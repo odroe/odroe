@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../foundation/functional_widget_pipe.dart';
+import 'functional_widget_pipe.dart';
 
 class FunctionalPipeWidget extends StatelessWidget
     implements FunctionalWidgetPipe {
