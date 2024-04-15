@@ -10,7 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  macros: ^0.1.0-main.2
 
 dev_dependencies:
   flutter_test:

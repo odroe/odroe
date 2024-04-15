@@ -1,11 +1,48 @@
-import 'package:flutter/widgets.dart';
-import 'package:odroe/src/macros/fw.dart';
-import 'package:odroe/src/macros/setup.dart';
+import 'package:flutter/material.dart';
 
-@Setup()
-void main() {
-  print(111);
+T state<T>(T initialValue) => initialValue;
+
+extension<T> on T {
+  void update(T Function(T) up) {}
 }
 
-@FunctionalWidget()
-_haha(BuildContext context) {}
+Widget counter() => FC(() {
+      final count = state(0);
+
+      return Text('Counter: $count');
+    });
+
+WidgetBuilder demo() {
+  final count = state(1);
+
+  void add() => count.update((value) => value++);
+
+  return FC(() {});
+
+  return (ctx) {
+    return Column(
+      children: [
+        Text('Count: $count'),
+        TextButton(
+          onPressed: add,
+          child: const Text('Plus'),
+        ),
+      ],
+    );
+  };
+}
+
+void main(List<String> args) {
+  Column(
+    children: [
+      ~demo(),
+    ],
+  );
+}
+
+extension on WidgetBuilder {
+  operator ~() {
+    // TODO: Create FC wrapper widget to be binding hooks
+    return this;
+  }
+}

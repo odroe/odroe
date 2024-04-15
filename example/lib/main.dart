@@ -1,64 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:odroe/framework.dart';
 
-void main() {
-  runApp(o | app());
-}
+class App extends StatelessWidget {
+  const App({super.key});
 
-WidgetBuilder app() {
-  return (context) {
-    return MaterialApp(
-      title: 'Odroe App',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: o | home(),
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      title: 'Example',
+      home: Home(),
     );
-  };
+  }
 }
 
-WidgetBuilder home() {
-  return (context) {
+class Home extends StatefulWidget {
+  const Home({super.key});
+
+  @override
+  State<Home> createState() => _HomeState();
+}
+
+class _HomeState extends State<Home> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Odroe App'),
+      body: ListView(
+        children: [
+          Page(),
+          Text('Counter: $count'),
+        ],
       ),
-      body: const Center(
-        child: Text('Hello, Odroe!'),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => setState(() => count++),
+        child: const Icon(Icons.plus_one),
       ),
     );
-  };
+  }
 }
 
-// Widget haha() => ~() {
-//       final context = useContext();
+class Page extends StatelessWidget {
+  Page({super.key}) {
+    print('Page c');
+  }
 
-//       return Scaffold(
-//         appBar: AppBar(
-//           title: const Text('Odroe App'),
-//         ),
-//         body: const Center(
-//           child: Text('Hello, Odroe!'),
-//         ),
-//       );
-//     };
+  @override
+  Widget build(BuildContext context) {
+    print('page build');
 
-// final widget = ~() {
-//   final counter = signal(0);
+    return TextButton(
+      onPressed: () {
+        Navigator.of(context).pop();
+      },
+      child: const Text('Back'),
+    );
+  }
 
-//   return MaterialApp(
-//     title: 'Odroe App',
-//     theme: ThemeData(
-//       colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-//       useMaterial3: true,
-//     ),
-//     home: o | home(),
-//   );
-// };
+  @override
+  StatelessElement createElement() => PageElement(this);
+}
 
-// extension on Function {
-//   Widget operator ~() {
-//     return this as Widget;
-//   }
-// }
+class PageElement extends StatelessElement {
+  PageElement(super.widget) {
+    print('Page element 重建测试');
+  }
+}
+
+void main(List<String> args) {
+  runApp(App());
+}
