@@ -1,71 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:odroe/odroe.dart';
 
-class App extends StatelessWidget {
-  const App({super.key});
+Widget app() => setup(() {
+      final theme = state(ThemeData());
 
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Example',
-      home: Home(),
-    );
-  }
-}
+      return MaterialApp(
+        theme: theme.get(),
+        title: 'Example',
+        home: home(),
+      );
+    });
 
-class Home extends StatefulWidget {
-  const Home({super.key});
+Widget home() => setup(() {
+      final counter = state(0);
 
-  @override
-  State<Home> createState() => _HomeState();
-}
+      print('demo' + counter.get().toString());
 
-class _HomeState extends State<Home> {
-  int count = 0;
+      return Scaffold(
+        appBar: AppBar(title: const Text('Home')),
+        body: Center(
+          child: Text('Counter: ${counter.get()}'),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => counter.set(counter.get() + 1),
+          child: plusIcon(),
+        ),
+      );
+    });
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: ListView(
-        children: [
-          Page(),
-          Text('Counter: $count'),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => setState(() => count++),
-        child: const Icon(Icons.plus_one),
-      ),
-    );
-  }
-}
-
-class Page extends StatelessWidget {
-  Page({super.key}) {
-    print('Page c');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    print('page build');
-
-    return TextButton(
-      onPressed: () {
-        Navigator.of(context).pop();
-      },
-      child: const Text('Back'),
-    );
-  }
-
-  @override
-  StatelessElement createElement() => PageElement(this);
-}
-
-class PageElement extends StatelessElement {
-  PageElement(super.widget) {
-    print('Page element 重建测试');
-  }
-}
+Widget plusIcon() => setup(() {
+      return const Icon(Icons.plus_one);
+    });
 
 void main(List<String> args) {
-  runApp(App());
+  runApp(app());
+}
+
+class MyWidget extends StatefulWidget {
+  const MyWidget({super.key});
+
+  @override
+  State<MyWidget> createState() => _MyWidgetState();
+}
+
+class _MyWidgetState extends State<MyWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return const Placeholder();
+  }
 }
