@@ -13,7 +13,7 @@ Widget app() => setup(() {
 
 Widget home() => setup(() {
       final counter = state(0);
-      final demo = computed(() => counter.get(), [counter]);
+      final demo = computed(() => counter.get() % 2, [counter]);
 
       return Scaffold(
         appBar: AppBar(title: const Text('Home')),

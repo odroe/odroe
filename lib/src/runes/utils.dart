@@ -1,10 +1,13 @@
-import '../setup.dart';
-import 'types.dart';
+import '../element.dart';
+import '../signal.dart';
+import 'rune.dart';
 
-typedef RuneCreator<T> = Rune<T> Function();
+typedef RuneCreator<T, R extends Rune<T>> = R Function();
 
-Rune<T> findOrCreateRune<T>(RuneCreator<T> creator) {
+R findOrCreateRune<T, R extends Rune<T>>(RuneCreator<T, R> creator) {
   final element = SetupElement.current;
+  assert(element.mounted);
+
   if (element.runes == null) {
     final rune = creator();
     element.runes = rune;
@@ -26,7 +29,7 @@ Rune<T> findOrCreateRune<T>(RuneCreator<T> creator) {
     cursor++;
   }
 
-  if (rune is Rune<T>) {
+  if (rune is R) {
     element.cursor++;
     return rune;
   }
@@ -37,7 +40,7 @@ Rune<T> findOrCreateRune<T>(RuneCreator<T> creator) {
   return result;
 }
 
-bool compareIterable(Iterable a, Iterable b) {
+bool compareDeps(Iterable a, Iterable b) {
   if (a.length != b.length) return false;
 
   final aIterator = a.iterator;
