@@ -1,8 +1,3 @@
-// import '../setup.dart';
-// import '../signal.dart';
-// import 'rune.dart';
-// import 'utils.dart';
-
 import '../element.dart';
 import '../signal.dart';
 import 'rune.dart';
@@ -20,24 +15,9 @@ class ComputedRune<T> extends Rune<T> implements Computed<T> {
   Iterable deps;
 
   @override
-  ComputedRuneState<T> get state => super.state as ComputedRuneState<T>;
-
-  @override
   T get() => source;
 
-  @override
-  RuneState<T> createState() => ComputedRuneState(this);
-}
-
-class ComputedRuneState<T> extends RuneState<T> {
-  const ComputedRuneState(super.rune);
-
-  @override
-  ComputedRune<T> get rune => super.rune as ComputedRune<T>;
-
-  void rebuild() {
-    rune.source = rune.callback();
-  }
+  void rebuild() => source = callback();
 }
 
 Computed<T> computed<T>(ComputedCallback<T> fn, [Iterable deps = const []]) {
@@ -45,13 +25,13 @@ Computed<T> computed<T>(ComputedCallback<T> fn, [Iterable deps = const []]) {
   final computedDeps = createDeps(deps);
   final rune = findOrCreateRune(() {
     final computed = ComputedRune<T>(fn, element, computedDeps);
-    computed.state.rebuild();
+    computed.rebuild();
 
     return computed;
   });
 
   if (!compareDeps(rune.deps, computedDeps)) {
-    rune.state.rebuild();
+    rune.rebuild();
     rune.element.mustRebuild = true;
   }
 

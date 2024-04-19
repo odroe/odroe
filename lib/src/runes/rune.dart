@@ -6,6 +6,12 @@ class RuneState<T> {
 
   @mustCallSuper
   void reassemble() {}
+
+  @mustCallSuper
+  void unmount() {}
+
+  @mustCallSuper
+  void mount() {}
 }
 
 abstract class Rune<T> {

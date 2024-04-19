@@ -43,13 +43,30 @@ class SetupElement extends ComponentElement {
 
   @override
   void reassemble() {
-    mustRebuild = true;
-    Rune? rune = runes;
-    while (rune != null) {
-      rune.state.reassemble();
-      rune = rune.next;
-    }
-
     super.reassemble();
+    mustRebuild = true;
+    runes?.foreach((rune) => rune.state.reassemble());
+  }
+
+  @override
+  void unmount() {
+    super.unmount();
+    runes?.foreach((rune) => rune.state.unmount());
+  }
+
+  @override
+  void mount(Element? parent, Object? newSlot) {
+    super.mount(parent, newSlot);
+    runes?.foreach((rune) => rune.state.mount());
+  }
+}
+
+extension<T> on Rune<T> {
+  void foreach(void Function(Rune rune) callback) {
+    Rune? current = this;
+    while (current != null) {
+      callback(current);
+      current = current.next;
+    }
   }
 }

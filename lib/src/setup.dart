@@ -8,7 +8,7 @@ class SetupWidget extends Widget {
   final SetupCallback fn;
 
   @override
-  Element createElement() => SetupElement(this, fn);
+  SetupElement createElement() => SetupElement(this, fn);
 }
 
 Widget setup(SetupCallback fn, {Key? key}) => SetupWidget(fn, key: key);
