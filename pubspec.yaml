@@ -1,7 +1,8 @@
 name: odroe
 description: 'A declarative, efficient, and flexible Flutter UI framework for building user interfaces.'
 version: 0.0.1
-homepage:
+homepage: https://odroe.com
+repository: https://github.com/odroe/odroe
 
 environment:
   sdk: '>=3.3.3 <4.0.0'
