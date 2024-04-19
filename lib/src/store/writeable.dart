@@ -1,46 +1,43 @@
 import 'source.dart';
-import 'subscription.dart';
 import 'types.dart';
 
 class _Writeable<T> implements Writeable<T>, CurrentSource<T> {
-  _Writeable(this.source, [this.notifier]);
+  _Writeable(this.source, [this.start]);
 
-  final StartStopNotifier<T>? notifier;
-  late Unsubscriber? cleanup;
+  final StartStopNotifier<T>? start;
+  final List<Subscriber<T>> subscribers = [];
+
+  late Unsubscriber? stop;
 
   @override
   T source;
-
-  Subscription<T>? subscription;
 
   @override
   void set(T value) {
     if (source == value) return;
 
     source = value;
-    subscription?.notice(source);
+    for (final subscriber in subscribers) {
+      subscriber(source);
+    }
   }
 
   @override
   Unsubscriber subscribe(Subscriber<T> subscriber) {
-    final subscription = Subscription(subscriber)..pre = this.subscription;
+    subscribers.add(subscriber);
+
+    if (subscribers.length == 1) {
+      final props = (set: set, update: update, get: () => source);
+      stop = start?.call(props);
+    }
+
     void unsubscriber() {
-      subscription.pre?.next = subscription.next;
-      if (subscription.pre == null) {
-        cleanup?.call();
+      subscribers.remove(subscriber);
+      if (subscribers.isEmpty) {
+        stop?.call();
       }
     }
 
-    if (this.subscription == null) {
-      this.subscription = subscription;
-
-      final props = (set: set, update: update);
-      cleanup = notifier?.call(props);
-
-      return unsubscriber;
-    }
-
-    this.subscription?.last.next = subscription;
     return unsubscriber;
   }
 

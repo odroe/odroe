@@ -2,7 +2,11 @@ typedef Subscriber<T> = void Function(T value);
 typedef Unsubscriber = void Function();
 typedef Updater<T> = T Function(T value);
 typedef StartStopNotifier<T> = Unsubscriber? Function(
-    ({Subscriber<T> set, void Function(Updater<T> updater) update}));
+    ({
+      Subscriber<T> set,
+      T Function() get,
+      void Function(Updater<T> updater) update,
+    }));
 
 abstract interface class Readable<T> {
   /// Subscribe on value changes

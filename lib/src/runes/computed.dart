@@ -20,7 +20,7 @@ class ComputedRune<T> extends Rune<T> implements Computed<T> {
   void rebuild() => source = callback();
 }
 
-Computed<T> computed<T>(ComputedCallback<T> fn, [Iterable deps = const []]) {
+Computed<T> $computed<T>(ComputedCallback<T> fn, [Iterable deps = const []]) {
   final element = SetupElement.current;
   final computedDeps = createDeps(deps);
   final rune = findOrCreateRune(() {

@@ -47,7 +47,7 @@ class EffectRuneState extends RuneState<void> {
   }
 }
 
-void effect(EffectCallback fn, [Iterable deps = const []]) {
+void $effect(EffectCallback fn, [Iterable deps = const []]) {
   final computedDeps = createDeps(deps);
   final rune = findOrCreateRune(() => EffectRune(fn, computedDeps));
 

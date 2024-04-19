@@ -5,6 +5,9 @@ class RuneState<T> {
   final Rune<T> rune;
 
   @mustCallSuper
+  void deactivate() {}
+
+  @mustCallSuper
   void reassemble() {}
 
   @mustCallSuper

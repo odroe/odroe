@@ -4,10 +4,12 @@ import 'rune.dart';
 import 'utils.dart';
 
 class StateRune<T> extends Rune<T> implements State<T> {
-  StateRune(this.initalValue, this.element) : source = initalValue;
+  StateRune(this.initalValue, this.element, {required this.wantRebuild})
+      : source = initalValue;
 
   final T initalValue;
   final SetupElement element;
+  final bool wantRebuild;
 
   late T source;
 
@@ -19,8 +21,10 @@ class StateRune<T> extends Rune<T> implements State<T> {
     if (source == value) return;
 
     source = value;
-    element.mustRebuild = true;
-    element.markNeedsBuild();
+    if (wantRebuild) {
+      element.mustRebuild = true;
+      element.markNeedsBuild();
+    }
   }
 
   @override
@@ -43,10 +47,10 @@ class StateRuneState<T> extends RuneState<T> {
   }
 }
 
-State<T> state<T>(T source) {
+State<T> $state<T>(T source, {bool wantRebuild = true}) {
   final element = SetupElement.current;
   final rune = findOrCreateRune(
-    () => StateRune(source, element),
+    () => StateRune(source, element, wantRebuild: wantRebuild),
   );
 
   return rune;
