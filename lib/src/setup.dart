@@ -32,37 +32,10 @@ class SetupElement extends ComponentElement {
 
   @override
   Widget build() {
+    current = this;
     final result = (widget as SetupWidget).fn();
     cursor = 0;
 
-    print(widget);
-
     return result;
-  }
-
-  @override
-  void mount(Element? parent, Object? newSlot) {
-    print('mount: $hashCode');
-
-    super.mount(parent, newSlot);
-  }
-
-  @override
-  void unmount() {
-    print('unmount: $hashCode');
-
-    super.unmount();
-  }
-
-  @override
-  void reassemble() {
-    print('reassemble: $hashCode');
-    super.reassemble();
-  }
-
-  @override
-  void update(covariant Widget newWidget) {
-    super.update(newWidget);
-    print('update');
   }
 }

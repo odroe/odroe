@@ -13,13 +13,12 @@ Widget app() => setup(() {
 
 Widget home() => setup(() {
       final counter = state(0);
-
-      print('demo' + counter.get().toString());
+      final demo = computed(() => counter.get(), [counter]);
 
       return Scaffold(
         appBar: AppBar(title: const Text('Home')),
         body: Center(
-          child: Text('Counter: ${counter.get()}'),
+          child: Text('Counter: ${counter.get()}, ${demo.get()}'),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => counter.set(counter.get() + 1),
@@ -34,18 +33,4 @@ Widget plusIcon() => setup(() {
 
 void main(List<String> args) {
   runApp(app());
-}
-
-class MyWidget extends StatefulWidget {
-  const MyWidget({super.key});
-
-  @override
-  State<MyWidget> createState() => _MyWidgetState();
-}
-
-class _MyWidgetState extends State<MyWidget> {
-  @override
-  Widget build(BuildContext context) {
-    return const Placeholder();
-  }
 }
