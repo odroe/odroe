@@ -47,6 +47,18 @@ class StateRuneState<T> extends RuneState<T> {
   }
 }
 
+/// Create a reactive state for [SetupWidget].
+///
+/// [$state] is used to create a responsive state in [SetupWidget], which
+/// returns a read-write Signal:
+///
+/// ```dart
+/// Widget counter() => setup(() {
+///   final count = $state(0);
+///
+///   return Text('Count: ${count.get()}');
+/// });
+/// ```
 State<T> $state<T>(T source, {bool wantRebuild = true}) {
   final element = SetupElement.current;
   final rune = findOrCreateRune(

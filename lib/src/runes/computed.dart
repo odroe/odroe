@@ -20,6 +20,31 @@ class ComputedRune<T> extends Rune<T> implements Computed<T> {
   void rebuild() => source = callback();
 }
 
+/// Create a computed Signal.
+///
+/// [$computed] Used to create a computed signal based on callback calculation
+/// values:
+///
+/// ```dart
+/// Widget calculation() => setup(() {
+///   final numbers = $state(<int>[]);
+///   final total = $computed(() {
+///     int result = 0;
+///     for (final n in numbers.get()) {
+///       result += n;
+///     }
+///
+///     return result;
+///   }, [numbers]);
+/// });
+/// ```
+///
+/// - [deps]: By default, as long as the signal is updated, it will run again.
+/// But if you want to recalculate and return a new value only when a certain
+/// data is updated, you will need to pay attention to it. For example, your
+/// Setup Widget has multiple Reactive data, and only updates the value when
+/// one of the values changes. If deps is not passed, any update will trigger a
+/// recalculation, resulting in meaningless logical execution.
 Computed<T> $computed<T>(ComputedCallback<T> fn, [Iterable deps = const []]) {
   final element = SetupElement.current;
   final computedDeps = createDeps(deps);
