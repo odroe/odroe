@@ -11,4 +11,14 @@ class SetupWidget extends Widget {
   SetupElement createElement() => SetupElement(this, fn);
 }
 
+/// Functional wrapper for Setup Widget.
+///
+/// [setup] is used to wrap the setup function to create a functional widget:
+///
+/// ```dart
+/// Widget app() => setup(() {
+///   // The is setup body, create Runes and return widget.
+///   ...
+/// });
+/// ```
 Widget setup(SetupCallback fn, {Key? key}) => SetupWidget(fn, key: key);
