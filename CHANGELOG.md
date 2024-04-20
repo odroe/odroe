@@ -18,6 +18,8 @@ dependencies:
 - **Store**: Remove `get` in `StartStipNotifier` first record.
 - **Code Comments**: Add public APIs code comments.
 
+**Full Changelog**: https://github.com/odroe/odroe/commits/v0.0.2
+
 # 0.0.1
 
 Publish first version
