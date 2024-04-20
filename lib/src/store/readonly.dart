@@ -14,4 +14,15 @@ class _Readonly<T>
       store.subscribe(subscriber);
 }
 
+/// This simple helper function makes a store readonly. You can still subscribe
+/// to the changes from the original one using this new [readable] store.
+///
+/// ```dart
+/// final writeableStore = writeable(1);
+/// final readableStore = readonly(writeable);
+///
+/// readableStore.subscribe(print);
+///
+/// writeable.set(2); // print 2
+/// ```
 Readable<T> readonly<T>(Readable<T> store) => _Readonly(store);
