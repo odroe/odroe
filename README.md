@@ -1,3 +1,14 @@
+# Odroe
+
+[![Pub Version](https://img.shields.io/pub/v/odroe)](https://pub.dev/packages/orm)
+[![GitHub License](https://img.shields.io/github/license/odroe/odroe)](https://github.com/odroe/odroe/blob/main/LICENSE)
+[![Docs website](https://img.shields.io/badge/docs-odroe.com-brightgreen)](https://odroe.com/)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/medz?label=github%20sponsors)](https://github.com/sponsors/medz)
+[![Open Collective sponsors](https://img.shields.io/opencollective/sponsors/openodroe?label=open%20collective)](https://opencollective.com/openodroe)
+[![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/shiweidu)
+](https://twitter.com/shiweidu)
+[![Discord](https://img.shields.io/discord/1035043284457881620?label=discord)](https://discord.gg/ms2X9TQMR8)
+
 Odroe is a declarative Flutter UI framework used to create user interfaces. It is built on top of Flutter and updated with fine-grained reactions. Declare your state and use it throughout the entire application, and only code that depends on it will rerun when the state changes.
 
 ```dart
