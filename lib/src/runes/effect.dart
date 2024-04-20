@@ -47,6 +47,46 @@ class EffectRuneState extends RuneState<void> {
   }
 }
 
+/// Creates a effect rune for the [SetupWidget].
+///
+/// ## `mount/unmount` effect
+///
+/// This is the most basic usage, which only has one side effect in
+/// [SetupWidget].
+///
+/// ```dart
+/// Widget example() => setup(() {
+///   $effect(() {
+///     print('Mount');
+///     return () => print('Unmount');
+///   });
+///
+///   ...
+/// });
+/// ```
+///
+/// ## Value effect
+///
+/// You can also pass the second parameter [$effect] so that its side effects
+/// are not just limited to the 'mount/unmount' lifecycle. However, [deps]
+/// updates will have side effects.
+///
+/// ```dart
+/// Widget example() => setup(() {
+///   final value = $state(0);
+///
+///   $effect(() {
+///     print('Effect value: ${value.get()}');
+///   }, [value]); // Dep value, value change rerun effect.
+/// });
+/// ```
+///
+/// ## Props
+///
+/// - [fn]: Effect callback, Optionally, return a cleanup function. If cleanup
+/// is returned, it will run when the 'unmount' event occurs.
+/// - [deps]: Optional, representing the list of changes that the effect wants
+/// to rely on. When the value changes, the effect will be rerun.
 void $effect(EffectCallback fn, [Iterable deps = const []]) {
   final computedDeps = createDeps(deps);
   final rune = findOrCreateRune(() => EffectRune(fn, computedDeps));
