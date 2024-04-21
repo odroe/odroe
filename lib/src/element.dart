@@ -50,14 +50,26 @@ class SetupElement extends ComponentElement {
 
   @override
   void unmount() {
-    super.unmount();
     runes?.foreach((rune) => rune.state.unmount());
+    super.unmount();
   }
 
   @override
   void mount(Element? parent, Object? newSlot) {
     super.mount(parent, newSlot);
     runes?.foreach((rune) => rune.state.mount());
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    runes?.foreach((rune) => rune.state.activate());
+  }
+
+  @override
+  void deactivate() {
+    runes?.foreach((rune) => rune.state.deactivate());
+    super.deactivate();
   }
 }
 
