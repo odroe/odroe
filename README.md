@@ -1,6 +1,6 @@
 # Odroe
 
-[![Pub Version](https://img.shields.io/pub/v/odroe)](https://pub.dev/packages/orm)
+[![Pub Version](https://img.shields.io/pub/v/odroe)](https://pub.dev/packages/odroe)
 [![GitHub License](https://img.shields.io/github/license/odroe/odroe)](https://github.com/odroe/odroe/blob/main/LICENSE)
 [![Docs website](https://img.shields.io/badge/website-odroe.com-brightgreen)](https://odroe.com/)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/medz?label=github%20sponsors)](https://github.com/sponsors/medz)
