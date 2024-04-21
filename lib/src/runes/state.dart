@@ -28,6 +28,9 @@ class StateRune<T> extends Rune<T> implements State<T> {
   }
 
   @override
+  void update(T Function(T value) updater) => set(updater(source));
+
+  @override
   RuneState<T, Rune<T>> createState() => StateRuneState(this);
 }
 

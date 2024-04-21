@@ -9,8 +9,11 @@ abstract interface class Signal<T> {
 
 /// A read-write Signal.
 abstract interface class State<T> implements Signal<T> {
-  /// Set the value if the Signal.
+  /// Set the value of the Signal.
   void set(T value);
+
+  /// Update the value of the Signal.
+  void update(T Function(T value) updater);
 }
 
 /// A Signal which is a formula based on other Signals.
