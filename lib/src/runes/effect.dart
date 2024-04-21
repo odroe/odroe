@@ -11,6 +11,9 @@ class EffectRune extends Rune<void> {
   final EffectCallback callback;
   VoidCallback? cleanup;
   Iterable deps;
+
+  @override
+  RuneState<void, Rune<void>> createState() => EffectRuneState(this);
 }
 
 class EffectRuneState extends RuneState<void, EffectRune> {

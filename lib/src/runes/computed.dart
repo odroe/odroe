@@ -18,6 +18,13 @@ class ComputedRune<T> extends Rune<T> implements Computed<T> {
   T get() => source;
 
   void rebuild() => source = callback();
+
+  @override
+  RuneState<T, Rune<T>> createState() => ComputedRuneState(this);
+}
+
+class ComputedRuneState<T> extends RuneState<T, ComputedRune<T>> {
+  const ComputedRuneState(super.rune);
 }
 
 /// Create a computed Signal.

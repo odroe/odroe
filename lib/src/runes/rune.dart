@@ -22,7 +22,7 @@ class RuneState<T, R extends Rune<T>> {
 
 abstract class Rune<T> {
   @protected
-  RuneState<T, Rune<T>> createState() => RuneState(this);
+  RuneState<T, Rune<T>> createState();
 
   Rune? next;
 
