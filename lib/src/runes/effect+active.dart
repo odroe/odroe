@@ -47,11 +47,10 @@ class EffectActiveRuneState extends RuneState<void, EffectActiveRune> {
 
 /// [active] extension on [$effect].
 extension Effect$Active on Effect {
-  /// Active effect, affects whether Setup-widget is active in the current
-  /// screen.
+  /// An effect that transitions from an inactive state to an active state
   ///
-  /// [callback] If a function with a [VoidCallback] signature is returned, it
-  /// will be called when the Setup-widget is no longer active.
+  /// If [fn] returns a [VoidCallback], it will be called when Setup-widget
+  /// transitions from active to inactive state.
   void active(EffectCallback fn) {
     findOrCreateRune(() => EffectActiveRune(fn));
   }

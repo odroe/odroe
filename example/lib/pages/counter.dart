@@ -9,7 +9,7 @@ Widget counter() => setup(() {
       return Scaffold(
         appBar: AppBar(title: const Text('Counter')),
         body: Center(
-          child: Text('count: ${counter.get()}'),
+          child: Text('Count: ${counter.get()}'),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: increment,
