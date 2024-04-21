@@ -28,17 +28,11 @@ class StateRune<T> extends Rune<T> implements State<T> {
   }
 
   @override
-  StateRuneState<T> get state => super.state as StateRuneState<T>;
-
-  @override
-  RuneState<T> createState() => StateRuneState(this);
+  RuneState<T, Rune<T>> createState() => StateRuneState(this);
 }
 
-class StateRuneState<T> extends RuneState<T> {
+class StateRuneState<T> extends RuneState<T, StateRune<T>> {
   const StateRuneState(super.rune);
-
-  @override
-  StateRune<T> get rune => super.rune as StateRune<T>;
 
   @override
   void reassemble() {

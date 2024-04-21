@@ -11,16 +11,10 @@ class EffectRune extends Rune<void> {
   final EffectCallback callback;
   VoidCallback? cleanup;
   Iterable deps;
-
-  @override
-  RuneState<void> createState() => EffectRuneState(this);
 }
 
-class EffectRuneState extends RuneState<void> {
+class EffectRuneState extends RuneState<void, EffectRune> {
   EffectRuneState(super.rune);
-
-  @override
-  EffectRune get rune => super.rune as EffectRune;
 
   @override
   void reassemble() {
@@ -96,3 +90,6 @@ void $effect(EffectCallback fn, [Iterable deps = const []]) {
     rune.cleanup = rune.callback();
   }
 }
+
+/// The [$effect] type.
+typedef Effect = void Function(EffectCallback fn, [Iterable deps]);
