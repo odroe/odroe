@@ -1,3 +1,22 @@
+# Odroe v0.0.4
+
+To install Odroe `v0.0.4` run:
+
+```bash
+flutter pub add odroe:0.0.4
+```
+
+or update your `pubspec.yaml` file:
+
+```yaml
+dependencies:
+  odroe: ^0.0.4
+```
+
+## What's Changed
+
+- **Feature**: Writeable Signal support `update` method
+
 # Odroe v0.0.3
 
 To install Odroe `v0.0.3` run:
@@ -43,7 +62,3 @@ dependencies:
 - **Code Comments**: Add public APIs code comments.
 
 **Full Changelog**: https://github.com/odroe/odroe/commits/v0.0.2
-
-# 0.0.1
-
-Publish first version
