@@ -2,7 +2,7 @@
 
 [![Pub Version](https://img.shields.io/pub/v/odroe)](https://pub.dev/packages/odroe)
 [![GitHub License](https://img.shields.io/github/license/odroe/odroe)](https://github.com/odroe/odroe/blob/main/LICENSE)
-[![Docs website](https://img.shields.io/badge/website-odroe.com-brightgreen)](https://odroe.com/)
+[![Website](https://img.shields.io/badge/website-odroe.com-brightgreen)](https://odroe.com/)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/medz?label=github%20sponsors)](https://github.com/sponsors/medz)
 [![Open Collective sponsors](https://img.shields.io/opencollective/sponsors/openodroe?label=open%20collective)](https://opencollective.com/openodroe)
 [![Discord](https://img.shields.io/discord/1035043284457881620?label=discord)](https://discord.gg/ms2X9TQMR8)
