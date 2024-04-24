@@ -43,9 +43,9 @@ class SetupElement extends ComponentElement {
 
   @override
   void reassemble() {
-    super.reassemble();
     mustRebuild = true;
     runes?.foreach((rune) => rune.state.reassemble());
+    super.reassemble();
   }
 
   @override
