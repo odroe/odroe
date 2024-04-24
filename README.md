@@ -18,7 +18,7 @@ import 'package:odroe/odroe.dart';
 Widget counter() => setup(() {
     final count = $state(0);
 
-    void increment() => count.set(count.get() + 1);
+    void increment() => count.update((value) => value + 1);
 
     return TextButton(
         onPressed: increment,
