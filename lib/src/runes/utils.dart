@@ -1,3 +1,5 @@
+import 'package:odroe/odroe.dart';
+
 import '../element.dart';
 import '../signal.dart';
 import 'rune.dart';
@@ -58,10 +60,11 @@ bool compareDeps(Iterable a, Iterable b) {
 Iterable createDeps(Iterable sources) {
   return List.generate(sources.length, (index) {
     final element = sources.elementAt(index);
-    if (element is Signal) {
-      return element.get();
-    }
 
-    return element;
+    return switch (element) {
+      Signal(get: final get) => get(),
+      Iterable sources => createDeps(sources),
+      _ => element,
+    };
   }, growable: false);
 }
