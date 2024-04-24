@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '_internal/props_key.dart';
 import 'element.dart';
 
 class SetupWidget extends Widget {
@@ -21,4 +22,6 @@ class SetupWidget extends Widget {
 ///   ...
 /// });
 /// ```
-Widget setup(SetupCallback fn, {Key? key}) => SetupWidget(fn, key: key);
+Widget setup<T extends Object?>(SetupCallback fn, {Key? key, T? props}) {
+  return SetupWidget(fn, key: key ?? (props != null ? PropsKey(props) : null));
+}
