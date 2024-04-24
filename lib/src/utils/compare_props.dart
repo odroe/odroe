@@ -1,3 +1,5 @@
+import '../signal.dart';
+
 bool compareProps<T>(T a, T b) {
   if (a == null && b == null) return true;
   if (a == null || b == null) return false;
@@ -27,5 +29,12 @@ bool compareProps<T>(T a, T b) {
     return false;
   }
 
-  return true;
+  if (a is Signal || b is Signal) {
+    final resolvedA = a is Signal ? a.get() : a;
+    final resolvedB = b is Signal ? b.get() : a;
+
+    return compareProps(resolvedA, resolvedB);
+  }
+
+  return a == b;
 }

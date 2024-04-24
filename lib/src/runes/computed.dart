@@ -64,7 +64,7 @@ Computed<T> $computed<T>(ComputedCallback<T> fn, [Iterable deps = const []]) {
 
   if (!compareDeps(rune.deps, computedDeps)) {
     rune.rebuild();
-    rune.element.mustRebuild = true;
+    rune.element.shouldRebuild = true;
   }
 
   return rune;

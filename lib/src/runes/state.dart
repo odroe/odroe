@@ -22,7 +22,7 @@ class StateRune<T> extends Rune<T> implements State<T> {
 
     source = value;
     if (wantRebuild) {
-      element.mustRebuild = true;
+      element.shouldRebuild = true;
       element.markNeedsBuild();
     }
   }

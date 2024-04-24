@@ -1,6 +1,8 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/widgets.dart';
 
 import 'runes/rune.dart';
+import 'utils/compare_props.dart';
 
 typedef SetupCallback = Widget Function();
 
@@ -24,36 +26,39 @@ class SetupElement<Props> extends ComponentElement {
   int cursor = 0;
 
   late Widget cachedWidget;
-  bool mustRebuild = true;
+  bool shouldRebuild = true;
 
   @override
   Widget build() {
-    // print('$this, Widget: $widget, Props: ${widget.callback}, $mustRebuild');
-    if (!mustRebuild) return cachedWidget;
+    if (!shouldRebuild) return cachedWidget;
 
     current = this;
     cachedWidget = widget.callback();
-    mustRebuild = false;
+    shouldRebuild = false;
     cursor = 0;
 
     return cachedWidget;
   }
 
   @override
-  void update(covariant Widget newWidget) {
-    mustRebuild = true;
+  void update(covariant SetupSource newWidget) {
+    shouldRebuild = !compareProps(widget.props, newWidget.props);
     super.update(newWidget);
+
+    if (shouldRebuild) {
+      rebuild(force: true);
+    }
   }
 
   @override
   void didChangeDependencies() {
-    mustRebuild = true;
+    shouldRebuild = true;
     super.didChangeDependencies();
   }
 
   @override
   void reassemble() {
-    mustRebuild = true;
+    shouldRebuild = true;
     runes?.foreach((rune) => rune.state.reassemble());
     super.reassemble();
   }

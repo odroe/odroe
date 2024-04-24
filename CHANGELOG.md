@@ -1,3 +1,22 @@
+# Odroe v0.0.7
+
+To install Odroe `v0.0.7` run:
+
+```bash
+flutter pub add odroe:0.0.7
+```
+
+or update your `pubspec.yaml` file:
+
+```yaml
+dependencies:
+  odroe: ^0.0.7
+```
+
+## What's Changed
+
+- **Refactor**: Refactoring and fixing setup widget props update unable to rebuild
+
 # Odroe v0.0.6
 
 To install Odroe `v0.0.6` run:

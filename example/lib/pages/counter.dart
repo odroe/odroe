@@ -18,7 +18,6 @@ Widget counter() => setup(() {
     });
 
 Widget demo(String value) => setup(props: value, () {
-      print(111);
       return Text('Counter: $value');
     });
 

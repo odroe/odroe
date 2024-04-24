@@ -26,9 +26,6 @@ class SetupWidget<Props> extends Widget with SetupSource<Props> {
 /// });
 /// ```
 Widget setup<T>(SetupCallback fn, {Key? key, T? props}) {
-  final widget = SetupWidget<T>(fn, key: key, props: props);
-  if (props != null) {
-    print(widget == SetupWidget<T>(fn, key: key, props: props));
-  }
+  StatefulElement;
   return SetupWidget<T>(fn, key: key, props: props);
 }
