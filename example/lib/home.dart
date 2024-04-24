@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:odroe/odroe.dart';
 
-final examples = [
+final examples = <({String title, String path})>[
   (path: '/counter', title: 'Counter'),
   (path: '/timer', title: 'Timer'),
+  (path: '/todo', title: 'Todo (via Store)'),
 ];
 
 Widget home() => setup(() {
