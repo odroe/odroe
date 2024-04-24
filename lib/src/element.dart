@@ -4,29 +4,39 @@ import 'runes/rune.dart';
 
 typedef SetupCallback = Widget Function();
 
-class SetupElement extends ComponentElement {
+mixin SetupSource<Props> on Widget {
+  Props? get props;
+  SetupCallback get callback;
+}
+
+class SetupElement<Props> extends ComponentElement {
   static late SetupElement current;
 
-  SetupElement(super.widget, this.callback);
+  SetupElement(super.widget);
 
-  final SetupCallback callback;
+  @override
+  SetupSource<Props> get widget {
+    assert(super.widget is SetupSource<Props>);
+    return super.widget as SetupSource<Props>;
+  }
 
   Rune? runes;
   int cursor = 0;
 
-  late Widget cacheWidget;
+  late Widget cachedWidget;
   bool mustRebuild = true;
 
   @override
   Widget build() {
-    if (!mustRebuild) return cacheWidget;
+    // print('$this, Widget: $widget, Props: ${widget.callback}, $mustRebuild');
+    if (!mustRebuild) return cachedWidget;
 
     current = this;
-    cacheWidget = callback();
+    cachedWidget = widget.callback();
     mustRebuild = false;
     cursor = 0;
 
-    return cacheWidget;
+    return cachedWidget;
   }
 
   @override

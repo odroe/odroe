@@ -5,7 +5,8 @@ Widget counter() => setup(() {
       final counter = useConunter();
 
       return Scaffold(
-        appBar: AppBar(title: const Text('Counter')),
+        appBar: AppBar(title: demo(counter.value.toString())),
+        // appBar: AppBar(title: const Text('Counter')),
         body: Center(
           child: Text('Count: ${counter.value}, Double: ${counter.double}'),
         ),
@@ -14,6 +15,11 @@ Widget counter() => setup(() {
           child: const Icon(Icons.plus_one),
         ),
       );
+    });
+
+Widget demo(String value) => setup(props: value, () {
+      print(111);
+      return Text('Counter: $value');
     });
 
 typedef Result = ({int value, int double, VoidCallback increment});

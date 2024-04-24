@@ -1,15 +1,18 @@
 import 'package:flutter/widgets.dart';
 
-import '_internal/props_key.dart';
 import 'element.dart';
 
-class SetupWidget extends Widget {
-  const SetupWidget(this.fn, {super.key});
-
-  final SetupCallback fn;
+class SetupWidget<Props> extends Widget with SetupSource<Props> {
+  const SetupWidget(this.callback, {super.key, this.props});
 
   @override
-  SetupElement createElement() => SetupElement(this, fn);
+  final SetupCallback callback;
+
+  @override
+  final Props? props;
+
+  @override
+  SetupElement<Props> createElement() => SetupElement<Props>(this);
 }
 
 /// Functional wrapper for Setup Widget.
@@ -22,6 +25,10 @@ class SetupWidget extends Widget {
 ///   ...
 /// });
 /// ```
-Widget setup<T extends Object?>(SetupCallback fn, {Key? key, T? props}) {
-  return SetupWidget(fn, key: key ?? (props != null ? PropsKey(props) : null));
+Widget setup<T>(SetupCallback fn, {Key? key, T? props}) {
+  final widget = SetupWidget<T>(fn, key: key, props: props);
+  if (props != null) {
+    print(widget == SetupWidget<T>(fn, key: key, props: props));
+  }
+  return SetupWidget<T>(fn, key: key, props: props);
 }
