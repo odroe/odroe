@@ -1,3 +1,23 @@
+# Odroe v0.0.5
+
+To install Odroe `v0.0.5` run:
+
+```bash
+flutter pub add odroe:0.0.5
+```
+
+or update your `pubspec.yaml` file:
+
+```yaml
+dependencies:
+  odroe: ^0.0.5
+```
+
+## What's Changed
+
+- **Bug**: Fix Runes nested dependencies.
+- **Feature**: `setup` support `props` key.
+
 # Odroe v0.0.4
 
 To install Odroe `v0.0.4` run:
