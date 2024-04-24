@@ -1,3 +1,23 @@
+# Odroe v0.0.6
+
+To install Odroe `v0.0.6` run:
+
+```bash
+flutter pub add odroe:0.0.6
+```
+
+or update your `pubspec.yaml` file:
+
+```yaml
+dependencies:
+  odroe: ^0.0.6
+```
+
+## What's Changed
+
+- **Bug**: Fix reassemble not triggering
+- **Bug**: Fix `$navigator` Rune not exported
+
 # Odroe v0.0.5
 
 To install Odroe `v0.0.5` run:
