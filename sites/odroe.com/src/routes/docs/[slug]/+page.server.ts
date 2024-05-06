@@ -1,6 +1,6 @@
 import { read } from '$app/server';
 import { markdown } from '$lib/server/markdown/index.js';
-import { getTypedPages } from '$lib/server/contents.js';
+import { getTypedPages } from '$lib/server/docs.js';
 import { error } from '@sveltejs/kit';
 import matter from 'gray-matter';
 

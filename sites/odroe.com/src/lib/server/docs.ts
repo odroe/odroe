@@ -1,7 +1,7 @@
 import { read } from '$app/server';
 import matter from 'gray-matter';
 
-const markdown = import.meta.glob<string>('../../../contents/**/*.md', {
+const markdown = import.meta.glob<string>('../../../../../docs/*/*.md', {
   eager: true,
   query: '?url',
   import: 'default',
