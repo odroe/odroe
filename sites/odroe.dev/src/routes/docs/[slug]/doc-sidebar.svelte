@@ -1,6 +1,6 @@
 <script lang="ts">
   import { title, sort, unique } from 'radash';
-  import type { Page } from '../../../lib/server/contents';
+  import type { Page } from '../../../lib/server/docs';
   import { resolveRoute } from '$app/paths';
 
   type Props = {
