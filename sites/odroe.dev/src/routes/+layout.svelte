@@ -3,14 +3,9 @@
   import NavSocial from './nav-social.svelte';
   import Nav from './nav.svelte';
   import Search from './search.svelte';
-
-  import brand from '$lib/assets/odroe-brand.svg?url';
 </script>
 
 <svelte:head>
-  <link rel="shortcut icon" href={brand} type="image/svg+xml" color="#000" />
-  <link rel="apple-touch-icon" href={brand} />
-
   <title>Odroe: Create user interfaces from Setup-widget</title>
   <meta
     name="description"
