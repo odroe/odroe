@@ -1,9 +1,7 @@
 <template>
-  <div>
-    <NuxtWelcome />
-  </div>
+  <NuxtPage />
 </template>
 
 <script lang="ts" setup>
-useHead();
+// useHead();
 </script>
