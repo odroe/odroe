@@ -1,3 +1,10 @@
+import { Header } from './_header';
+
 export default ({ children }: React.PropsWithChildren) => {
-  return <>{children}</>;
+  return (
+    <>
+      <Header />
+      {children}
+    </>
+  );
 };
