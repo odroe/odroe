@@ -1,5 +1,11 @@
 export default defineAppConfig({
   seo: {
-    name: 'Odroe',
+    title: 'Odroe',
+    slogan: 'Create user interfaces from Setup-widget',
+    description:
+      'A declarative, efficient, and flexible Flutter UI framework for building user interfaces.',
+  },
+  ui: {
+    primary: 'green',
   },
 });
