@@ -1,4 +1,4 @@
-export const HanburgerIcon = ({ open }: { open: boolean }) => {
+export const HanburgerIcon = ({ open = false }: { open?: boolean }) => {
   return (
     <span
       className="relative size-6 group overflow-hidden block aria-expanded:translate-y-0.5 transition-all"

@@ -1,6 +1,8 @@
 import { BrandLogo } from '@/components/brand';
 import Link from 'next/link';
 import { Navigation } from './_navigation';
+import { MobileNavigation } from './_mobile-navigation';
+import { GitHubIcon } from '@/components/icons/github';
 
 export const Header = () => {
   return (
@@ -9,10 +11,17 @@ export const Header = () => {
         <Link href="/" className="lg:flex-1">
           <BrandLogo className="h-6 fill-black dark:fill-white" />
         </Link>
-
         <Navigation className="hidden lg:flex items-center gap-x-8 h-16" />
-
-        <div className="flex-1 justify-end hidden lg:flex">Right</div>
+        <div className="flex-1 justify-end hidden items-center lg:flex gap-2">
+          <Link
+            href="https://github.com/odroe/odroe"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <GitHubIcon className="size-6 fill-gray-700  dark:fill-gray-200" />
+          </Link>
+        </div>
+        <MobileNavigation />
       </div>
     </header>
   );
