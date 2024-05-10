@@ -84,7 +84,7 @@ const DropdownNav = ({ label, href, children }: DropdownLink) => {
             to: 'bottom',
             gap: 12,
           }}
-          className="rounded-xl bg-white/5 text-sm/6 [--anchor-gap:var(--spacing-5)] shadow border dark:border-white/5 border-black/10"
+          className="rounded-xl bg-white/5 text-sm/6 [--anchor-gap:var(--spacing-5)] shadow border dark:border-white/5 border-black/10 backdrop-blur z-50"
         >
           <div className="p-3 max-w-80">
             {children.map((props) => (

@@ -2,11 +2,11 @@ import { BrandLogo } from '@/components/brand';
 import Link from 'next/link';
 import { Navigation } from './_navigation';
 import { MobileNavigation } from './_mobile-navigation';
-import { GitHubIcon } from '@/components/icons/github';
+import { SimpleIconsGithub } from '@/components/icons/github';
 
 export const Header = () => {
   return (
-    <header className="w-full h-16 sticky z-auto top-0 backdrop-blur bg-white/75 dark:bg-black/75">
+    <header className="w-full h-16 sticky z-30 top-0 backdrop-blur bg-white/5 dark:bg-black/5 border-b border-b-gray-200 lg:border-b-0">
       <div className="mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl flex items-center justify-between gap-3 h-full">
         <Link href="/" className="lg:flex-1">
           <BrandLogo className="h-6 fill-black dark:fill-white" />
@@ -17,8 +17,9 @@ export const Header = () => {
             href="https://github.com/odroe/odroe"
             target="_blank"
             rel="noopener noreferrer"
+            className="p-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
           >
-            <GitHubIcon className="size-6 fill-gray-700  dark:fill-gray-200" />
+            <SimpleIconsGithub className="size-5 fill-gray-700  dark:fill-gray-200" />
           </Link>
         </div>
         <MobileNavigation />

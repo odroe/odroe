@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { Footer } from './_footer';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -28,6 +29,7 @@ export default ({ children }: React.PropsWithChildren) => {
         style={inter.style}
       >
         {children}
+        <Footer />
       </body>
     </html>
   );
