@@ -1,4 +1,4 @@
 [build]
     base = "sites/odroe.dev"
-    command = "next build"
+    command = "nuxt build"
     publish = "build"
