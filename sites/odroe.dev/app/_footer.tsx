@@ -58,13 +58,13 @@ export const Footer = () => {
                   <li key={href}>
                     <Link
                       href={href}
-                      className="text-sm relative text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white z-0"
+                      className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex gap-1"
                       target={target ? '_blank' : undefined}
                       rel={target ? 'noopener noreferrer' : undefined}
                     >
                       {label}
                       {target && (
-                        <ArrowUpRightIcon className="size-3 absolute top-0.5 -right-3.5 text-gray-400 dark:text-gray-500" />
+                        <ArrowUpRightIcon className="size-3 text-gray-400 dark:text-gray-500 translate-y-1" />
                       )}
                     </Link>
                   </li>
