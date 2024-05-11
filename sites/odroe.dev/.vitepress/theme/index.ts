@@ -3,8 +3,8 @@ import { h } from 'vue';
 import type { Theme } from 'vitepress';
 import DefaultTheme from 'vitepress/theme';
 
+import './tailwind.css';
 import './style.css';
-import './tailwind.postcss';
 
 export default {
   extends: DefaultTheme,

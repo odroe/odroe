@@ -3,11 +3,40 @@
  * https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css
  */
 
+:root {
+  --vp-c-brand-1: theme(colors.black);
+  --vp-c-brand-2: theme(colors.black / 0.75);
+  --vp-c-brand-3: theme(colors.black);
+  --vp-c-brand-soft: theme(colors.black / 0.25);
+  --vp-c-tip-soft: theme(colors.green.100);
+}
+
+.dark {
+  --vp-c-brand-1: theme(colors.white);
+  --vp-c-brand-2: theme(colors.white / 0.75);
+  --vp-c-brand-3: theme(colors.white);
+  --vp-c-brand-soft: theme(colors.white / 0.25);
+  --vp-c-tip-soft: theme(colors.green.800);
+}
+
 /**
  * Component: Nav
  * -------------------------------------------------------------------------- */
 :root {
   --vp-nav-bg-color: transparent;
+}
+
+/**
+ * Component: Button
+ * -------------------------------------------------------------------------- */
+:root {
+  --vp-button-brand-text: theme(colors.white);
+}
+
+.dark {
+  --vp-button-brand-text: theme(colors.black);
+  --vp-button-brand-hover-text: theme(colors.black);
+  --vp-button-brand-active-text: theme(colors.black / 0.75);
 }
 
 /**

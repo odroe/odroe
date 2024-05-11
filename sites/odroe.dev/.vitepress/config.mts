@@ -1,14 +1,10 @@
 import { type DefaultTheme, type HeadConfig, defineConfig } from 'vitepress';
 import navConfig from './nav.config';
+import sidebarConfig from './sidebar.config';
 import editLinkConfig from './edit-link.config';
-import viteConfig from '../vite.config';
+import appData from '../app.data';
 
-const app = {
-  name: 'Odroe',
-  slogan: 'Create user interfaces from Setup-widget',
-  description:
-    'Odroe is an declarative, efficient, and flexible Flutter UI framework for building user interfaces.',
-};
+const app = appData.load();
 
 const socialLinks = [
   {
@@ -26,7 +22,8 @@ const socialLinks = [
 ] satisfies DefaultTheme.SocialLink[];
 
 const rewrites = {
-  // 'pages/(.*)': '(.*)',
+  'docs/ui.md': 'ui.md',
+  'docs/ui/(.*)': 'ui/(.*).md',
   // 'docs/index.md': 'docs.md',
 } satisfies Record<string, string>;
 
@@ -42,16 +39,16 @@ const logo = {
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   outDir: 'dist',
-  title: app.name,
-  titleTemplate: app.name,
+  title: `${app.name}: ${app.slogan}`,
+  titleTemplate: `${app.name} → :title`,
   description: app.description,
   cleanUrls: true,
   head,
   rewrites,
   lastUpdated: true,
-  vite: viteConfig,
   themeConfig: {
     nav: navConfig,
+    sidebar: sidebarConfig,
     socialLinks,
     logo,
     siteTitle: false,

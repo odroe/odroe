@@ -1,7 +1,15 @@
+import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  css: {
-    // postcss: fileURLToPath(new URL('postcss.config.ts', import.meta.url)),
+  resolve: {
+    alias: [
+      {
+        find: /^.*\/VPNavBar\.vue$/,
+        replacement: fileURLToPath(
+          new URL('.vitepress/theme/components/navbar.vue', import.meta.url),
+        ),
+      },
+    ],
   },
 });
