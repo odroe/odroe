@@ -1,3 +1,0 @@
-.nav_link {
-  @apply text-sm/6 font-semibold text-black dark:text-white relative before:absolute before:-left-4 before:-right-4 before:-top-1 before:-bottom-1 before:rounded-full before:bg-transparent before:hover:bg-black/5 aria-selected:before:bg-black/5 before:-z-10 dark:before:hover:bg-white/10 aria-selected:dark:before:bg-white/10;
-}
