@@ -1,5 +1,7 @@
 import { type DefaultTheme, type HeadConfig, defineConfig } from 'vitepress';
-import nav from './nav.config';
+import navConfig from './nav.config';
+import editLinkConfig from './edit-link.config';
+import viteConfig from '../vite.config';
 
 const app = {
   name: 'Odroe',
@@ -32,6 +34,11 @@ const head = [
   ['link', { rel: 'icon', href: '/favicon.ico' }],
 ] satisfies HeadConfig[];
 
+const logo = {
+  light: '/brand-light.svg',
+  dark: '/brand-dark.svg',
+} satisfies DefaultTheme.ThemeableImage;
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   outDir: 'dist',
@@ -41,5 +48,13 @@ export default defineConfig({
   cleanUrls: true,
   head,
   rewrites,
-  themeConfig: { nav, socialLinks },
+  lastUpdated: true,
+  vite: viteConfig,
+  themeConfig: {
+    nav: navConfig,
+    socialLinks,
+    logo,
+    siteTitle: false,
+    editLink: editLinkConfig,
+  },
 });

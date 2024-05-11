@@ -13,6 +13,6 @@
     "jsx": "preserve",
     "incremental": true
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [".vitepress/**/*.ts", ".vitepress/**/*.vue"],
+  "exclude": ["node_modules", ".vitepress/cache", "dist"]
 }

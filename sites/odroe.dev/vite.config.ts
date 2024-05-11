@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
-import unocss from 'unocss/vite';
 
 export default defineConfig({
-  plugins: [unocss()],
+  css: {
+    // postcss: fileURLToPath(new URL('postcss.config.ts', import.meta.url)),
+  },
 });
