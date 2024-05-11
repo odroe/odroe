@@ -1,4 +1,4 @@
-import { DefaultTheme, defineConfig } from 'vitepress';
+import { type DefaultTheme, type HeadConfig, defineConfig } from 'vitepress';
 import nav from './nav.config';
 
 const app = {
@@ -28,6 +28,10 @@ const rewrites = {
   // 'docs/index.md': 'docs.md',
 } satisfies Record<string, string>;
 
+const head = [
+  ['link', { rel: 'icon', href: '/favicon.ico' }],
+] satisfies HeadConfig[];
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   outDir: 'dist',
@@ -35,6 +39,7 @@ export default defineConfig({
   titleTemplate: app.name,
   description: app.description,
   cleanUrls: true,
-  rewrites: rewrites,
+  head,
+  rewrites,
   themeConfig: { nav, socialLinks },
 });
