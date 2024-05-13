@@ -1,9 +1,11 @@
-abstract interface class Element {
+import 'component.dart';
+
+abstract interface class Element<Props> {
   Owner? get owner;
+  Component<Props> get component;
 }
 
-abstract interface class Owner {
-  abstract final Element element;
-  abstract final Owner? next;
-  abstract final Owner? prev;
+abstract interface class Owner<Props> {
+  Element<Props> get element;
+  Owner? parent;
 }

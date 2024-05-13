@@ -1,19 +1,26 @@
 import 'component.dart';
 import 'element.dart';
+import 'element_impl.dart';
+import 'owner_impl.dart';
 import 'setup.dart';
 
 /// Internal, Component impl
-class ComponentImpl<P> implements Component<P> {
+class ComponentImpl<Props> implements Component<Props> {
   ComponentImpl(this.setup);
 
-  final Setup<P> setup;
+  final Setup<Props> setup;
 
   @override
   String? displayName;
 
   @override
-  Element call(P props) {
-    // TODO: implement call
-    throw UnimplementedError();
+  Element call(Props props) {
+    final parent = evalOwner;
+    final element = ElementImpl(this);
+    final owner = OwnerImpl(element, parent);
+
+    evalOwner = element.owner = owner;
+
+    throw element;
   }
 }

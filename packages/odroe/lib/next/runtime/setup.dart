@@ -1,6 +1,6 @@
 import 'component.dart';
 import 'component_impl.dart';
-import 'element.dart';
+import 'render.dart';
 
 /// The [setup] function main param type def.
 typedef Setup<Props> = Render Function(Props props);
