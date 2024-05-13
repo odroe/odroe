@@ -17,7 +17,7 @@ Element fire(FireMaker maker, {widgets.Key? key}) {
       return depthOwner.element;
     }
 
-    depthOwner.destroy();
+    depthOwner.unmount();
     evalOwner = depthOwner.prev;
     depthOwner.next = null;
   }
@@ -66,14 +66,16 @@ class FireWidget extends widgets.Widget {
   FireWidget(this.maker, {super.key});
 
   final FireMaker maker;
-  late final Owner owner;
+  late final FireOwner owner;
 
   @override
-  FireWidgetElement createElement() => FireWidgetElement(this);
+  FireWidgetElement createElement() {
+    return owner.flutterWidgetElement = FireWidgetElement(this);
+  }
 }
 
 class FireWidgetElement extends widgets.ComponentElement {
-  FireWidgetElement(super.widget);
+  FireWidgetElement(FireWidget super.widget);
 
   @override
   FireWidget get widget => super.widget as FireWidget;
