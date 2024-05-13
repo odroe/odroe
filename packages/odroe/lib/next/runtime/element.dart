@@ -1,10 +1,9 @@
-import 'package:flutter/widgets.dart';
+abstract interface class Element {
+  Owner? get owner;
+}
 
-abstract interface class Element {}
-
-typedef Render = Element Function();
-
-typedef RenderBuilder = Element Function(BuildContext context);
-Render defineRender(RenderBuilder builder) {
-  throw UnimplementedError();
+abstract interface class Owner {
+  abstract final Element element;
+  abstract final Owner? next;
+  abstract final Owner? prev;
 }
