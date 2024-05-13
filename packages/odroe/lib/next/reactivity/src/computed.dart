@@ -1,7 +1,8 @@
 import '_internal.dart';
-import 'types.dart';
+import 'flags.dart';
+import 'signal.dart';
 
-class Computed<T> extends SignalSource<T>
+final class Computed<T> extends SignalSource<T>
     with Target
     implements ReadonlySignal<T> {
   Computed(this._fn) : flags = Flag.outdated {

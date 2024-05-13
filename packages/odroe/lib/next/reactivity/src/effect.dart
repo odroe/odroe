@@ -1,9 +1,10 @@
 import '_internal.dart';
 import 'batch.dart';
+import 'flags.dart';
 
 typedef EffectFn = void Function()? Function();
 
-class Effect extends Target {
+final class Effect extends Target {
   EffectFn? fn;
   void Function()? cleanup;
 
@@ -40,7 +41,7 @@ class Effect extends Target {
     final prevContext = evalContext;
     evalContext = this;
 
-    return () => endEffect(this, prevContext);
+    return () => endEffect(this, prevContext!);
   }
 
   @override
@@ -100,7 +101,7 @@ disposeEffect(Effect effect) {
   cleanupEffect(effect);
 }
 
-endEffect(Effect effect, dynamic prevContext) {
+endEffect(Effect effect, Target prevContext) {
   if (evalContext != effect) {
     throw Exception('Out-of-order effect');
   }

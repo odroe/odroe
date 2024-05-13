@@ -1,8 +1,7 @@
-import 'package:meta/meta.dart';
-
 import 'batch.dart';
 import 'effect.dart';
-import 'types.dart';
+import 'flags.dart';
+import 'signal.dart';
 
 Target? evalContext;
 Effect? batchedEffect;
@@ -10,18 +9,7 @@ int batchDepth = 0;
 int batchIteration = 0;
 int globalVersion = 0;
 
-/// Signal flags.
-@immutable
-extension type const Flag._(int _) implements int {
-  static const running = Flag._(1 << 0);
-  static const notified = Flag._(1 << 1);
-  static const outdated = Flag._(1 << 2);
-  static const disposed = Flag._(1 << 3);
-  static const hasError = Flag._(1 << 4);
-  static const tracking = Flag._(1 << 5);
-}
-
-abstract mixin class Target {
+abstract base mixin class Target {
   Node? sources;
   abstract int flags;
 

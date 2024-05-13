@@ -1,5 +1,6 @@
 import '_internal.dart';
 import 'effect.dart';
+import 'flags.dart';
 
 void beginBatch() => batchDepth++;
 void endBatch() {
