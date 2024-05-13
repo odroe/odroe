@@ -14,13 +14,10 @@ mixin SetupSource<Props> on Widget {
 class SetupElement<Props> extends ComponentElement {
   static late SetupElement current;
 
-  SetupElement(super.widget);
+  SetupElement(SetupSource<Props> super.widget);
 
   @override
-  SetupSource<Props> get widget {
-    assert(super.widget is SetupSource<Props>);
-    return super.widget as SetupSource<Props>;
-  }
+  SetupSource<Props> get widget => super.widget as SetupSource<Props>;
 
   Rune? runes;
   int cursor = 0;

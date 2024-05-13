@@ -3,10 +3,10 @@ import 'component_impl.dart';
 import 'render.dart';
 
 /// The [setup] function main param type def.
-typedef Setup<Props> = Render Function(Props props);
+typedef Setup<Props> = Render<Props> Function(Props props);
 
 /// The [DefineComponentWithputProps.z] function main param type def.
-typedef SetupWithoutProps = Render Function();
+typedef SetupWithoutProps = Render<void> Function();
 
 /// Define a odroe [Component] of [Props], with [fn] creator function setup your [Component].
 /// ```dart

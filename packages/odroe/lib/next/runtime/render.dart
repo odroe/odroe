@@ -2,9 +2,9 @@ import 'package:flutter/widgets.dart' show BuildContext;
 
 import 'element.dart';
 
-typedef Render = Element Function();
-typedef RenderBuilder = Element Function(BuildContext context);
+typedef Render<Props> = Element<Props> Function();
+typedef RenderBuilder = Element<void> Function(BuildContext context);
 
-Render defineRender(RenderBuilder builder) {
+Render<void> defineRender(RenderBuilder builder) {
   throw UnimplementedError();
 }
