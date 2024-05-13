@@ -124,8 +124,6 @@ endEffect(Effect effect, Target prevContext) {
 /// run once, either when the callback is next called or when the effect
 /// gets disposed, whichever happens first.
 ///
-/// @param fn The effect callback.
-/// @returns A function for disposing the effect.
 void Function() effect(EffectFn fn) {
   final effect = Effect(fn);
   try {

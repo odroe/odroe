@@ -1,12 +1,8 @@
 import 'batch.dart';
-import 'effect.dart';
 import 'flags.dart';
 import 'signal.dart';
 
 Target? evalContext;
-Effect? batchedEffect;
-int batchDepth = 0;
-int batchIteration = 0;
 int globalVersion = 0;
 
 abstract base mixin class Target {
@@ -31,8 +27,7 @@ class Node {
   Node? rollbackNode;
 }
 
-class SignalSource<T> extends Signal<T>
-    implements WriteableSignal<T>, ReadonlySignal<T> {
+class SignalSource<T> implements WriteableSignal<T>, ReadonlySignal<T> {
   SignalSource([this.raw]) : version = 0;
 
   /// Signal value

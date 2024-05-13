@@ -1,10 +1,6 @@
 import '_internal.dart';
 
-abstract class Signal<T> {
-  const Signal();
-
-  Symbol get brand => #odroe;
-
+abstract interface class Signal<T> {
   /// Returns current signal value.
   T get value;
 
@@ -16,9 +12,7 @@ abstract class Signal<T> {
   T peek();
 }
 
-abstract class ReadonlySignal<T> extends Signal<T> {
-  const ReadonlySignal();
-}
+abstract class ReadonlySignal<T> extends Signal<T> {}
 
 abstract class WriteableSignal<T> extends ReadonlySignal<T> {
   /// Write a new value to the signal.

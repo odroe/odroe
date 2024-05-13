@@ -2,6 +2,10 @@ import '_internal.dart';
 import 'effect.dart';
 import 'flags.dart';
 
+int batchDepth = 0;
+int batchIteration = 0;
+Effect? batchedEffect;
+
 void beginBatch() => batchDepth++;
 void endBatch() {
   if (batchDepth > 1) {
