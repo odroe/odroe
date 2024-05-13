@@ -41,14 +41,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.18.0"
-  cupertino_icons:
-    dependency: "direct main"
-    description:
-      name: cupertino_icons
-      sha256: ba631d1c7f7bef6b729a622b7b752645a2d076dba9976925b8f25725a30e1ee6
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.8"
   fake_async:
     dependency: transitive
     description:
@@ -131,6 +123,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.11.0"
+  odroe:
+    dependency: "direct main"
+    description:
+      path: "../packages/odroe"
+      relative: true
+    source: path
+    version: "0.0.7"
   path:
     dependency: transitive
     description:
@@ -139,6 +138,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.0"
+  signals_core:
+    dependency: transitive
+    description:
+      name: signals_core
+      sha256: e34d9e3a5125f2063a6a3817729961cf948ca8cfdd66b6036c1c8c48735d2dda
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.2.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -210,3 +217,4 @@ packages:
     version: "13.0.0"
 sdks:
   dart: ">=3.3.4 <4.0.0"
+  flutter: ">=1.17.0"

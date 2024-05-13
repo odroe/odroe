@@ -1,11 +1,28 @@
-import 'package:flutter/widgets.dart' hide Element;
+import 'package:flutter/widgets.dart' as widgets;
 
 import 'element.dart';
 
-Widget reversal(Element element) {
-  throw UnimplementedError();
+widgets.Widget reversal(Element element) {
+  return ReversalWidget(element);
 }
 
-abstract interface class Ref<T> {}
+class ReversalWidget extends widgets.Widget {
+  const ReversalWidget(this.element, {super.key});
 
-extension type Demo<T extends int>(T value) implements int, num {}
+  final Element element;
+
+  @override
+  widgets.Element createElement() => ReversalElement(this);
+}
+
+class ReversalElement extends widgets.ComponentElement {
+  ReversalElement(ReversalWidget super.widget);
+
+  @override
+  ReversalWidget get widget => super.widget as ReversalWidget;
+
+  @override
+  widgets.Widget build() {
+    return widget.element.owner.render();
+  }
+}

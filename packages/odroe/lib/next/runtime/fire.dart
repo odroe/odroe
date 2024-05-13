@@ -28,8 +28,9 @@ Element fire(FireMaker maker, {widgets.Key? key}) {
   final element = FireElement(component);
   final owner = FireOwner(element, depth);
 
-  owner.prev = parent;
   widget.owner = owner;
+  element.owner = owner;
+  owner.prev = parent;
   evalOwner = owner;
   depth++;
 
@@ -81,7 +82,7 @@ class FireWidgetElement extends widgets.ComponentElement {
   FireWidget get widget => super.widget as FireWidget;
 
   late widgets.Widget cachedWidget;
-  bool shouldRebuild = false;
+  bool shouldRebuild = true;
 
   @override
   widgets.Widget build() {
@@ -124,11 +125,14 @@ class FireOwner extends OwnerImpl {
   @override
   FireElement get element => super.element as FireElement;
 
-  FireWidgetElement? flutterWidgetElement;
+  late final FireWidgetElement flutterWidgetElement;
 
   @override
   update() {
     super.update();
-    flutterWidgetElement?.markNeedsBuild();
+    flutterWidgetElement.markNeedsBuild();
   }
+
+  @override
+  render() => flutterWidgetElement.build();
 }

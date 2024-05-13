@@ -1,8 +1,9 @@
+import 'package:flutter/widgets.dart' as widgets;
 import 'component.dart';
 import 'lifecycle.dart';
 
 abstract interface class Element {
-  Owner? get owner;
+  Owner get owner;
   Component get component;
 }
 
@@ -14,7 +15,7 @@ class ElementImpl implements Element {
   final Component component;
 
   @override
-  Owner? owner;
+  late final Owner owner;
 }
 
 abstract interface class Owner implements Lifecycle {
@@ -23,6 +24,7 @@ abstract interface class Owner implements Lifecycle {
   Owner? prev;
   Owner? next;
   Owner get root;
+  widgets.Widget render();
 }
 
 Owner? evalOwner;
@@ -79,5 +81,14 @@ class OwnerImpl implements Owner {
   @override
   void update() {
     // TODO
+  }
+
+  @override
+  widgets.Widget render() {
+    if (prev != null) {
+      return prev!.render();
+    }
+    // TODO: implement render, 目前没有自绘制组件，fire 和 veversal 会重写！
+    throw UnimplementedError('$depth');
   }
 }

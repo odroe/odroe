@@ -16,7 +16,7 @@ final Component<String?> sayHello = setup((props) {
 final app = setup.z(() {
   return () => fire(() => MaterialApp(
         title: "App",
-        home: reversal(sayHello.zero),
+        home: reversal(sayHello(null)),
       ));
 });
 

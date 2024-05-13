@@ -1,12 +1,11 @@
 import 'component.dart';
-import 'component_impl.dart';
 import 'render.dart';
 
 /// The [setup] function main param type def.
-typedef Setup<Props> = Render<Props> Function(Props props);
+typedef Setup<Props> = Render Function(Props props);
 
 /// The [DefineComponentWithputProps.z] function main param type def.
-typedef SetupWithoutProps = Render<void> Function();
+typedef SetupWithoutProps = Render Function();
 
 /// Define a odroe [Component] of [Props], with [fn] creator function setup your [Component].
 /// ```dart
@@ -45,5 +44,5 @@ extension DefineComponentWithputProps on Component<Props> Function<Props>(
   ///
   /// From the code perspective, using [z] is more concise.
   /// But this is a hobby multiple-choice question.
-  Component<void> z(SetupWithoutProps fn) => this((_) => fn());
+  Component<Null> z(SetupWithoutProps fn) => this((_) => fn());
 }

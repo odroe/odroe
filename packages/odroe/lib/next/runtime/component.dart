@@ -9,8 +9,8 @@ abstract interface class Component<Props> {
   }
 }
 
-extension ComponentWithoutProps on Component<void> {
-  Element get zero => call(null);
+extension ComponentWithoutProps<T extends Object?> on Component<T> {
+  Element get zero => call(null as T);
 }
 
 /// Internal, Component impl
@@ -24,6 +24,7 @@ class ComponentImpl<Props> implements Component<Props> {
 
   @override
   Element call(Props props) {
+    print(depth);
     final depthOwner = findDepthOwner();
     if (depthOwner != null) {
       if (depthOwner.element.component == this) {
@@ -45,6 +46,7 @@ class ComponentImpl<Props> implements Component<Props> {
 
     owner.prev = parent;
     evalOwner = owner;
+    element.owner = owner;
     depth++;
 
     return element;
