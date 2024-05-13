@@ -1,3 +1,4 @@
 library odroe.dev;
 
-export 'next/reactivity/reactivity.dart';
+export 'next/reactivity/reactive.dart';
+export 'next/reactivity/signals.dart';

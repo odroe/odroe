@@ -146,6 +146,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.0"
+  signals_core:
+    dependency: transitive
+    description:
+      name: signals_core
+      sha256: e34d9e3a5125f2063a6a3817729961cf948ca8cfdd66b6036c1c8c48735d2dda
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.2.0"
   sky_engine:
     dependency: transitive
     description: flutter
