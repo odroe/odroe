@@ -1,6 +1,6 @@
 import 'package:signals_core/signals_core.dart' as signals;
 
-import 'warn.dart';
+import '../../warn.dart';
 
 export 'package:signals_core/signals_core.dart'
     show
@@ -9,11 +9,11 @@ export 'package:signals_core/signals_core.dart'
         SignalsWriteAfterDisposeError;
 
 /// The abstract interface of [Signal].This is readable interface. expose the [value] getter.
-abstract interface class ReadonlySignal<T> {
-  /// Returns the value by the current [Signal].
+abstract interface class Readonly<T> {
+  /// Returns the value by the current [Readonly] | [Signal].
   T get value;
 
-  /// Reading signals without subscribing to them
+  /// Reading [Signal] | [Readonly] without subscribing to them
   ///
   /// On the rare occasion that you need to write to a signal
   /// inside [effect], but don't want the effect to re-run
@@ -44,35 +44,30 @@ abstract interface class ReadonlySignal<T> {
 
 /// Internal stringable mixin;
 mixin _Stringable {
-  String toDisplayString();
+  String _toDisplayString();
 
   @override
-  toString() => toDisplayString();
+  toString() => _toDisplayString();
 }
 
-/// Writeable [Signal], The [Signal] expose the [value] setter and [toReadobly] method.
-abstract interface class Signal<T> implements ReadonlySignal<T> {
+/// The [Signal] expose the [value] setter and [toReadobly] method.
+abstract interface class Signal<T> implements Readonly<T> {
   /// Wirte a new value to the current [Signal].
   set value(T value);
-
-  /// Convert the current model to a read only signal type.
-  ///
-  /// The main purpose is to achieve safe type conversion when you want to pass the entire signal as a parameter to the target but only allow the target to read.
-  ReadonlySignal<T> toReadonly();
 }
 
-/// Internal [ReadonlySignal] proxy.
+/// Internal [Readonly] proxy.
 ///
 /// Why do we need a proxy? Merely type conversion is not enough to meet true read-only requirements, so using a read-only Signal proxy ensures that it cannot be converted back to the original type through `as dynamic as Signal`.
-class _ReadonlySignalProxy<T> with _Stringable implements ReadonlySignal<T> {
-  const _ReadonlySignalProxy(this.signal);
-  final ReadonlySignal<T> signal;
+class _ReadonlyProxy<T> with _Stringable implements Readonly<T> {
+  const _ReadonlyProxy(this.signal);
+  final Signal<T> signal;
 
   @override
   T peek() => signal.peek();
 
   @override
-  String toDisplayString() => value.toString();
+  String _toDisplayString() => value.toString();
 
   @override
   T get value => signal.value;
@@ -85,10 +80,7 @@ class _SignalProxy<T> with _Stringable implements Signal<T> {
   final signals.Signal<T> signal;
 
   @override
-  String toDisplayString() => value.toString();
-
-  @override
-  ReadonlySignal<T> toReadonly() => _ReadonlySignalProxy(this);
+  String _toDisplayString() => value.toString();
 
   @override
   T get value => signal.value;
@@ -119,7 +111,7 @@ Signal<T> signal<T>(T initialValue,
 }
 
 /// Internal computed proxy.
-class _ComputedProxy<T> with _Stringable implements ReadonlySignal<T> {
+class _ComputedProxy<T> with _Stringable implements Readonly<T> {
   const _ComputedProxy(this.computed);
 
   final signals.Computed<T> computed;
@@ -128,7 +120,7 @@ class _ComputedProxy<T> with _Stringable implements ReadonlySignal<T> {
   T peek() => computed.peek();
 
   @override
-  String toDisplayString() => value.toString();
+  String _toDisplayString() => value.toString();
 
   @override
   T get value => computed.value;
@@ -138,7 +130,7 @@ class _ComputedProxy<T> with _Stringable implements ReadonlySignal<T> {
 /// other signals. The returned computed signal is read-only, and
 /// its value is automatically updated when any signals accessed
 /// from within the callback function change.
-ReadonlySignal<T> computed<T>(T Function() getter,
+Readonly<T> computed<T>(T Function() getter,
     {bool autoDispose = false, String? debugLabel}) {
   final inner = signals.computed(getter,
       autoDispose: autoDispose, debugLabel: debugLabel);
@@ -192,4 +184,4 @@ T untracked<T>(T Function() getter) => signals.untracked(getter);
 T batch<T>(T Function() handler) => signals.batch(handler);
 
 /// Determine whether an object is a [Signal] or [ReadonlySignal].
-bool isSignal(value) => value is ReadonlySignal || value is signals.Signal;
+bool isSignal(value) => value is Signal || value is signals.Signal;
