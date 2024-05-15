@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide Colors;
+import 'package:flutter/material.dart' hide Colors, ButtonStyle;
 import 'package:odroe/ui.dart';
 
 class AlertDefaultPage extends StatelessWidget {
@@ -10,7 +10,13 @@ class AlertDefaultPage extends StatelessWidget {
       body: ListView(
         children: const [
           Alert(),
-          Button(text: Text('Hello')),
+          Button(
+            text: Text('Hello'),
+            style: ButtonStyle(
+              color: Colors.green,
+              disabled: true,
+            ),
+          ),
         ],
       ),
     );
