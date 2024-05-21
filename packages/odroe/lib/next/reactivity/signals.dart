@@ -1,6 +1,6 @@
 import 'package:signals_core/signals_core.dart' as signals;
 
-import '../../warn.dart';
+import '../warn.dart';
 
 export 'package:signals_core/signals_core.dart'
     show

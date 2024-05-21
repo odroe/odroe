@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:odroe/next.dart';
 
-import 'pages/alert.dart';
+Widget counter() => setup(() {
+      final count = signal(0);
+      void onPressed() => count.value++;
 
-class App extends StatelessWidget {
-  const App({super.key});
+      return () => Scaffold(
+            appBar: AppBar(title: const Text('Counter')),
+            body: Text('Count: ${count.value}'),
+            floatingActionButton: FloatingActionButton(
+              onPressed: onPressed,
+              child: const Icon(Icons.plus_one),
+            ),
+          );
+    });
 
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Odroe/UI Playground',
-      home: AlertDefaultPage(),
-    );
-  }
-}
+Widget app() => setup(() => () => MaterialApp(
+      title: 'Odreo Playground',
+      home: counter(),
+    ));
 
-main() => runApp(const App());
+main() => runApp(app());

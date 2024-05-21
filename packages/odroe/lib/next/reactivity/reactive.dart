@@ -1,6 +1,6 @@
 import 'package:signals_core/signals_core.dart' as signals;
 
-import '../../warn.dart';
+import '../warn.dart';
 
 /// Level is warning, @see https://pub.dev/documentation/logging/latest/logging/Level/WARNING-constant.html
 void _warnIsReactive() => warn('Value is already a reactive object');
