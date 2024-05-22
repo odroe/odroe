@@ -56,23 +56,6 @@ abstract interface class Signal<T> implements Readonly<T> {
   set value(T value);
 }
 
-/// Internal [Readonly] proxy.
-///
-/// Why do we need a proxy? Merely type conversion is not enough to meet true read-only requirements, so using a read-only Signal proxy ensures that it cannot be converted back to the original type through `as dynamic as Signal`.
-class _ReadonlyProxy<T> with _Stringable implements Readonly<T> {
-  const _ReadonlyProxy(this.signal);
-  final Signal<T> signal;
-
-  @override
-  T peek() => signal.peek();
-
-  @override
-  String _toDisplayString() => value.toString();
-
-  @override
-  T get value => signal.value;
-}
-
 /// Internal [Signal] proxy
 class _SignalProxy<T> with _Stringable implements Signal<T> {
   const _SignalProxy(this.signal);
