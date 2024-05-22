@@ -29,7 +29,6 @@ class SetupElement extends ComponentElement {
   Widget build() {
     evalElement = this;
     if (!_initializedSetup) {
-      evalElement = this;
       props = widget.props?.map<Signal>((prop) {
             if (isSignal(prop)) return prop;
             return signal(prop);
