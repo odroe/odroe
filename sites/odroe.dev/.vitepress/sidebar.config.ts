@@ -1,16 +1,13 @@
-import { type DefaultTheme } from 'vitepress';
+import { type DefaultTheme } from "vitepress";
 
 const docsSidbar = [
   {
-    text: 'Get Started',
+    text: "Introduction",
     collapsed: true,
-    items: [
-      { text: 'Introduction', link: '/docs/getting-started/introduction' },
-      { text: 'Installation', link: '/docs/getting-started/installation' },
-    ],
+    items: [{ text: "Getting Started", link: "/docs/getting-started" }],
   },
 ] satisfies DefaultTheme.SidebarItem[];
 
 export default {
-  '/docs/': docsSidbar,
+  "/docs/": docsSidbar,
 } satisfies DefaultTheme.Sidebar;

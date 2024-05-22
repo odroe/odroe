@@ -1,6 +1,6 @@
 ---
 layout: home
-title: 'Odroe: Create user interfaces from Setup-widget'
+title: "Odroe: Create user interfaces from Setup-widget"
 titleTemplate: false
 hero:
   text: Create user interfaces from Setup-widget
@@ -8,10 +8,10 @@ hero:
   actions:
     - theme: brand
       text: </> Get Started
-      link: /docs/getting-started/installation
+      link: /docs/getting-started
     - theme: alt
       text: What is Odroe?
-      link: /docs/getting-started/introduction
+      link: /docs/getting-started
 features:
   - title: Refined
     details: the amount of code is significantly reduced compared to Class Widget.

@@ -1,0 +1,4 @@
+[build]
+base = "sites/odroe.dev"
+command = "build"
+publish = ".vitepress/dist"
