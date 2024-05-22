@@ -13,5 +13,8 @@
     "build": "vitepress build",
     "preview": "vitepress preview"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "yaml": "^2.4.2"
+  }
 }
