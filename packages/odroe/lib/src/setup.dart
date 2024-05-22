@@ -17,6 +17,7 @@ class SetupWidget extends Widget {
   Element createElement() => SetupElement(this);
 }
 
+/// Define a Setup-widget.
 Widget setup(SetupCallback fn) {
   final key = evalKey;
   final props = evalProps;

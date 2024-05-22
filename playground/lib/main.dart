@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:odroe/next.dart';
+import 'package:odroe/odroe.dart';
 
 Widget countText(int count) {
   defineProps([count]);
