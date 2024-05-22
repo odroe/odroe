@@ -1,3 +1,22 @@
+# Odroe v0.0.8
+
+To install Odroe `v0.0.8` run:
+
+```bash
+flutter pub add odreo:0.0.8
+```
+
+or update your `pubspec.yaml` file:
+
+```yaml
+dependencies:
+  odroe: ^0.0.8
+```
+
+## What's Changed
+
+- **Framework**: Refactoring All
+
 # Odroe v0.0.7
 
 To install Odroe `v0.0.7` run:

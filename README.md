@@ -16,13 +16,13 @@ import 'package:flutter/material.dart';
 import 'package:odroe/odroe.dart';
 
 Widget counter() => setup(() {
-    final count = $state(0);
+    final count = signal(0);
 
-    void increment() => count.update((value) => value + 1);
+    void increment() => count.value++;
 
-    return TextButton(
+    return () => TextButton(
         onPressed: increment,
-        child: Text('Count: ${count.get()}'),
+        child: Text('Count: ${count.value}'),
     );
 });
 ```
