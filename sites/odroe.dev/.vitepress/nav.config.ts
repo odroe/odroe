@@ -2,13 +2,14 @@ import { type DefaultTheme } from "vitepress";
 
 const docs = {
   text: "Docs",
-  items: [
-    { text: "Get Started", link: "/docs/getting-started" },
-    // { text: "Guide", link: "/docs/guide" },
-    // { text: "API", link: "/docs/api" },
-    // { text: "Examples", link: "/docs/examples" },
-    // { text: "Community", link: "/docs/community" },
-  ],
+  link: "/docs/getting-started",
+  // items: [
+  //   { text: "Get Started", link: "/docs/getting-started" },
+  //   // { text: "Guide", link: "/docs/guide" },
+  //   // { text: "API", link: "/docs/api" },
+  //   // { text: "Examples", link: "/docs/examples" },
+  //   // { text: "Community", link: "/docs/community" },
+  // ],
 } satisfies DefaultTheme.NavItem;
 
 const ui = {

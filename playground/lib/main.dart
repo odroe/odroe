@@ -6,6 +6,7 @@ Widget countText(int count) {
 
   return setup(() {
     final [count] = props();
+
     return () => Center(child: Text('Count: $count'));
   });
 }

@@ -15,10 +15,10 @@ hero:
 features:
   - title: Refined
     details: the amount of code is significantly reduced compared to Class Widget.
-  - title: Feature B
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature C
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
+  - title: Conciseness
+    details: Less code compared to class-widgets.
+  - title: Compositional
+    details: Setup-widgets are typical functional widgets, encouraging the learning of powerful composition, reusability, and construction concepts.
 ---
 
 <script setup>
