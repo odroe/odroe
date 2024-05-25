@@ -32,8 +32,6 @@ Widget grid(Iterable<Route> routes) => setup(() {
     });
 
 Widget home() => setup(() {
-      final context = useContext();
-
       return () => Scaffold(
             appBar: AppBar(title: const Text('Odroe Playground')),
             body: ListView(

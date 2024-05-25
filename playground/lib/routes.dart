@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import 'basics/counter.dart';
-import 'home.dart';
 import 'ui/link.dart';
 
 typedef PageSetupWidget = Widget Function();
