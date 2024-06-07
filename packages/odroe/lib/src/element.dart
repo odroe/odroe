@@ -21,7 +21,7 @@ class SetupElement extends ComponentElement {
   bool _initializedSetup = false;
   late Widget cachedBuiltWidget;
   late Render render;
-  late final List<Signal> props;
+  late List<Signal> props;
   void Function()? cleanup;
   final lifecycle = <Lifecycle>[];
 
@@ -98,6 +98,13 @@ class SetupElement extends ComponentElement {
   deactivate() {
     super.deactivate();
     lifecycle.type(LifecycleType.onDeactivated).call();
+  }
+
+  @override
+  reassemble() {
+    props.clear();
+    _initializedSetup = false;
+    super.reassemble();
   }
 }
 
