@@ -6,13 +6,6 @@ class StyleSheet {
   final double? width;
   final double? height;
 
-  StyleSheet merge(StyleSheet other) {
-    return StyleSheet(
-      width: other.width ?? width,
-      height: other.height ?? height,
-    );
-  }
-
   @override
   int get hashCode => Object.hashAll([width, height]);
 

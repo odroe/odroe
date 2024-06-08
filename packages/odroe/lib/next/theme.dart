@@ -1,24 +1,31 @@
 import 'package:flutter/widgets.dart';
 
-import '_null_widget.dart';
+import '_internal/map_utils.dart';
+import '_internal/style_sheet_utils.dart';
 import 'style_sheet.dart';
 
 typedef NamedStyleSheets = Map<String, StyleSheet>;
 
-abstract interface class OdroeTheme {
-  StyleSheet? get style;
-  NamedStyleSheets? get sheets;
+class OdroeTheme {
+  final StyleSheet? style;
+  final NamedStyleSheets? sheets;
 
-  const factory OdroeTheme({
-    Key? key,
-    NamedStyleSheets? sheets,
-    StyleSheet? style,
-    required Widget child,
-  }) = _ThemeImpl;
+  const OdroeTheme.value({this.sheets, this.style});
+
+  const factory OdroeTheme(
+      {Key? key,
+      NamedStyleSheets? sheets,
+      StyleSheet? style,
+      required Widget child}) = _ThemeWidgetProxy;
+
+  static OdroeTheme? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<_ThemeProvider>()?.theme;
+  }
 }
 
-class _ThemeImpl extends StatelessWidget implements OdroeTheme {
-  const _ThemeImpl({super.key, this.sheets, this.style, required this.widget});
+class _ThemeWidgetProxy extends StatelessWidget implements OdroeTheme {
+  const _ThemeWidgetProxy(
+      {super.key, this.sheets, this.style, required this.child});
 
   @override
   final NamedStyleSheets? sheets;
@@ -26,37 +33,28 @@ class _ThemeImpl extends StatelessWidget implements OdroeTheme {
   @override
   final StyleSheet? style;
 
-  final Widget widget;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
-    throw UnimplementedError();
+    if (this.style == null && this.sheets.isNullOrEmpty) {
+      return child;
+    }
+
+    final parent = OdroeTheme.maybeOf(context);
+    final style = parent?.style?.maybeMerge(this.style) ?? this.style;
+    final sheets = parent?.sheets?.maybeMerge(this.sheets) ?? this.sheets;
+
+    if (parent?.style == style && sheets.equals(parent?.sheets)) {
+      return child;
+    }
+
+    return _ThemeProvider(
+      theme: OdroeTheme.value(sheets: sheets, style: style),
+      child: child,
+    );
   }
 }
-
-// class OdroeTheme {
-//   const OdroeTheme._({this.style, this.sheets});
-
-//   final StyleSheet? style;
-//   final NamedStyleSheets? sheets;
-
-//   // @override
-//   // Widget build(BuildContext context) {
-//   //   if (style == null && (sheets == null || sheets?.isEmpty == true)) {
-//   //     return child;
-//   //   }
-
-//   //   return _ThemeProvider(theme: this, child: child);
-//   // }
-
-//   // static StyleSheet? styleMaybeOf(BuildContext context) {
-//   //   return context
-//   //       .dependOnInheritedWidgetOfExactType<_ThemeProvider>()
-//   //       ?.theme
-//   //       .style;
-//   // }
-// }
 
 class _ThemeProvider extends InheritedWidget {
   const _ThemeProvider({required super.child, required this.theme});
@@ -65,75 +63,7 @@ class _ThemeProvider extends InheritedWidget {
 
   @override
   bool updateShouldNotify(covariant _ThemeProvider oldWidget) {
-    final oldTheme = oldWidget.theme;
-
-    return oldTheme.style != theme.style ||
-        oldTheme.sheets?.records.unorderedHashCode !=
-            oldTheme.sheets?.records.unorderedHashCode;
+    return theme.style != oldWidget.theme.style ||
+        !theme.sheets.equals(oldWidget.theme.sheets);
   }
-}
-
-class OdroeTheme2 extends InheritedWidget {
-  const OdroeTheme2({
-    required super.child,
-    super.key,
-    this.style,
-    this.sheets = const {},
-  });
-
-  final StyleSheet? style;
-  final Map<String, StyleSheet> sheets;
-
-  @override
-  bool updateShouldNotify(covariant OdroeTheme oldWidget) {
-    return oldWidget.style != style ||
-        oldWidget.sheets.records.unorderedHashCode !=
-            sheets.records.unorderedHashCode;
-  }
-
-  @override
-  get child => Builder(builder: build);
-
-  Widget build(BuildContext context) {
-    const init = (StyleSheet(), <String, StyleSheet>{});
-    final theme = _findThemes(context).fold(init, _themesFoldHandle);
-  }
-
-  static (StyleSheet, Map<String, StyleSheet>)? of(BuildContext context) {
-    const init = (StyleSheet(), <String, StyleSheet>{});
-    final theme = _findThemes(context).fold(init, _themesFoldHandle);
-  }
-
-  static (StyleSheet, Map<String, StyleSheet>) _themesFoldHandle(
-      (StyleSheet, Map<String, StyleSheet>) prev, OdroeTheme theme) {
-    final style = switch (theme.style) {};
-  }
-
-  static Iterable<OdroeTheme> _findThemes(BuildContext context,
-      [Iterable<OdroeTheme> themes = const []]) {
-    final element =
-        context.getElementForInheritedWidgetOfExactType<OdroeTheme>();
-    if (element == null) return themes;
-
-    final results = [element.widget as OdroeTheme, ...themes];
-    Element? parent;
-    element.visitAncestorElements((element) {
-      parent = element;
-      return false;
-    });
-
-    return switch (parent) {
-      Element element => _findThemes(element, results),
-      _ => results,
-    };
-  }
-}
-
-extension on Map<String, StyleSheet> {
-  Iterable<(String, StyleSheet)> get records =>
-      entries.map((e) => (e.key, e.value));
-}
-
-extension<T> on Iterable<T> {
-  int get unorderedHashCode => Object.hashAllUnordered(this);
 }
