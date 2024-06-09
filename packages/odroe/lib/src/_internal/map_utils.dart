@@ -8,9 +8,10 @@ extension InternalNullableMapUtils<K, V> on Map<K, V>? {
     };
   }
 
-  bool equals(Map<K, V>? other) =>
-      runtimeType == other.runtimeType &&
-      this?.itemsHashCode == other?.itemsHashCode;
+  bool equals(Map<K, V>? other) {
+    return runtimeType == other.runtimeType &&
+        this?.itemsHashCode == other?.itemsHashCode;
+  }
 }
 
 extension InternalMapUtils<K, V> on Map<K, V> {
