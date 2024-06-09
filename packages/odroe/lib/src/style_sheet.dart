@@ -1,4 +1,4 @@
-class StyleSheet {
+final class StyleSheet {
   const StyleSheet({
     this.pattern,
     this.cascades,

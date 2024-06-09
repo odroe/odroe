@@ -1,11 +1,14 @@
 import 'style_sheet.dart';
 import '_internal/pattern_utils.dart';
+import '_internal/cascade_style_sheet_utils.dart';
 
 extension StyleSheetUtils on StyleSheet {
   /// On the current basis, create a new [StyleSheet] using [other].
   StyleSheet createWith(StyleSheet other, [Pattern? pattern]) {
     return StyleSheet(
       pattern: pattern,
+      cascades:
+          cascades?.createWith(other.cascades ?? const []) ?? other.cascades,
       width: other.width ?? width,
       height: other.height ?? height,
       maxWidth: other.maxWidth ?? maxWidth,
