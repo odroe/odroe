@@ -1,13 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:odroe/odroe.dart';
+import 'package:odroe/src/box.dart';
+import 'package:odroe/src/style_sheet.dart';
 
-import 'home.dart';
-import 'routes.dart';
+void main() {
+  runApp(const MaterialApp(
+    title: "Playground",
+    home: Home(),
+  ));
+}
 
-Widget app() => setup(() => () => MaterialApp(
-      title: 'Odreo Playground',
-      home: home(),
-      routes: routes,
-    ));
+class Home extends StatelessWidget {
+  const Home({super.key});
 
-void main() => runApp(app());
+  @override
+  Widget build(BuildContext context) {
+    return const Column(children: [
+      Box(
+        style: StyleSheet(width: 100, height: 64),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: Colors.red),
+        ),
+      ),
+    ]);
+  }
+}

@@ -1,9 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '_internal/map_utils.dart';
-import '_internal/style_sheet_utils.dart';
+import 'style.dart';
 import 'style_sheet.dart';
-import 'theme.dart';
+import 'style_sheet_utils.dart';
 import 'visitors/default_style_sheet_visitor.dart';
 import 'visitors/style_sheet_visitor.dart';
 
@@ -13,38 +12,39 @@ class Box extends StatelessWidget {
     this.child,
     this.children,
     this.style,
-    this.sheets,
+    this.aspect,
     this.visitor = const DefaultStyleSheetVisitor(),
-  }) : assert(child != null && children != null);
+  })  : assert(child != null || children != null),
+        assert(style != null || aspect?.length != 0);
 
   final StyleSheet? style;
-  final Iterable<String>? sheets;
   final StyleSheetVisitor visitor;
   final Widget? child;
   final Iterable<Widget>? children;
+  final String? aspect;
 
   @override
   Widget build(BuildContext context) {
-    final parent = OdroeTheme.maybeOf(context);
-    final currentStyle = parent?.style?.maybeMerge(this.style) ?? this.style;
-    final StyleSheet? namedStyle = switch (sheets) {
-      Iterable(isNotEmpty: true, contains: final contains) => parent?.sheets
-          ?.where((name, _) => contains(name))
-          .values
-          .fold(null, (prev, current) => prev?.maybeMerge(current) ?? current),
+    final style = switch (aspect) {
+      String aspect when aspect.isNotEmpty => Style.maybeOf(context, aspect),
       _ => null,
     };
 
-    final style = namedStyle?.maybeMerge(currentStyle) ?? currentStyle;
+    final effectStyle = switch (this.style) {
+      StyleSheet current => style?.merge(current) ?? current,
+      _ => style,
+    };
+
     final widget = switch ((child, children)) {
       (Widget child, _) => child,
       (null, Iterable<Widget> children) => _ChildrenBox(style, children),
       _ => const SizedBox.shrink(),
     };
 
-    if (style == null) return widget;
-
-    return visitor.visit(style, widget);
+    return switch (effectStyle) {
+      StyleSheet style => visitor.visit(style, widget),
+      _ => widget,
+    };
   }
 }
 

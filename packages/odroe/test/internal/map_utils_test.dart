@@ -1,4 +1,4 @@
-import 'package:odroe/next/_internal/map_utils.dart';
+import 'package:odroe/src/_internal/map_utils.dart';
 import 'package:test/test.dart';
 
 void main() {

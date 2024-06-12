@@ -3,10 +3,14 @@ import 'package:flutter/widgets.dart';
 import '../style_sheet.dart';
 import 'sizing/size_visitor.dart';
 import 'sorted_visitor.dart';
+import 'spacing/mergin_visitor.dart';
+import 'spacing/padding_visitor.dart';
 import 'style_sheet_visitor.dart';
 
 const _defailtVisitors = <StyleSheetVisitor>[
+  MerginVisitor(),
   SizeVisitor(),
+  PaddingVisitor(),
 ];
 
 class DefaultStyleSheetVisitor implements StyleSheetVisitor {
