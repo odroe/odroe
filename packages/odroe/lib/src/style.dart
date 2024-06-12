@@ -1,38 +1,35 @@
 import 'package:flutter/widgets.dart';
 
+import 'pattern_style.dart';
 import 'style_sheet.dart';
-import 'style_sheet_utils.dart';
 
 class Style extends StatelessWidget {
-  const Style({super.key, required this.child, required this.style});
+  const Style({this.style, this.pattern, this.named, super.key});
 
-  final StyleSheet style;
-  final Widget child;
+  final StyleSheet? style;
+  final Iterable<PatternStyle>? pattern;
+  final Map<String, StyleSheet>? named;
 
   @override
   Widget build(BuildContext context) {
-    final style = maybeOf(context)?.createOrAnother(this.style) ?? this.style;
+    // final parentTextStyle = DefaultTextStyle.merge(…)
 
-    // If style is an empty [StyleSheet], it is not provided.
-    if (style == const StyleSheet()) {
-      return child;
-    }
-
-    return _StyleProvider(style, child);
+    // TODO: implement build
+    throw UnimplementedError();
   }
 
-  static StyleSheet? maybeOf(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<_StyleProvider>()?.style;
+  // StyleSheet of(BuildContext context, {String? aspect}) {
+  //   // const basic = StyleSheet();
+  //   context.dependOnInheritedWidgetOfExactType<_StyleProvider>();
   }
 }
 
 class _StyleProvider extends InheritedWidget {
-  const _StyleProvider(this.style, Widget child) : super(child: child);
-
-  final StyleSheet style;
+  const _StyleProvider({required super.child});
 
   @override
   bool updateShouldNotify(covariant _StyleProvider oldWidget) {
-    return oldWidget.style != style;
+    // TODO: implement updateShouldNotify
+    throw UnimplementedError();
   }
 }

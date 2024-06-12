@@ -1,7 +1,5 @@
 final class StyleSheet {
   const StyleSheet({
-    this.pattern,
-    this.cascades,
     this.width,
     this.height,
     this.maxWidth,
@@ -9,10 +7,6 @@ final class StyleSheet {
     this.minWidth,
     this.minHeight,
   });
-
-  // Baisc
-  final Pattern? pattern;
-  final Iterable<StyleSheet>? cascades;
 
   // Sizing ----------------------------------
 
@@ -27,8 +21,6 @@ final class StyleSheet {
   @override
   int get hashCode {
     return Object.hashAll([
-      ...?cascades,
-      pattern,
       width,
       height,
       maxWidth,
