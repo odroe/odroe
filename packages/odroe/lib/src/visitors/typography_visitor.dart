@@ -6,10 +6,12 @@ import 'style_sheet_visitor.dart';
 class TypographyVisitor implements StyleSheetVisitor {
   @override
   Widget visit(StyleSheet style, Widget widget) {
-    TextStyle;
-    DefaultTextStyle;
-    StrutStyle;
-    // TODO: implement visit
-    throw UnimplementedError();
+    return DefaultTextStyle.merge(
+      style: TextStyle(
+        package: style.package,
+        fontFamily: style.fontFamily,
+      ),
+      child: widget,
+    );
   }
 }

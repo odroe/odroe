@@ -1,4 +1,5 @@
-import 'dart:ui' show Color;
+import 'dart:ui'
+    show Color, FontStyle, FontWeight, TextDecoration, TextDecorationStyle;
 
 final class StyleSheet {
   const StyleSheet({
@@ -49,6 +50,15 @@ final class StyleSheet {
   final Iterable<String>? fontFamilyFallback;
   final String? package;
   final Color? color;
+  final double? fontSize;
+  final FontWeight? fontWeight;
+  final FontStyle? fontStyle;
+  final double? letterSpacing;
+  final double? lineHeight;
+  final TextDecoration? textDecorationLine;
+  final Color? textDecorationColor;
+  final TextDecorationStyle? textDecorationStyle;
+  final double? textDecorationThickness;
 
   @override
   int get hashCode {
@@ -69,6 +79,18 @@ final class StyleSheet {
       merginRight,
       merginBottom,
       merginLeft,
+      fontFamily,
+      ...?fontFamilyFallback,
+      package,
+      color,
+      fontSize,
+      fontWeight,
+      letterSpacing,
+      lineHeight,
+      textDecorationLine,
+      textDecorationColor,
+      textDecorationStyle,
+      textDecorationThickness,
     ]);
   }
 
