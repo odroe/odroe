@@ -1,5 +1,4 @@
-import 'dart:ui'
-    show Color, FontStyle, FontWeight, TextDecoration, TextDecorationStyle;
+import 'package:flutter/widgets.dart';
 
 final class StyleSheet {
   const StyleSheet({
@@ -19,9 +18,25 @@ final class StyleSheet {
     this.merginRight,
     this.merginBottom,
     this.merginLeft,
+    this.color,
+    this.fontFamily,
+    this.fontFamilyFallback,
+    this.fontSize,
+    this.fontStyle,
+    this.fontWeight,
+    this.letterSpacing,
+    this.lineHeight,
+    this.package,
+    this.textAlign,
+    this.textDecorationColor,
+    this.textDecorationLine,
+    this.textDecorationStyle,
+    this.textDecorationThickness,
+    this.textOverflow,
+    this.textShadow,
   });
 
-  // Sizing ----------------------------------
+  // Sizing
 
   final double? width;
   final double? height;
@@ -47,7 +62,7 @@ final class StyleSheet {
 
   // Typography
   final String? fontFamily;
-  final Iterable<String>? fontFamilyFallback;
+  final List<String>? fontFamilyFallback;
   final String? package;
   final Color? color;
   final double? fontSize;
@@ -59,6 +74,9 @@ final class StyleSheet {
   final Color? textDecorationColor;
   final TextDecorationStyle? textDecorationStyle;
   final double? textDecorationThickness;
+  final TextAlign? textAlign;
+  final TextOverflow? textOverflow;
+  final List<Shadow>? textShadow;
 
   @override
   int get hashCode {
@@ -91,6 +109,9 @@ final class StyleSheet {
       textDecorationColor,
       textDecorationStyle,
       textDecorationThickness,
+      textAlign,
+      textOverflow,
+      textShadow,
     ]);
   }
 

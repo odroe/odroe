@@ -6,11 +6,13 @@ import 'sorted_visitor.dart';
 import 'spacing/mergin_visitor.dart';
 import 'spacing/padding_visitor.dart';
 import 'style_sheet_visitor.dart';
+import 'typography_visitor.dart';
 
 const _defailtVisitors = <StyleSheetVisitor>[
   MerginVisitor(),
   SizeVisitor(),
   PaddingVisitor(),
+  TypographyVisitor(),
 ];
 
 class DefaultStyleSheetVisitor implements StyleSheetVisitor {
