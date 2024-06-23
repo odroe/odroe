@@ -8,14 +8,13 @@ funding:
   - https://opencollective.com/openodroe
 
 environment:
-  sdk: ">=3.3.3 <4.0.0"
-  flutter: ">=1.17.0"
+  sdk: ^3.4.3
+  flutter: ^3.22.2
 
 dependencies:
   flutter:
     sdk: flutter
-  mix: ^1.0.0
-  signals_core: ^5.2.0
+  macros: ^0.0.1
 
 dev_dependencies:
   flutter_test:
