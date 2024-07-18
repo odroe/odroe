@@ -1,1 +1,0 @@
-../../../node_modules/vitepress/dist/client/theme-default/components/VPNavBar.vue
