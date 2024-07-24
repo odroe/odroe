@@ -4,7 +4,7 @@ import 'dart:io';
 enum OdroeMode { development, production }
 
 /// Odroe application type.
-enum OdroeType { clientOnly, serverOnly, hybrid }
+enum OdroeType { client, server, hybrid }
 
 /// Odroe shared options.
 abstract class SharedOptions {
