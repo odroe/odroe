@@ -30,7 +30,10 @@ main() async {
   final config = await c.config;
   final app = createSpry();
 
-${_registerRoutes(config.routes.path, manifest)}
+  await config.server.setup?.call(app);
+
+  ${_registerRoutes(config.routes.path, manifest)}
+
   final handler = toIOHandler(app);
   final server = await HttpServer.bind(config.server.host, config.server.port);
 
@@ -46,9 +49,12 @@ ${_registerRoutes(config.routes.path, manifest)}
 const _routeImportPrefix = 'r';
 
 String _registerRoutes(String root, Manifest manifest) {
+  final codes = <String>[];
   final buffer = StringBuffer();
+
   for (final (index, endpoint) in manifest.indexed) {
     if (endpoint.fallback != null) {
+      buffer.clear();
       buffer.write('  app.all(\'');
       buffer.write(fileToRoute(root, endpoint.path));
       buffer.write('\', ');
@@ -56,10 +62,13 @@ String _registerRoutes(String root, Manifest manifest) {
       buffer.write(index);
       buffer.write('.');
       buffer.write(endpoint.fallback);
-      buffer.writeln(');');
+      buffer.write(');');
+
+      codes.add(buffer.toString());
     }
 
     for (final method in endpoint.methods) {
+      buffer.clear();
       buffer.write('  app.on(\'');
       buffer.write(method.toUpperCase());
       buffer.write('\', \'');
@@ -69,11 +78,13 @@ String _registerRoutes(String root, Manifest manifest) {
       buffer.write(index);
       buffer.write('.');
       buffer.write(method);
-      buffer.writeln(');');
+      buffer.write(');');
+
+      codes.add(buffer.toString());
     }
   }
 
-  return buffer.toString();
+  return codes.join(Platform.lineTerminator).trimLeft();
 }
 
 String _importRoutes(String from, Manifest manifest) {
