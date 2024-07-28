@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../_internal/context.dart';
-import '../config/odroe_config.dart';
+import '../../_internal/context.dart';
+import '../../config/odroe_config.dart';
 import 'types.dart';
 import 'utils/file_to_route.dart';
 import 'utils/gen_import_code.dart';

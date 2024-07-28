@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
-import '../gen/types.dart';
+import 'gen/types.dart';
 
 PageNode createPageNode(String id, [PageNode? parent]) {
   final node = PageNode(id)..parent = parent;
