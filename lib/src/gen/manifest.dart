@@ -4,7 +4,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:odroe/config.dart';
 import 'package:path/path.dart' as path;
 
-import '../types.dart';
+import 'types.dart';
 
 const _supportedMethods = [
   'get',

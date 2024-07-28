@@ -2,9 +2,9 @@ import 'package:odroe/config.dart';
 import 'package:path/path.dart' as p;
 
 import '../_internal/context.dart';
+import '../gen/manifest.dart';
+import '../gen/write_server.dart';
 import 'create_page_node.dart';
-import 'gen/manifest.dart';
-import 'gen/write_server.dart';
 
 extension type ExternalCommand._(Object _) {
   static build(OdroeConfig config, List<String> args) {
