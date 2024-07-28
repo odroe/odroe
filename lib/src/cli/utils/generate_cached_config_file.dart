@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/features.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:odroe/config.dart';
 import 'package:path/path.dart' as path;
 
@@ -47,14 +50,26 @@ final FutureOr<OdroeConfig> config = extend(defineOdroeConfigOf(
 }
 
 Future<void> _validateConfigFile(File file) async {
-  final regex = RegExp(
-    r'(OdroeConfig|Future(Or)?\<OdroeConfug\>) extend\((OdroeConfig \w+)\)',
-    caseSensitive: true,
+  bool success = false;
+  final result = parseFile(
+    path: file.path,
+    featureSet: FeatureSet.latestLanguageVersion(),
   );
-  final code = await file.readAsString();
-  if (regex.hasMatch(code)) return;
+  final extend = result.unit.declarations
+      .whereType<FunctionDeclaration>()
+      .singleWhere((e) => e.name.value() == 'extend');
+  if (extend.returnType?.toSource() == 'OdroeConfig') {
+    success = true;
+  }
 
-  throw Exception('''
+  final params = extend.functionExpression.parameters?.parameters;
+  success = success && params?.length == 1;
+
+  final param = params?.single;
+  success = success && param?.isPositional == true && param?.isConst == false;
+
+  if (!success) {
+    throw Exception('''
 The Odroe configuration file is illegal.
 
 path: ${file.path}
@@ -70,4 +85,5 @@ OdroeConfig extend(OdroeConfig config) {
 }
 ```
   ''');
+  }
 }
