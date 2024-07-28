@@ -4,7 +4,7 @@ import 'package:args/command_runner.dart';
 import 'package:path/path.dart' as path;
 import 'package:odroe/config.dart';
 
-import 'context.dart';
+import '../_internal/context.dart';
 import 'utils/find_project_root.dart';
 import 'utils/generate_cached_config_file.dart';
 

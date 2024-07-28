@@ -6,7 +6,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:odroe/config.dart';
 import 'package:path/path.dart' as path;
 
-import '../context.dart';
+import '../../_internal/context.dart';
 
 Future<void> generateCachedConfigFile(
   Context context, {
@@ -24,7 +24,7 @@ Future<void> generateCachedConfigFile(
     throw PathNotFoundException(file.path, error);
   }
 
-  await _validateConfigFile(file);
+  _validateConfigFile(file);
 
   final cacheConfigFile = File(context.configPath);
   final config = path
@@ -34,9 +34,9 @@ Future<void> generateCachedConfigFile(
 import 'dart:async';
 import 'dart:io';
 import 'package:odroe/config.dart';
-import '$config';
+import '$config' as i0;
 
-final FutureOr<OdroeConfig> config = extend(defineOdroeConfigOf(
+final FutureOr<OdroeConfig> config = i0.extend(defineOdroeConfigOf(
   root: Directory(r'${context.root}'),
   mode: OdroeMode.${mode.name},
 ));
@@ -49,7 +49,7 @@ final FutureOr<OdroeConfig> config = extend(defineOdroeConfigOf(
   await cacheConfigFile.writeAsString(code);
 }
 
-Future<void> _validateConfigFile(File file) async {
+void _validateConfigFile(File file) {
   bool success = false;
   final result = parseFile(
     path: file.path,

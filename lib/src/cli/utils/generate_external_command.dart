@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
-import '../context.dart';
+import '../../_internal/context.dart';
 
 Future<void> generateExtrenalCommand(Context context,
     {required String commandPath, required String name}) async {
@@ -12,9 +12,9 @@ Future<void> generateExtrenalCommand(Context context,
       .replaceAll('\\', '/');
   final code = '''
 import 'package:odroe/bundler.dart';
-import '$config';
+import '$config' as i0;
 
-main(List<String> args) async => ExternalCommand.$name(await config, args);
+main(List<String> args) async => ExternalCommand.$name(await i0.config, args);
 ''';
 
   if (!(await file.exists())) {

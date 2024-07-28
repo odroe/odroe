@@ -20,3 +20,11 @@ class PageNode {
   PageNode? parent;
   final children = <PageNode>[];
 }
+
+typedef Endpoint = ({
+  String path,
+  Iterable<String> methods,
+  String? fallback,
+});
+
+typedef Manifest = Iterable<Endpoint>;

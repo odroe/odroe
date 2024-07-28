@@ -9,4 +9,5 @@ class Context {
   String get configPath => path.join(cachePath, 'config.dart');
   String get buildCommandPath => path.join(cachePath, 'commands', 'build.dart');
   String get devCommandPath => path.join(cachePath, 'commands', 'dev.dart');
+  String get serverPath => path.join(cachePath, 'server.dart');
 }

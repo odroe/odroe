@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
+import '../env_options.dart';
 import '../odroe_config.dart';
+import '../server_options.dart';
 import '../shared_options.dart';
 
 OdroeConfig defineOdroeConfigOf({
@@ -29,4 +31,19 @@ class _OdroeConfigImpl extends OdroeConfig {
 
   @override
   set routes(Directory directory) => _routes = directory;
+
+  @override
+  late final ServerOptions server = _ServerOptionsImpl();
+
+  @override
+  late final EnvOptions env = _EnvOptionsImpl(root);
 }
+
+class _EnvOptionsImpl extends EnvOptions {
+  _EnvOptionsImpl(this.dir);
+
+  @override
+  Directory dir;
+}
+
+class _ServerOptionsImpl extends ServerOptions {}

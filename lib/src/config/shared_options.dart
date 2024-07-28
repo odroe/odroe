@@ -3,9 +3,6 @@ import 'dart:io';
 /// Odroe application mode.
 enum OdroeMode { development, production }
 
-/// Odroe application type.
-enum OdroeType { client, server, hybrid }
-
 /// Odroe shared options.
 abstract class SharedOptions {
   /// Project root directory.
@@ -34,9 +31,4 @@ abstract class SharedOptions {
   ///
   /// Defaults to `<root>/routes`.
   abstract Directory routes;
-
-  /// The Odroe application type.
-  ///
-  /// Defaults to `hybrid`
-  OdroeType type = OdroeType.hybrid;
 }
