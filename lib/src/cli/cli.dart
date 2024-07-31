@@ -5,6 +5,7 @@ import 'package:odroe/config.dart';
 
 import 'commands/build_command.dart';
 import 'commands/dev_command.dart';
+import 'commands/gen_command.dart';
 import 'utils/find_project_root.dart';
 
 runOdroeCLI(Iterable<String> args) {
@@ -25,9 +26,11 @@ runOdroeCLI(Iterable<String> args) {
         abbr: 'm',
         allowed: OdroeMode.values.map((e) => e.name),
         help: 'Override the default mode for both dev and build.');
+
   runner
     ..addCommand(BuildCommand())
-    ..addCommand(DevCommand());
+    ..addCommand(DevCommand())
+    ..addCommand(GenCommand());
 
   return runner.run(args);
 }

@@ -32,7 +32,7 @@ main() async {
 
   await config.server.setup?.call(app);
 
-  ${_registerRoutes(config.routes.path, manifest)}
+  ${_registerRoutes(config.routes.path, config.base, manifest)}
 
   final handler = toIOHandler(app);
   final server = await HttpServer.bind(config.server.host, config.server.port);
@@ -48,14 +48,17 @@ main() async {
 
 const _routeImportPrefix = 'r';
 
-String _registerRoutes(String root, Manifest manifest) {
+String _registerRoutes(String root, String base, Manifest manifest) {
   final codes = <String>[];
   final buffer = StringBuffer();
+
+  base = base.endsWith('/') ? base : '$base/';
 
   for (final (index, endpoint) in manifest.indexed) {
     if (endpoint.fallback != null) {
       buffer.clear();
       buffer.write('  app.all(\'');
+      buffer.write(base);
       buffer.write(fileToRoute(root, endpoint.path));
       buffer.write('\', ');
       buffer.write(_routeImportPrefix);
@@ -72,6 +75,7 @@ String _registerRoutes(String root, Manifest manifest) {
       buffer.write('  app.on(\'');
       buffer.write(method.toUpperCase());
       buffer.write('\', \'');
+      buffer.write(base);
       buffer.write(fileToRoute(root, endpoint.path));
       buffer.write('\', ');
       buffer.write(_routeImportPrefix);
