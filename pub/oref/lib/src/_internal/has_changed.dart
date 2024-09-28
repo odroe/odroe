@@ -15,8 +15,8 @@ bool hasChanged(Object? a, Object? b) {
 bool _hasIterableChanged(Iterable a, Iterable b) {
   if (a.length != b.length) return true;
 
-  var iteratorA = a.iterator;
-  var iteratorB = b.iterator;
+  final iteratorA = a.iterator;
+  final iteratorB = b.iterator;
 
   while (iteratorA.moveNext() && iteratorB.moveNext()) {
     if (hasChanged(iteratorA.current, iteratorB.current)) {

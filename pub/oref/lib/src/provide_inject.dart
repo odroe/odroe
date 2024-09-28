@@ -3,76 +3,62 @@ import 'package:flutter/widgets.dart';
 import '_internal/has_changed.dart';
 
 class _Store {
-  _Store(this.widget);
   final Widget widget;
-  late final Map<Symbol, Object?> values = {};
-  late final Map<Symbol, List<WeakReference<Element>>> elements = {};
+  final values = <Symbol, Object?>{};
+  final elements = <Symbol, List<WeakReference<Element>>>{};
+
+  _Store(this.widget);
 }
 
 final _refs = Expando<_Store>();
 final _targets = Expando<Map<Symbol, WeakReference<Element>>>();
 
 void provide<T>(BuildContext context, Symbol key, T value) {
-  var store = _refs[context];
-  if (store == null || !Widget.canUpdate(store.widget, context.widget)) {
+  var store = _refs[context] ??= _Store(context.widget);
+  if (!Widget.canUpdate(store.widget, context.widget)) {
     store = _refs[context] = _Store(context.widget);
   }
 
-  final hasUpdated = hasChanged(store.values[key], value);
-  store.values[key] = value;
-
-  if (hasUpdated) {
-    final elements = store.elements[key] ?? [];
-    for (final element in elements) {
-      element.target?.markNeedsBuild();
-    }
+  if (hasChanged(store.values[key], value)) {
+    store.values[key] = value;
+    store.elements[key]?.forEach((element) => element.target?.markNeedsBuild());
   }
 }
 
 T? inject<T>(BuildContext context, Symbol key) {
-  final (value, found) = _lookupValueAndTrack<T>(context, key);
-  if (found) return value;
+  final (v, f) = _lookupValueAndTrack<T>(context, key);
+  if (f) return v;
 
   final target = _targets[context]?[key]?.target;
   if (target != null) {
-    final (value, found) =
-        _lookupValueAndTrack<T>(target, key, context as Element);
-    if (found) return value;
+    final (v, f) = _lookupValueAndTrack<T>(target, key, context as Element);
+    if (f) return v;
   }
 
-  T? inner;
+  T? value;
   context.visitAncestorElements((element) {
-    final (value, found) =
-        _lookupValueAndTrack<T>(element, key, context as Element);
-    if (found) {
-      inner = value;
-      return false;
-    }
+    final (v, f) = _lookupValueAndTrack<T>(element, key, context as Element);
+    value = v;
 
-    return true;
+    return !f;
   });
 
-  return inner;
+  return value;
 }
 
 (T?, bool) _lookupValueAndTrack<T>(BuildContext context, Symbol key,
     [Element? element]) {
   final store = _refs[context];
-  if (store != null && store.values.containsKey(key)) {
+  if (store?.values.containsKey(key) ?? false) {
     if (element != null) {
-      final elements = store.elements[key] ??= [];
-      if (elements.every((e) => e.target != element)) {
-        elements.add(WeakReference(element));
-      }
+      store!.elements.putIfAbsent(key, () => [])
+        ..removeWhere((ref) => ref.target == null)
+        ..add(WeakReference(element));
 
-      final targets = _targets[element] ??= {};
-      targets[key] = WeakReference(context as Element);
+      (_targets[element] ??= {})[key] = WeakReference(context as Element);
     }
 
-    final value = store.values[key];
-    if (value is T?) {
-      return (value, true);
-    }
+    return (store?.values[key] as T?, true);
   }
 
   return (null, false);
