@@ -13,6 +13,24 @@ class _Store {
 final _refs = Expando<_Store>();
 final _targets = Expando<Map<Symbol, WeakReference<Element>>>();
 
+(T?, bool) _lookupValueAndTrack<T>(BuildContext context, Symbol key,
+    [Element? element]) {
+  final store = _refs[context];
+  if (store?.values.containsKey(key) ?? false) {
+    if (element != null) {
+      store!.elements.putIfAbsent(key, () => [])
+        ..removeWhere((ref) => ref.target == null)
+        ..add(WeakReference(element));
+
+      (_targets[element] ??= {})[key] = WeakReference(context as Element);
+    }
+
+    return (store?.values[key] as T?, true);
+  }
+
+  return (null, false);
+}
+
 /// Provides a value associated with a key in the given BuildContext.
 ///
 /// This function is used to store a value of type [T] associated with a [key]
@@ -66,22 +84,4 @@ T? inject<T>(BuildContext context, Symbol key) {
   });
 
   return value;
-}
-
-(T?, bool) _lookupValueAndTrack<T>(BuildContext context, Symbol key,
-    [Element? element]) {
-  final store = _refs[context];
-  if (store?.values.containsKey(key) ?? false) {
-    if (element != null) {
-      store!.elements.putIfAbsent(key, () => [])
-        ..removeWhere((ref) => ref.target == null)
-        ..add(WeakReference(element));
-
-      (_targets[element] ??= {})[key] = WeakReference(context as Element);
-    }
-
-    return (store?.values[key] as T?, true);
-  }
-
-  return (null, false);
 }
