@@ -72,24 +72,29 @@ T? inject<T>(BuildContext context, Symbol key) {
   if (cachedAncestor != null) {
     final values = _providedValues[cachedAncestor];
     if (values != null && values.containsKey(key)) {
-      final provided = values[key] as _Provided<T>;
-      provided.addDependent(element);
-      return provided.value;
+      final provided = values[key];
+      if (provided is _Provided<T>) {
+        provided.addDependent(element);
+        return provided.value;
+      }
     }
   }
 
-  // 如果缓存未命中，执行常规查找
+  // 如果缓存未命中或类型不匹配，执行完整查找
   T? result;
   element.visitAncestorElements((Element ancestor) {
     final values = _providedValues[ancestor];
     if (values != null && values.containsKey(key)) {
-      final provided = values[key] as _Provided<T>;
-      provided.addDependent(element);
-      result = provided.value;
+      final provided = values[key];
+      if (provided is _Provided<T>) {
+        provided.addDependent(element);
+        result = provided.value;
 
-      // 更新缓存
-      cache[key] = WeakReference(ancestor);
-      return false;
+        // 更新缓存
+        cache[key] = WeakReference(ancestor);
+        return false; // 找到匹配的类型，停止搜索
+      }
+      // 如果类型不匹配，继续搜索
     }
     return true;
   });
