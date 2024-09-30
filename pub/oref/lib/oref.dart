@@ -14,3 +14,6 @@ library;
 
 export 'src/apiinject/provide.dart';
 export 'src/apiinject/inject.dart';
+
+export 'src/types.dart';
+export 'src/ref.dart';
