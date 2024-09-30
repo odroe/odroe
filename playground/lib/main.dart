@@ -62,3 +62,35 @@ class Name extends StatelessWidget {
     );
   }
 }
+
+class A extends StatelessWidget {
+  const A({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    provide<String>(context, #name, 'Seven');
+    provide<int>(context, #name, 1);
+
+    return const B();
+  }
+}
+
+class B extends StatelessWidget {
+  const B({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const C();
+  }
+}
+
+class C extends StatelessWidget {
+  const C({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = inject(context, #name);
+
+    return Text('Hello, $name');
+  }
+}
