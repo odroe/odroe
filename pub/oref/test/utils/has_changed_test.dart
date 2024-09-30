@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:oref/src/_internal/has_changed.dart';
+import 'package:oref/src/_utils.dart';
 
 void main() {
   group('hasChanged', () {

@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '_internal/has_changed.dart';
+import '_utils.dart';
 import 'types.dart';
 
 final _refs = Expando<List<_Ref>>();
@@ -54,7 +54,6 @@ Ref<T> ref<T>(BuildContext context, T initialValue) {
   }
 
   final newRef = _Ref<T>(initialValue);
-
   if (index >= refs.length) {
     refs.add(newRef);
   } else {
@@ -71,9 +70,9 @@ class _Ref<T> implements Ref<T> {
   _Ref(this.innerValue);
 
   T innerValue;
-  bool dirty = false;
+  bool dirty = true;
 
-  final List<WeakReference<Element>> dependents = [];
+  late final List<WeakReference<Element>> dependents = [];
 
   @override
   T get value {
@@ -93,13 +92,15 @@ class _Ref<T> implements Ref<T> {
   }
 
   void track() {
-    if (_evalElement == null) return;
+    if (_evalElement == null || !dirty) return;
     dependents.removeWhere((ref) => ref.target == null);
 
     // Check if the current element is already a dependent.
     if (dependents.every((ref) => ref.target != _evalElement)) {
       dependents.add(WeakReference(_evalElement!));
     }
+
+    dirty = false;
   }
 
   void trigger() {

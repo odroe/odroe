@@ -12,6 +12,11 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = ref(context, 0);
 
+    final element = context as Element;
+    element.visitChildren((child) {
+      print(child);
+    });
+
     return MaterialApp(
       home: Scaffold(
         body: Center(

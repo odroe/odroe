@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../_internal/has_changed.dart';
+import '../_utils.dart';
 import '_provided.dart';
 
 /// Provides a value associated with a key in the given BuildContext.

@@ -21,12 +21,14 @@ abstract interface class Ref<T> {
 ///
 /// [ComputedRef] represents a reactive reference that is computed based on other
 /// reactive values. It is readonly and cannot be directly modified.
-abstract interface class ComputedRef<T> implements Ref<T> {
+abstract class ComputedRef<T> implements Ref<T> {
+  const ComputedRef();
+
   /// Throws an error when attempting to set the value of a computed reference.
   ///
   /// [ComputedRef] values are derived and cannot be directly set.
   /// Attempting to set the value will result in a [StateError].
   @override
-  @mustCallSuper
+  @nonVirtual
   set value(_) => throw StateError('ComputedRef is readonly');
 }
