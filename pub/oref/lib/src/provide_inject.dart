@@ -38,14 +38,16 @@ final _injectCache = Expando<Map<Symbol, WeakReference<Element>>>();
 /// - [value]: The value to be provided.
 void provide<T>(BuildContext context, Symbol key, T value) {
   final values = _providedValues[context] ??= {};
-  final provided = values[key] as _Provided<T>?;
+  final provided = values[key];
 
-  if (provided == null || hasChanged(provided.value, value)) {
-    if (provided == null) {
-      values[key] = _Provided(value);
-      return;
+  if (provided == null || provided is! _Provided<T>) {
+    values[key] = _Provided<T>(value);
+    if (provided != null) {
+      values[key]!.dependents.addAll(provided.dependents);
     }
 
+    return;
+  } else if (hasChanged(provided.value, value)) {
     provided.value = value;
     provided.notifyDependents();
   }

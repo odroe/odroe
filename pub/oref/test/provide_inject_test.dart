@@ -18,13 +18,19 @@ void main() {
           Builder(
             builder: (context) {
               provide(context, testKey, testValue);
-              final injectedValue = inject<String>(context, testKey);
-              expect(injectedValue, equals(testValue));
-              return const SizedBox();
+              return Builder(
+                builder: (context) {
+                  final injectedValue = inject<String>(context, testKey);
+                  expect(injectedValue, equals(testValue));
+                  return Text(injectedValue ?? 'Not found');
+                },
+              );
             },
           ),
         ),
       );
+
+      expect(find.text(testValue), findsOneWidget);
     });
 
     testWidgets('provide and inject with different types',
@@ -40,17 +46,29 @@ void main() {
             builder: (context) {
               provide(context, stringKey, stringValue);
               provide(context, intKey, intValue);
-
-              final injectedString = inject<String>(context, stringKey);
-              final injectedInt = inject<int>(context, intKey);
-
-              expect(injectedString, equals(stringValue));
-              expect(injectedInt, equals(intValue));
-              return const SizedBox();
+              return Column(
+                children: [
+                  Builder(
+                    builder: (context) {
+                      final injectedString = inject<String>(context, stringKey);
+                      return Text('String: ${injectedString ?? 'Not found'}');
+                    },
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final injectedInt = inject<int>(context, intKey);
+                      return Text('Int: ${injectedInt ?? 'Not found'}');
+                    },
+                  ),
+                ],
+              );
             },
           ),
         ),
       );
+
+      expect(find.text('String: $stringValue'), findsOneWidget);
+      expect(find.text('Int: $intValue'), findsOneWidget);
     });
 
     testWidgets('inject inherits from parent', (WidgetTester tester) async {
@@ -67,19 +85,35 @@ void main() {
               return Builder(
                 builder: (childContext) {
                   provide(childContext, childKey, childValue);
-                  final injectedParentValue =
-                      inject<String>(childContext, parentKey);
-                  final injectedChildValue =
-                      inject<String>(childContext, childKey);
-                  expect(injectedParentValue, equals(parentValue));
-                  expect(injectedChildValue, equals(childValue));
-                  return const SizedBox();
+                  return Column(
+                    children: [
+                      Builder(
+                        builder: (context) {
+                          final injectedParentValue =
+                              inject<String>(context, parentKey);
+                          return Text(
+                              'Parent: ${injectedParentValue ?? 'Not found'}');
+                        },
+                      ),
+                      Builder(
+                        builder: (context) {
+                          final injectedChildValue =
+                              inject<String>(context, childKey);
+                          return Text(
+                              'Child: ${injectedChildValue ?? 'Not found'}');
+                        },
+                      ),
+                    ],
+                  );
                 },
               );
             },
           ),
         ),
       );
+
+      expect(find.text('Parent: $parentValue'), findsOneWidget);
+      expect(find.text('Child: $childValue'), findsOneWidget);
     });
 
     testWidgets('widget rebuilds when provided value changes',
@@ -87,17 +121,18 @@ void main() {
       const testKey = Symbol('testKey');
       const initialValue = 'Initial Value';
       const updatedValue = 'Updated Value';
-      late String currentValue;
+      late BuildContext provideContext;
 
       Widget buildTestWidget(String value) {
         return wrapWithDirectionality(
-          Builder(
-            builder: (context) {
+          StatefulBuilder(
+            builder: (context, setState) {
+              provideContext = context;
               provide(context, testKey, value);
               return Builder(
                 builder: (childContext) {
-                  currentValue = inject<String>(childContext, testKey)!;
-                  return Text(currentValue);
+                  final currentValue = inject<String>(childContext, testKey);
+                  return Text(currentValue ?? 'Not found');
                 },
               );
             },
@@ -107,11 +142,10 @@ void main() {
 
       await tester.pumpWidget(buildTestWidget(initialValue));
       expect(find.text(initialValue), findsOneWidget);
-      expect(currentValue, equals(initialValue));
 
-      await tester.pumpWidget(buildTestWidget(updatedValue));
+      provide(provideContext, testKey, updatedValue);
+      await tester.pump();
       expect(find.text(updatedValue), findsOneWidget);
-      expect(currentValue, equals(updatedValue));
     });
   });
 }
