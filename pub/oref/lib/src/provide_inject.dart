@@ -2,34 +2,28 @@ import 'package:flutter/widgets.dart';
 
 import '_internal/has_changed.dart';
 
-class _Store {
-  final Widget widget;
-  final values = <Symbol, Object?>{};
-  final elements = <Symbol, List<WeakReference<Element>>>{};
+class _Provided<T> {
+  _Provided(this.value);
 
-  _Store(this.widget);
-}
+  T value;
+  late final List<WeakReference<Element>> dependents = [];
 
-final _refs = Expando<_Store>();
-final _targets = Expando<Map<Symbol, WeakReference<Element>>>();
-
-(T?, bool) _lookupValueAndTrack<T>(BuildContext context, Symbol key,
-    [Element? element]) {
-  final store = _refs[context];
-  if (store?.values.containsKey(key) ?? false) {
-    if (element != null) {
-      store!.elements.putIfAbsent(key, () => [])
-        ..removeWhere((ref) => ref.target == null)
-        ..add(WeakReference(element));
-
-      (_targets[element] ??= {})[key] = WeakReference(context as Element);
+  void addDependent(Element element) {
+    dependents.removeWhere((weakRef) => weakRef.target == null);
+    if (dependents.every((weakRef) => weakRef.target != element)) {
+      dependents.add(WeakReference(element));
     }
-
-    return (store?.values[key] as T?, true);
   }
 
-  return (null, false);
+  void notifyDependents() {
+    dependents.removeWhere((weakRef) => weakRef.target == null);
+    for (final weakRef in dependents) {
+      weakRef.target?.markNeedsBuild();
+    }
+  }
 }
+
+final _providedValues = Expando<Map<Symbol, _Provided>>();
 
 /// Provides a value associated with a key in the given BuildContext.
 ///
@@ -42,14 +36,17 @@ final _targets = Expando<Map<Symbol, WeakReference<Element>>>();
 /// - [key]: A Symbol used as the identifier for the provided value.
 /// - [value]: The value to be provided.
 void provide<T>(BuildContext context, Symbol key, T value) {
-  var store = _refs[context] ??= _Store(context.widget);
-  if (!Widget.canUpdate(store.widget, context.widget)) {
-    store = _refs[context] = _Store(context.widget);
-  }
+  final values = _providedValues[context] ??= {};
+  final provided = values[key] as _Provided<T>?;
 
-  if (hasChanged(store.values[key], value)) {
-    store.values[key] = value;
-    store.elements[key]?.forEach((element) => element.target?.markNeedsBuild());
+  if (provided == null || hasChanged(provided.value, value)) {
+    if (provided == null) {
+      values[key] = _Provided(value);
+      return;
+    }
+
+    provided.value = value;
+    provided.notifyDependents();
   }
 }
 
@@ -66,22 +63,21 @@ void provide<T>(BuildContext context, Symbol key, T value) {
 /// Returns:
 /// The injected value of type [T], or null if not found.
 T? inject<T>(BuildContext context, Symbol key) {
-  final (v, f) = _lookupValueAndTrack<T>(context, key);
-  if (f) return v;
+  T? result;
+  final Element element = context as Element;
 
-  final target = _targets[context]?[key]?.target;
-  if (target != null) {
-    final (v, f) = _lookupValueAndTrack<T>(target, key, context as Element);
-    if (f) return v;
-  }
+  element.visitAncestorElements((Element ancestor) {
+    final values = _providedValues[ancestor];
+    if (values != null && values.containsKey(key)) {
+      final provided = values[key] as _Provided<T>;
+      provided.addDependent(element);
+      result = provided.value;
 
-  T? value;
-  context.visitAncestorElements((element) {
-    final (v, f) = _lookupValueAndTrack<T>(element, key, context as Element);
-    value = v;
+      return false;
+    }
 
-    return !f;
+    return true;
   });
 
-  return value;
+  return result;
 }
