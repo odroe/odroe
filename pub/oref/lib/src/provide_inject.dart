@@ -24,6 +24,7 @@ class _Provided<T> {
 }
 
 final _providedValues = Expando<Map<Symbol, _Provided>>();
+final _injectCache = Expando<Map<Symbol, WeakReference<Element>>>();
 
 /// Provides a value associated with a key in the given BuildContext.
 ///
@@ -63,9 +64,22 @@ void provide<T>(BuildContext context, Symbol key, T value) {
 /// Returns:
 /// The injected value of type [T], or null if not found.
 T? inject<T>(BuildContext context, Symbol key) {
-  T? result;
   final Element element = context as Element;
 
+  // 检查缓存
+  final cache = _injectCache[element] ??= {};
+  final cachedAncestor = cache[key]?.target;
+  if (cachedAncestor != null) {
+    final values = _providedValues[cachedAncestor];
+    if (values != null && values.containsKey(key)) {
+      final provided = values[key] as _Provided<T>;
+      provided.addDependent(element);
+      return provided.value;
+    }
+  }
+
+  // 如果缓存未命中，执行常规查找
+  T? result;
   element.visitAncestorElements((Element ancestor) {
     final values = _providedValues[ancestor];
     if (values != null && values.containsKey(key)) {
@@ -73,9 +87,10 @@ T? inject<T>(BuildContext context, Symbol key) {
       provided.addDependent(element);
       result = provided.value;
 
+      // 更新缓存
+      cache[key] = WeakReference(ancestor);
       return false;
     }
-
     return true;
   });
 
