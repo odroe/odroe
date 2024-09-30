@@ -68,7 +68,7 @@ void provide<T>(BuildContext context, Symbol key, T value) {
 T? inject<T>(BuildContext context, Symbol key) {
   final Element element = context as Element;
 
-  // 检查缓存
+  // Check cache
   final cache = _injectCache[element] ??= {};
   final cachedAncestor = cache[key]?.target;
   if (cachedAncestor != null) {
@@ -82,7 +82,7 @@ T? inject<T>(BuildContext context, Symbol key) {
     }
   }
 
-  // 如果缓存未命中或类型不匹配，执行完整查找
+  // If cache miss or type mismatch, perform full search
   T? result;
   element.visitAncestorElements((Element ancestor) {
     final values = _providedValues[ancestor];
@@ -92,11 +92,11 @@ T? inject<T>(BuildContext context, Symbol key) {
         provided.addDependent(element);
         result = provided.value;
 
-        // 更新缓存
+        // Update cache
         cache[key] = WeakReference(ancestor);
-        return false; // 找到匹配的类型，停止搜索
+        return false; // Found matching type, stop searching
       }
-      // 如果类型不匹配，继续搜索
+      // If type doesn't match, continue searching
     }
     return true;
   });
