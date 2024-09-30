@@ -1,10 +1,12 @@
+import 'package:flutter/foundation.dart';
+
 abstract interface class Ref<T> {
   T get value;
-  set value(T value);
+  set value(T _);
 }
 
 abstract interface class ComputedRef<T> implements Ref<T> {
-  set valye(T _) => throw StateError('ComputedRef is readonly');
+  @override
+  @mustCallSuper
+  set value(_) => throw StateError('ComputedRef is readonly');
 }
-
-typedef RefGetter<T> = T Function();
