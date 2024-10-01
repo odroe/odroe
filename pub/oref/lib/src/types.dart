@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
 
 /// A reactive and mutable reference object.
 ///
@@ -29,6 +29,6 @@ abstract class ComputedRef<T> implements Ref<T> {
   /// [ComputedRef] values are derived and cannot be directly set.
   /// Attempting to set the value will result in a [StateError].
   @override
-  @nonVirtual
+  // @nonVirtual
   set value(_) => throw StateError('ComputedRef is readonly');
 }

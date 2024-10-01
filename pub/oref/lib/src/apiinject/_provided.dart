@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../_global.dart';
+
 final provides = Expando<Map<Symbol, Provided>>();
 
 class Provided<T> {
@@ -10,6 +12,8 @@ class Provided<T> {
   final List<WeakReference<Element>> dependents;
 
   void track(Element element) {
+    autoScope(element, value);
+
     dependents.removeWhere((weakRef) => weakRef.target == null);
     if (dependents.every((weakRef) => weakRef.target != element)) {
       dependents.add(WeakReference(element));
