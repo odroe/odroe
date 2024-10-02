@@ -43,7 +43,6 @@ Ref<T> ref<T>(BuildContext context, T initialValue) {
       _indices[element] = 0;
     }
   });
-  WidgetsBinding.instance.scheduleTask;
 
   final refs = _refs[element] ??= [];
   final index = _indices[element] ??= 0;
