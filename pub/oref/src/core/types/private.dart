@@ -3,6 +3,7 @@ import 'public.dart' as public;
 abstract interface class Derived<T> implements public.Derived<T> {}
 
 abstract interface class Node {
+  Dependent get dependent;
   abstract int version;
   Subscriber get subscriber;
   List<Node> get dependents;
