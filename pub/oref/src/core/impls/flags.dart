@@ -1,5 +1,8 @@
-abstract interface class Flags {
+abstract interface class EffectFlags {
   static const active = 1 << 0;
+}
+
+abstract interface class Flags {
   static const running = 1 << 1;
   static const tracking = 1 << 2;
   static const notified = 1 << 3;

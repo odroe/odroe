@@ -1,33 +1,45 @@
 import 'public.dart' as public;
 
-abstract interface class Derived<T> implements public.Derived<T> {}
+abstract interface class Link {
+  Dep get dep;
+  Sub get sub;
 
-abstract interface class Node {
-  Dependent get dependent;
+  Link? prevDep;
+  Link? nextDep;
+  Link? prevSub;
+  Link? nextSub;
+
   abstract int version;
-  Subscriber get subscriber;
-  List<Node> get dependents;
-  List<Subscriber> get subscribers;
 }
 
-abstract interface class Subscriber {
+abstract interface class Sub {
+  Link? deps;
+  Link? depsTail;
+  Sub? next;
   abstract int flags;
-  List<Node> get dependents;
-  List<Subscriber> get children;
   Derived? notify();
 }
 
-abstract interface class Dependent {
-  abstract int version;
-  List<Node> get subscribers;
+abstract interface class Dep {
+  abstract int vrsion;
+  Link? activeLink;
+  Link? subs;
   Derived? get derived;
 
-  Node? track();
+  Link? track();
   void trigger();
   void notify();
 }
 
-abstract interface class Effect<T> implements public.Effect<T>, Subscriber {
+abstract interface class Ref<T> implements public.Ref<T> {
+  Dep get dep;
+}
+
+abstract interface class Derived<T> implements public.Derived<T>, Sub, Ref<T> {
+  abstract int version;
+}
+
+abstract interface class Effect<T> implements public.Effect<T>, Sub {
   abstract void Function()? cleanup;
   abstract final T Function() runner;
   void runIfDirty();

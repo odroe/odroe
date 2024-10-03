@@ -1,5 +1,6 @@
-import 'dart:developer';
+import 'src/core/impls/flags.dart';
 
 main() {
-  print(NativeRuntime.buildId);
+  final flags = Flags.dirty | Flags.notified;
+  print(flags & Flags.active);
 }

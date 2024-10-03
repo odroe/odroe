@@ -1,1 +1,0 @@
-int globalVersion = 0;
