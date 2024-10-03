@@ -9,14 +9,11 @@ int batchDepth = 0;
 Sub? batchedSub;
 
 void startBatch() {
-  print("startBatch called");
   batchDepth++;
 }
 
 void endBatch() {
-  print("endBatch called");
   if (--batchDepth > 0) {
-    print("batchDepth > 0, returning early");
     return;
   }
 
@@ -40,10 +37,8 @@ void endBatch() {
       current.flags &= ~Flags.notified;
       if (current.flags.contains(Flags.active)) {
         try {
-          print("Triggering effect");
           (current as ReactiveEffect).trigger();
         } catch (e) {
-          print("Error in effect: $e");
           error ??= e;
         }
       }
@@ -136,7 +131,6 @@ abstract class Sub {
   bool notify();
 
   void prepareDeps() {
-    print("prepareDeps called");
     Link? link = deps;
     while (link != null) {
       link.version = -1;
@@ -146,7 +140,6 @@ abstract class Sub {
   }
 
   void cleanupDeps() {
-    print("cleanupDeps called");
     Link? head, link = depsTail, tail = link;
     while (link != null) {
       final prev = link.prevDep;
@@ -171,7 +164,6 @@ abstract class Sub {
   }
 
   void batch() {
-    print("batch called");
     flags |= Flags.notified;
     next = batchedSub;
     batchedSub = this;
@@ -211,18 +203,18 @@ class Dep {
   Dep([this.derived]);
 
   Link? track() {
-    print("Dep.track called. activeSub: $activeSub, shouldTrack: $shouldTrack");
     if (activeSub == null || !shouldTrack || activeSub == derived) {
-      print("Dep.track returning null early");
       return null;
-    } else if (activeLink == null || activeLink?.sub != activeSub) {
+    }
+
+    if (activeLink == null || activeLink?.sub != activeSub) {
       activeLink = Link(activeSub!, this);
 
       if (activeSub!.deps != null) {
         activeSub!.deps = activeSub!.depsTail = activeLink;
       } else {
         activeLink!.prevDep = activeSub!.depsTail;
-        activeSub!.depsTail!.nextDep = activeLink;
+        activeSub!.depsTail?.nextDep = activeLink;
         activeSub!.depsTail = activeLink;
       }
 
@@ -232,7 +224,7 @@ class Dep {
       if (activeLink?.nextDep != null) {
         final next = activeLink!.nextDep!;
         if (activeLink?.prevDep != null) {
-          activeLink!.prevDep!.nextDep = next;
+          activeLink!.prevDep?.nextDep = next;
         }
 
         activeLink!.prevDep = activeSub?.depsTail;
@@ -250,19 +242,16 @@ class Dep {
   }
 
   void trigger() {
-    print("Dep.trigger called");
     version++;
     globalVersion++;
     notify();
   }
 
   void notify() {
-    print("Dep.notify called");
     startBatch();
     try {
       Link? link = subs;
       while (link != null) {
-        print("Notifying subscriber");
         if (link.sub.notify()) {
           (link.sub as DerivedImpl).dep.notify();
         }
@@ -315,7 +304,6 @@ class DerivedImpl<T> extends Sub implements Derived<T> {
 
   @override
   T get value {
-    print("DerivedImpl.value getter called");
     final link = dep.track();
     refresh();
 
@@ -328,7 +316,6 @@ class DerivedImpl<T> extends Sub implements Derived<T> {
 
   @override
   set value(T newValue) {
-    print("DerivedImpl.value setter called");
     if (setter == null) {
       warn('Write failed: Derived value is readonly.');
       return;
@@ -339,7 +326,6 @@ class DerivedImpl<T> extends Sub implements Derived<T> {
 
   @override
   bool notify() {
-    print("DerivedImpl.notify called");
     flags |= Flags.dirty;
     if (!flags.contains(Flags.notified) && activeSub != this) {
       batch();
@@ -350,7 +336,6 @@ class DerivedImpl<T> extends Sub implements Derived<T> {
   }
 
   void refresh() {
-    print("DerivedImpl.refresh called");
     if (flags.contains(Flags.tracking) && !flags.contains(Flags.dirty)) {
       return;
     }
@@ -387,31 +372,25 @@ class DerivedImpl<T> extends Sub implements Derived<T> {
 }
 
 class RefImpl<T> implements Ref<T> {
-  RefImpl(this._value) {
-    print("RefImpl created with value: $_value");
-  }
+  RefImpl(this._value);
 
   T _value;
   late final dep = Dep();
 
   @override
   T get value {
-    print("Getting RefImpl value: $_value");
     dep.track();
     return _value;
   }
 
   @override
   set value(T newValue) {
-    print("Setting RefImpl value from $_value to $newValue");
     final oldValue = _value;
     if (!hasChanged(oldValue, newValue)) {
-      print("Value unchanged, not triggering update");
       return;
     }
 
     _value = newValue;
-    print("Triggering dep update");
     dep.trigger();
   }
 }
@@ -533,7 +512,6 @@ class ReactiveEffect<T> extends Sub {
   void Function()? onStop;
 
   ReactiveEffect(this.runner) {
-    print("ReactiveEffect created");
     if (activeEffectScope?.active == true) {
       activeEffectScope!.effects.add(this);
     }
@@ -541,14 +519,11 @@ class ReactiveEffect<T> extends Sub {
 
   @override
   bool notify() {
-    print("ReactiveEffect.notify called");
     if (flags.contains(Flags.running) && !flags.contains(Flags.allowRecurse)) {
-      print("ReactiveEffect.notify: Already running, not notifying");
       return false;
     }
 
     if (!flags.contains(Flags.notified)) {
-      print("ReactiveEffect.notify: Batching effect");
       batch();
     }
 
@@ -570,9 +545,7 @@ class ReactiveEffect<T> extends Sub {
   }
 
   T run() {
-    print("ReactiveEffect.run started");
     if (!flags.contains(Flags.active)) {
-      print("ReactiveEffect.run: Effect not active, just running function");
       return runner();
     }
 
@@ -583,15 +556,12 @@ class ReactiveEffect<T> extends Sub {
     final prevActiveSub = activeSub;
     final prevShouldTrack = shouldTrack;
 
-    print("ReactiveEffect.run: Setting activeSub and shouldTrack");
     activeSub = this;
     shouldTrack = true;
 
     try {
-      print("ReactiveEffect.run: Running effect function");
       return runner();
     } finally {
-      print("ReactiveEffect.run: Cleanup and resetting state");
       cleanupDeps();
       activeSub = prevActiveSub;
       shouldTrack = prevShouldTrack;
@@ -647,34 +617,22 @@ class ReactiveEffect<T> extends Sub {
 }
 
 void effect<T>(T Function() runner) {
-  print("effect function called");
   final inner = ReactiveEffect(runner);
 
   try {
-    print("Running effect for the first time");
     inner.run();
   } catch (e) {
-    print("Error in effect: $e");
     inner.stop();
     rethrow;
   }
-
-  print("Effect setup complete");
 }
 
 void main() {
-  print("Starting main function");
   final a = RefImpl(1);
-  print("Created RefImpl a with initial value 1");
 
-  print("Setting up effect");
   effect(() {
-    print("Effect function running");
-    print("Current value of a: ${a.value}");
+    a.value;
   });
 
-  print("Changing value of a");
   a.value = 2;
-
-  print("Main function complete");
 }
