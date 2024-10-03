@@ -14,25 +14,31 @@ void startBatch() {
 
 void endBatch() {
   if (--batchDepth > 0) {
+    print(222);
     return;
   }
 
   Object? error;
   while (batchedSub != null) {
-    Sub? current = batchedSub, next;
+    Sub? current = batchedSub;
     while (current != null) {
       if (!current.flags.contains(Flags.active)) {
         current.flags &= ~Flags.notified;
       }
 
       current = current.next;
+      print('current: $current');
     }
+
+    print(111);
 
     current = batchedSub;
     batchedSub = null;
 
+    Sub? next;
     while (current != null) {
       next = current.next;
+
       current.next = null;
       current.flags &= ~Flags.notified;
       if (current.flags.contains(Flags.active)) {
@@ -42,7 +48,6 @@ void endBatch() {
           error ??= e;
         }
       }
-
       current = next;
     }
   }
@@ -132,10 +137,12 @@ abstract class Sub {
 
   void prepareDeps() {
     Link? link = deps;
+
     while (link != null) {
       link.version = -1;
       link.prevActiveLink = link.dep.activeLink;
       link.dep.activeLink = link;
+      link = link.nextDep;
     }
   }
 
@@ -172,14 +179,14 @@ abstract class Sub {
   bool get dirty {
     Link? link = deps;
 
-    bool refreshTest() {
-      link?.dep.derived?.refresh();
-      return link?.version != link?.dep.version;
-    }
-
     while (link != null) {
-      if (link.version != link.dep.version || refreshTest()) {
+      if (link.version != link.dep.version) {
         return true;
+      } else if (link.dep.derived != null) {
+        link.dep.derived!.refresh();
+        if (link.version != link.dep.version) {
+          return true;
+        }
       }
 
       link = link.nextDep;
@@ -200,7 +207,7 @@ class Dep {
 
   final DerivedImpl? derived;
 
-  Dep([this.derived]);
+  Dep([this.derived]) {}
 
   Link? track() {
     if (activeSub == null || !shouldTrack || activeSub == derived) {
@@ -210,7 +217,7 @@ class Dep {
     if (activeLink == null || activeLink?.sub != activeSub) {
       activeLink = Link(activeSub!, this);
 
-      if (activeSub!.deps != null) {
+      if (activeSub!.deps == null) {
         activeSub!.deps = activeSub!.depsTail = activeLink;
       } else {
         activeLink!.prevDep = activeSub!.depsTail;
@@ -255,6 +262,7 @@ class Dep {
         if (link.sub.notify()) {
           (link.sub as DerivedImpl).dep.notify();
         }
+
         link = link.nextSub;
       }
     } finally {
@@ -274,17 +282,17 @@ class Dep {
       for (var link = derived.deps; link != null; link = link.nextDep) {
         addSub(link);
       }
-
-      final currentTail = link.dep.subs;
-      if (currentTail != link) {
-        link.prevSub = currentTail;
-        if (currentTail != null) {
-          currentTail.nextSub = link;
-        }
-      }
-
-      link.dep.subs = link;
     }
+
+    final currentTail = link.dep.subs;
+    if (currentTail != link) {
+      link.prevSub = currentTail;
+      if (currentTail != null) {
+        currentTail.nextSub = link;
+      }
+    }
+
+    link.dep.subs = link;
   }
 }
 
@@ -550,6 +558,7 @@ class ReactiveEffect<T> extends Sub {
     }
 
     flags |= Flags.running;
+
     cleanupEffect();
     prepareDeps();
 
@@ -597,13 +606,15 @@ class ReactiveEffect<T> extends Sub {
 
   void cleanupEffect() {
     final cleanup = this.cleanup;
-    if (this.cleanup == null) return;
+    this.cleanup = null;
+
+    if (cleanup == null) return;
 
     final prevActiveSub = activeSub;
     activeSub = null;
 
     try {
-      cleanup!();
+      cleanup();
     } finally {
       activeSub = prevActiveSub;
     }
@@ -616,7 +627,7 @@ class ReactiveEffect<T> extends Sub {
   }
 }
 
-void effect<T>(T Function() runner) {
+T Function() effect<T>(T Function() runner) {
   final inner = ReactiveEffect(runner);
 
   try {
@@ -625,14 +636,29 @@ void effect<T>(T Function() runner) {
     inner.stop();
     rethrow;
   }
+
+  return inner.run;
 }
 
 void main() {
+  final dem = Stopwatch()..start();
+
+  // print(1);
+  // print(2);
+  // print(3);
+
   final a = RefImpl(1);
+  final b = DerivedImpl(
+    (_) => a.value * 2,
+  );
 
   effect(() {
-    a.value;
+    print('a: ${a.value}, b: ${b.value}');
   });
 
   a.value = 2;
+  // a.value = 3;
+
+  dem.stop();
+  print('Time: ${dem.elapsed.inMicroseconds}');
 }
