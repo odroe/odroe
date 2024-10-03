@@ -26,3 +26,12 @@ bool _hasIterableChanged(Iterable a, Iterable b) {
 
   return false;
 }
+
+class WeakSet<T extends Object> {
+  late Expando<bool> _inner = Expando();
+
+  void add(T element) => _inner[element] = true;
+  void remove(T element) => _inner[element] = null;
+  bool contains(T element) => _inner[element] == true;
+  void clear() => _inner = Expando();
+}
