@@ -13,8 +13,8 @@ void startBatch() {
 }
 
 void endBatch() {
-  if (--batchDepth > 0) {
-    print(222);
+  batchDepth--;
+  if (batchDepth > 0) {
     return;
   }
 
@@ -27,10 +27,7 @@ void endBatch() {
       }
 
       current = current.next;
-      print('current: $current');
     }
-
-    print(111);
 
     current = batchedSub;
     batchedSub = null;
@@ -207,7 +204,7 @@ class Dep {
 
   final DerivedImpl? derived;
 
-  Dep([this.derived]) {}
+  Dep([this.derived]);
 
   Link? track() {
     if (activeSub == null || !shouldTrack || activeSub == derived) {
@@ -641,12 +638,6 @@ T Function() effect<T>(T Function() runner) {
 }
 
 void main() {
-  final dem = Stopwatch()..start();
-
-  // print(1);
-  // print(2);
-  // print(3);
-
   final a = RefImpl(1);
   final b = DerivedImpl(
     (_) => a.value * 2,
@@ -657,8 +648,5 @@ void main() {
   });
 
   a.value = 2;
-  // a.value = 3;
-
-  dem.stop();
-  print('Time: ${dem.elapsed.inMicroseconds}');
+  a.value = 3;
 }
