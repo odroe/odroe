@@ -86,7 +86,6 @@ class Effect<T> implements private.Effect<T> {
     flags |= Flags.running;
 
     cleanupEffect(this);
-    impl.cleanupDeps(this);
     impl.prepareDeps(this);
 
     final prevSub = activeSub;

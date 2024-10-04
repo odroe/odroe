@@ -38,7 +38,7 @@ class Dep implements private.Dep {
 
     private.Link? link = activeLink;
     if (link == null || link.sub != activeSub) {
-      link = impl.Link(activeSub!, this);
+      link = activeLink = impl.Link(activeSub!, this);
 
       if (activeSub!.deps == null) {
         activeSub!.deps = activeSub!.depsTail = link;
