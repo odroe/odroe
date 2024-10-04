@@ -9,6 +9,8 @@ abstract interface class Link {
   Link? prevSub;
   Link? nextSub;
 
+  Link? prevActiveLink;
+
   abstract int version;
 }
 
