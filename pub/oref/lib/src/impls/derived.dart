@@ -101,7 +101,7 @@ void refreshDerived<T>(private.Derived<T> derived) {
   try {
     impl.prepareDeps(derived);
     final value = derived.getter(derived.innerValue);
-    if (dep.version == 0 || identical(derived.innerValue, value)) {
+    if (dep.version == 0 || !identical(derived.innerValue, value)) {
       derived.innerValue = value;
       dep.version++;
     }

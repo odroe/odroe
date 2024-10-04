@@ -17,7 +17,7 @@ class Ref<T> implements private.Ref<T> {
 
   @override
   set value(T newValue) {
-    if (!identical(_value, newValue)) {
+    if (identical(_value, newValue)) {
       return;
     }
 
