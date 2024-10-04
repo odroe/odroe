@@ -1,12 +1,11 @@
-# oref
+# Oref
 
-oref is a lightweight, high-performance reactive programming library for Dart.
+Oref is a lightweight, high-performance reactive programming library for Dart.
 It provides a concise yet powerful way to manage application state and side effects.
 
 ## Features
 
 - 🚀 High Performance: Optimized reactive system ensures fast state updates with minimal overhead
-- 🎯 Type Safety: Fully leverages Dart's type system to provide compile-time safety guarantees
 - 🧩 Modularity: Easy to integrate into existing projects without enforcing a specific application architecture
 - 🔍 Fine-grained Reactivity: Precisely tracks and updates dependencies, avoiding unnecessary computations
 - 🛠 Flexible API: Supports various reactive programming patterns, including refs, derived properties, and effects
@@ -14,12 +13,12 @@ It provides a concise yet powerful way to manage application state and side effe
 
 ## Installation
 
-Run the following command to install oref:
+Run the following command to install Oref:
 ```bash
 dart pub add oref
 ```
 
-Or add the following line to your pubspec.yaml file:
+Or add the following line to your `pubspec.yaml` file:
 
 ```yaml
 dependencies:
@@ -28,7 +27,7 @@ dependencies:
 
 ## Quick Start
 
-Here's a simple example demonstrating how to use oref:
+Here's a simple example demonstrating how to use Oref:
 
 ```dart
 import 'package:oref/oref.dart';

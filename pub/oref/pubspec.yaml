@@ -1,7 +1,9 @@
 name: oref
-description: "Imperative state management"
-version: 0.0.0
-repository: https://github.com/odroe/odroe
+description: Oref is a lightweight, high-performance reactive programming library.
+version: 0.0.1
+repository: https://github.com/odroe/odroe/tree/main/pub/oref
+homepage: https://odroe.dev
+issue_tracker: https://github.com/odroe/odroe/issues
 
 environment:
   sdk: ^3.5.3
