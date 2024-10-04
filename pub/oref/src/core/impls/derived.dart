@@ -9,7 +9,7 @@ import 'utils.dart';
 class Derived<T> implements private.Derived<T> {
   Derived(this.getter, [this.setter]);
 
-  final T Function() getter;
+  final T Function(T?) getter;
   final void Function(T)? setter;
 
   @override
@@ -95,7 +95,7 @@ void refreshDerived<T>(Derived<T> derived) {
 
   try {
     impl.prepareDeps(derived);
-    final value = derived.getter();
+    final value = derived.getter(derived._value);
     if (dep.version == 0 || hasChanged(derived._value, value)) {
       derived._value = value;
       dep.version++;
