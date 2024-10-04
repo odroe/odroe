@@ -1,5 +1,6 @@
 import '../types/private.dart' as private;
 import 'flags.dart';
+import 'utils.dart';
 
 int batchDepth = 0;
 private.Sub? batchedSub;
@@ -44,10 +45,13 @@ void endBatch() {
       final next = element.next;
       element.next = null;
       element.flags &= ~Flags.notified;
+
+      // Only effect contains active flag.
       if ((element.flags & EffectFlags.active) != 0) {
         try {
           (element as private.Effect).trigger();
-        } catch (e) {
+        } catch (e, s) {
+          warn('Error during effect trigger', error: e, stackTrace: s);
           error ??= e;
         }
       }
@@ -57,6 +61,7 @@ void endBatch() {
   }
 
   if (error != null) {
+    warn('Error during batch execution', error: error, when: true);
     throw error;
   }
 }

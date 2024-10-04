@@ -10,7 +10,7 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final count = ref(context, 0);
+    final count = ref(0);
 
     final element = context as Element;
     element.visitChildren((child) {

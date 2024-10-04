@@ -1,6 +1,5 @@
 import '../types/private.dart' as private;
 import 'dep.dart' as impl;
-import 'utils.dart';
 
 class Ref<T> implements private.Ref<T> {
   Ref(T value) : _value = value;
@@ -18,7 +17,7 @@ class Ref<T> implements private.Ref<T> {
 
   @override
   set value(T newValue) {
-    if (!hasChanged(_value, newValue)) {
+    if (!identical(_value, newValue)) {
       return;
     }
 

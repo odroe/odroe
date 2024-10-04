@@ -61,7 +61,8 @@ final class Scope implements private.Scope {
   @override
   void resume() {
     if (!active || !paused) return;
-    paused = true;
+
+    paused = false;
     for (final scope in scopes) {
       scope.resume();
     }
