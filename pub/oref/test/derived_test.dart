@@ -5,16 +5,16 @@ void main() {
   group('derived', () {
     test('should compute derived value using getter', () {
       final count = ref(0);
-      final derivedValue = derived<int>((old) => count.value + 1);
+      final derivedValue = derived(() => count.value + 1);
       expect(derivedValue.value, equals(1));
       count.value = 2;
       expect(derivedValue.value, equals(3));
     });
 
-    test('should update derived value using setter', () {
+    test('should update derived value using writable derived', () {
       final count = ref(0);
-      final derivedValue = derived<int>(
-        (old) => count.value * 2,
+      final derivedValue = writableDerived(
+        (_) => count.value * 2,
         (newValue) => count.value = newValue ~/ 2,
       );
       expect(derivedValue.value, equals(0));
@@ -24,14 +24,14 @@ void main() {
       expect(derivedValue.value, equals(10));
     });
 
-    test('readonly should create a derived value without setter', () {
+    test('should be readonly by default', () {
       final count = ref(0);
-      final readonlyValue = derived.readonly(() => count.value + 2);
+      final readonlyValue = derived(() => count.value + 2);
       expect(readonlyValue.value, equals(2));
+
       count.value = 3;
       expect(readonlyValue.value, equals(5));
 
-      // Attempting to set the value should result in a warning
       readonlyValue.value = 10;
       expect(readonlyValue.value, equals(5)); // Value should not change
     });
@@ -39,7 +39,7 @@ void main() {
     test('derived should cache its value', () {
       var computeCount = 0;
       final count = ref(0);
-      final derivedValue = derived<int>((old) {
+      final derivedValue = derived(() {
         computeCount++;
         return count.value * 2;
       });
@@ -60,7 +60,7 @@ void main() {
     test('derived should handle multiple dependencies', () {
       final count1 = ref(1);
       final count2 = ref(2);
-      final derivedValue = derived<int>((old) => count1.value + count2.value);
+      final derivedValue = derived(() => count1.value + count2.value);
 
       expect(derivedValue.value, equals(3));
 
@@ -73,8 +73,8 @@ void main() {
 
     test('derived should handle nested derived values', () {
       final count = ref(0);
-      final derived1 = derived<int>((old) => count.value * 2);
-      final derived2 = derived<int>((old) => derived1.value + 1);
+      final derived1 = derived(() => count.value * 2);
+      final derived2 = derived(() => derived1.value + 1);
 
       expect(derived2.value, equals(1));
 

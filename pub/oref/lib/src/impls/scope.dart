@@ -12,6 +12,9 @@ final class Scope implements private.Scope {
     }
   }
 
+  @override
+  late bool active = true;
+
   late bool paused = false;
 
   @override
@@ -22,9 +25,6 @@ final class Scope implements private.Scope {
 
   @override
   late Scope? parent;
-
-  @override
-  late bool active = true;
 
   @override
   late final List<void Function()> cleanups = [];
