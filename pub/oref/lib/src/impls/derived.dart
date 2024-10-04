@@ -53,8 +53,9 @@ class Derived<T> implements private.Derived<T> {
 
   @override
   set value(T newValue) {
-    setter?.call(newValue);
-    if (setter == null) {
+    if (setter != null) {
+      setter!(newValue);
+    } else {
       warn('Derived value is readonly');
     }
   }

@@ -35,7 +35,7 @@ void addSub(private.Link link) {
   }
 
   final derived = link.dep.derived;
-  if (derived != null && link.dep.subs != null) {
+  if (derived != null && link.dep.subs == null) {
     derived.flags |= Flags.tracking | Flags.dirty;
     for (var link = derived.deps; link != null; link = link.nextDep) {
       addSub(link);
@@ -72,11 +72,6 @@ void removeSub(private.Link link, [bool soft = false]) {
       removeSub(link, true);
     }
   }
-
-  // TODO: https://github.com/vuejs/core/blob/main/packages/reactivity/src/effect.ts#L449
-  // if (!soft && (--dep.sunCounter) == 0 && dep.map) {
-  //   dep.map.remove(dep.key);
-  // }
 }
 
 void removeDep(private.Link link) {

@@ -22,13 +22,13 @@ extension DerivedHelper on public.Derived<T> Function<T>(
   T Function(T?), [
   void Function(T)?,
 ]) {
-  /// Creates a computed [Derived] instance with the provided getter function.
+  /// Creates a readonly [public.Derived] instance with the provided getter function.
   ///
   /// The [getter] function is used to compute the value of the derived state.
   /// It takes no parameters and returns the computed value.
   ///
   /// Returns a [public.Derived<T>] instance.
-  public.Derived<T> computed<T>(T Function() getter) {
+  public.Derived<T> readonly<T>(T Function() getter) {
     return derived<T>((_) => getter());
   }
 }
