@@ -9,7 +9,10 @@ import 'utils.dart';
 class Derived<T> implements private.Derived<T> {
   Derived(this.getter, [this.setter]);
 
+  @override
   final T Function(T?) getter;
+
+  @override
   final void Function(T)? setter;
 
   @override
@@ -30,7 +33,8 @@ class Derived<T> implements private.Derived<T> {
   @override
   late final private.Dep dep = impl.Dep(this);
 
-  dynamic _value;
+  @override
+  dynamic innerValue;
 
   @override
   T get value {
@@ -44,7 +48,7 @@ class Derived<T> implements private.Derived<T> {
       link.version = dep.version;
     }
 
-    return _value;
+    return innerValue;
   }
 
   @override
@@ -59,7 +63,7 @@ class Derived<T> implements private.Derived<T> {
   Derived<T>? notify() {
     flags |= Flags.dirty;
     if ((flags & Flags.notified) == 0 && activeSub != this) {
-      impl.batch(this);
+      impl.batch(this, true);
 
       return this;
     } else if (dev) {
@@ -70,7 +74,7 @@ class Derived<T> implements private.Derived<T> {
   }
 }
 
-void refreshDerived<T>(Derived<T> derived) {
+void refreshDerived<T>(private.Derived<T> derived) {
   if ((derived.flags & Flags.tracking) != 0 &&
       (derived.flags & Flags.dirty) == 0) {
     return;
@@ -95,9 +99,9 @@ void refreshDerived<T>(Derived<T> derived) {
 
   try {
     impl.prepareDeps(derived);
-    final value = derived.getter(derived._value);
-    if (dep.version == 0 || hasChanged(derived._value, value)) {
-      derived._value = value;
+    final value = derived.getter(derived.innerValue);
+    if (dep.version == 0 || hasChanged(derived.innerValue, value)) {
+      derived.innerValue = value;
       dep.version++;
     }
   } catch (_) {

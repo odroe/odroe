@@ -1,5 +1,6 @@
 import '../types/private.dart' as private;
 import 'link.dart' as impl;
+import 'derived.dart' as impl;
 
 void prepareDeps(private.Sub sub) {
   for (var link = sub.deps; link != null; link = link.nextDep) {
@@ -31,4 +32,22 @@ void cleanupDeps(private.Sub sub) {
 
   sub.deps = head;
   sub.depsTail = tail;
+}
+
+bool isDirty(private.Sub sub) {
+  for (var link = sub.deps; link != null; link = link.nextDep) {
+    if (link.dep.version != link.version) {
+      return true;
+    }
+
+    final derived = link.dep.derived;
+    if (derived != null) {
+      impl.refreshDerived(derived);
+      if (link.dep.version != link.version) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }

@@ -16,13 +16,9 @@ abstract interface class Scope {
 
 abstract interface class Effect<T> {
   bool get dirty;
-  bool get allowRecurse;
   void Function()? get scheduler;
   void Function()? get onStop;
 
   T run();
   void stop();
-  void pause();
-  void resume();
-  void trigger();
 }

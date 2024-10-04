@@ -39,12 +39,19 @@ abstract interface class Ref<T> implements public.Ref<T> {
 
 abstract interface class Derived<T> implements public.Derived<T>, Sub, Ref<T> {
   abstract int version;
+  T Function(T?) get getter;
+  void Function(T)? get setter;
+  abstract dynamic innerValue;
 }
 
 abstract interface class Effect<T> implements public.Effect<T>, Sub {
   abstract void Function()? cleanup;
-  abstract final T Function() runner;
+  T Function() get runner;
+
   void runIfDirty();
+  void pause();
+  void resume();
+  void trigger();
 }
 
 abstract interface class Scope implements public.Scope {
