@@ -1,9 +1,10 @@
 import '../types/private.dart' as private;
 import 'batch.dart';
 import 'global.dart';
+import 'link.dart' as impl;
 
-class Dependent implements private.Dependent {
-  Dependent([this.derived]) : version = 0;
+class Dep implements private.Dep {
+  Dep([this.derived]) : version = 0;
 
   @override
   int version;
@@ -12,16 +13,17 @@ class Dependent implements private.Dependent {
   final private.Derived? derived;
 
   @override
-  late final List<private.Node> subscribers;
+  private.Link? activeLink;
 
-  private.Node? activeNode;
+  @override
+  private.Link? subs;
 
   @override
   void notify() {
     startBatch();
     try {
-      for (final private.Node(:subscriber) in subscribers) {
-        subscriber.notify()?.dependent.notify();
+      for (private.Link? link = subs; link != null; link = link.prevSub) {
+        link.sub.notify()?.dep.notify();
       }
     } finally {
       endBatch();
@@ -29,21 +31,45 @@ class Dependent implements private.Dependent {
   }
 
   @override
-  private.Node? track() {
-    if (evalSubscriber == null || !shouldTrack || evalSubscriber == derived) {
+  private.Link? track() {
+    if (activeSub == null || !shouldTrack || activeSub == derived) {
       return null;
     }
 
-    private.Node? node = activeNode;
-    if (node == null || node.subscriber != evalSubscriber) {
-      node = activeNode = Node(evalSubscriber!, this);
-      if (evalSubscriber!.dependents.isNotEmpty) {
-        evalSubscriber!.dependents.add(node);
+    private.Link? link = activeLink;
+    if (link == null || link.sub != activeSub) {
+      link = impl.Link(activeSub!, this);
+
+      if (activeSub!.deps == null) {
+        activeSub!.deps = activeSub!.depsTail = link;
       } else {
-        node.dependents.add(evalSubscriber!.dependents.removeLast());
-        evalSubscriber!.dependents.add(node);
+        link.prevDep = activeSub!.depsTail;
+        activeSub!.depsTail!.nextDep = link;
+        activeSub!.depsTail = link;
+      }
+
+      impl.addSub(link);
+    } else if (link.version == -1) {
+      link.version = version;
+      if (link.nextDep != null) {
+        final next = link.nextDep!;
+        next.prevDep = link.prevDep;
+        if (link.prevDep != null) {
+          link.prevDep!.nextDep = next;
+        }
+
+        link.prevDep = activeSub!.depsTail;
+        link.nextDep = null;
+        activeSub!.depsTail!.nextDep = link;
+        activeSub!.depsTail = link;
+
+        if (activeSub!.deps == link) {
+          activeSub!.deps = next;
+        }
       }
     }
+
+    return link;
   }
 
   @override

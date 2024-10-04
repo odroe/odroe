@@ -21,7 +21,7 @@ abstract interface class Sub {
 }
 
 abstract interface class Dep {
-  abstract int vrsion;
+  abstract int version;
   Link? activeLink;
   Link? subs;
   Derived? get derived;
