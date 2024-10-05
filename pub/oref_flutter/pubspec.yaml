@@ -4,7 +4,7 @@ version: 0.0.0
 homepage: https://odroe.dev
 repository: https://github.com/odroe/odroe/tree/main/pub/oref_fultter
 issue_tracker: https://github.com/odroe/odroe/issues
-# resolution: workspace
+resolution: workspace
 
 funding:
   - https://github.com/sponsors/medz
@@ -23,6 +23,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  _octr: ^0.1.0
   oref: ^0.1.0
 
 dev_dependencies:

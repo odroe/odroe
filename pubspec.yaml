@@ -8,4 +8,4 @@ workspace:
   # - playground
   - pub/_octr
   - pub/oref
-  # - pub/oref_flutter
+  - pub/oref_flutter
