@@ -1,6 +1,6 @@
 name: _octr
 description: Internal package, The _octr is odroe/odroe packages shared container.
-version: 0.0.0
+version: 0.0.1
 resolution: workspace
 repository: https://github.com/odroe/odroe
 

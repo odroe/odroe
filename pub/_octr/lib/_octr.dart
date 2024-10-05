@@ -1,8 +1,25 @@
-/// Support for doing something awesome.
-///
-/// More dartdocs go here.
-library;
+final _typed = <WeakReference<Expando>>[];
+final _marked = Expando<Expando>();
 
-export 'src/_octr_base.dart';
+/// Creates a container.
+Expando<T> createWeakMap<T extends Object>([Object? mark]) {
+  if (mark == null) {
+    for (final WeakReference(:target) in _typed) {
+      if (target is Expando<T>) {
+        return target;
+      }
+    }
 
-// TODO: Export any libraries intended for clients of this package.
+    final expando = Expando<T>();
+    _typed.add(WeakReference(expando));
+
+    return expando;
+  }
+
+  final expando = _marked[mark] ??= Expando<T>();
+  if (expando is Expando<T>) {
+    return expando;
+  }
+
+  throw StateError('Invalid mark, the mark is already used for another type.');
+}
