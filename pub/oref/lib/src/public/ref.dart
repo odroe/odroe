@@ -3,11 +3,18 @@ import '../types/private.dart' as private;
 import '../impls/ref.dart' as impl;
 import '../impls/utils.dart';
 
-/// Creates a new [public.Ref] instance with the given [value].
+/// Creates a value reference.
 ///
-/// If [value] is already a [public.Ref], a warning is logged.
+/// **NOTE**: Don't pass in a reference to another value, since it will never be changed.
 ///
-/// Returns a [public.Ref<T>] instance.
+/// ```dart
+/// final count = ref(0);
+///
+/// print(count.value); // 0
+///
+/// count.value = 10;
+/// print(count.value); // 10
+/// ```
 public.Ref<T> ref<T>(T value) {
   if (value is public.Ref) {
     warn('ref() was called with a Ref instance.');
@@ -18,10 +25,9 @@ public.Ref<T> ref<T>(T value) {
 
 /// Triggers the update of a [Ref] instance.
 ///
-/// If [ref] is a [private.Ref], it triggers the update.
 /// If [ref] is an external implementation, a warning is logged in development mode.
 ///
-/// [T] is the type of the value held by the [public.Ref].
+/// [T] is the type of the value held by the [Ref].
 void triggerRef<T>(public.Ref<T> ref) {
   if (ref is private.Ref) {
     (ref as private.Ref).dep.trigger();
@@ -32,13 +38,13 @@ void triggerRef<T>(public.Ref<T> ref) {
 
 /// Checks if a value is a [Ref] instance.
 ///
-/// Returns `true` if [value] is a [public.Ref], `false` otherwise.
+/// Returns `true` if [value] is a [Ref], `false` otherwise.
 bool isRef(value) => value is public.Ref;
 
-/// Unwraps a [public.Ref] instance if the given value is a [public.Ref], otherwise returns the value as-is.
+/// Unwraps a [Ref] instance if the given value is a [Ref], otherwise returns the value as-is.
 ///
-/// If [ref] is a [public.Ref], returns its value.
-/// If [ref] is not a [public.Ref], returns [ref] unchanged.
+/// If [ref] is a [Ref], returns its value.
+/// If [ref] is not a [Ref], returns [ref] unchanged.
 ///
 /// [R] is the type of the unwrapped value.
 R unref<R>(ref) {

@@ -33,7 +33,7 @@ void main() {
       final count = ref(0);
       var effectCount = 0;
 
-      final effectInstance = effect(() {
+      final runner = effect(() {
         count.value; // Track the ref
         effectCount++;
       });
@@ -43,7 +43,7 @@ void main() {
       count.value++;
       expect(effectCount, equals(2));
 
-      effectInstance.stop();
+      runner.effect.stop();
 
       count.value++;
       expect(effectCount, equals(2)); // Should not increase

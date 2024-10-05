@@ -10,32 +10,51 @@ import '../impls/global.dart';
 /// - [scheduler] is an optional function to schedule the effect run.
 /// - [onStop] is an optional function called when the effect is stopped.
 ///
-/// Returns a [public.Effect<T>] instance.
-public.Effect<T> effect<T>(
+/// ```dart
+/// final count = ref(0);
+///
+/// effect(() {
+///     print('Count: ${count.value}');
+/// });
+///
+/// count.value = 10; // prints 'Count: 10'
+/// ```
+public.EffectRunner<T> effect<T>(
   T Function() runner, {
   void Function()? scheduler,
   void Function()? onStop,
 }) {
-  final inner = impl.Effect(
+  final effect = impl.Effect(
     runner,
     scheduler: scheduler,
     onStop: onStop,
   );
 
   try {
-    inner.run();
+    effect.run();
   } catch (_) {
-    inner.stop();
+    effect.stop();
     rethrow;
   }
 
-  return inner;
+  return impl.EffectRunner(effect);
 }
 
 /// Registers a cleanup function for the current active effect.
 ///
 /// [cleanup] is the function to be called when the effect is cleaned up.
 /// [failSilently] determines whether to suppress warnings when called outside an effect.
+///
+/// ```dart
+/// final count = ref(0);
+///
+/// effect(() {
+///    print('Count: ${count.value}');
+///
+///    // Triggered when the effect of count changes.
+///    onEffectCleanup(() => print('Cleaned up'));
+/// });
+/// ```
 void onEffectCleanup(void Function() cleanup, [failSilently = false]) {
   if (activeSub is private.Effect) {
     (activeSub as private.Effect).cleanup = cleanup;

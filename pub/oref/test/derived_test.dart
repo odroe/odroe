@@ -13,7 +13,7 @@ void main() {
 
     test('should update derived value using writable derived', () {
       final count = ref(0);
-      final derivedValue = writableDerived(
+      final derivedValue = derived.writable(
         (_) => count.value * 2,
         (newValue) => count.value = newValue ~/ 2,
       );

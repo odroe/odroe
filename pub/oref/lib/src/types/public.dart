@@ -51,4 +51,29 @@ abstract interface class Effect<T> {
 
   /// Stops the effect from running.
   void stop();
+
+  /// Pauses the effect, preventing it from running until resumed.
+  void pause();
+
+  /// Resumes a paused effect, allowing it to run again.
+  void resume();
+
+  /// Manually triggers the effect to run, regardless of its current state.
+  void trigger();
+}
+
+/// Represents a runner for reactive effects.
+///
+/// This interface defines the structure for objects that can execute effects
+/// and retrieve the associated [Effect] object.
+abstract interface class EffectRunner<T> {
+  /// Gets the [Effect] associated with this runner.
+  Effect<T> get effect;
+
+  /// Executes the effect and returns its result.
+  ///
+  /// This method is callable, allowing the [EffectRunner] to be used as a function.
+  ///
+  /// Also -> [Effect.run]
+  T call();
 }

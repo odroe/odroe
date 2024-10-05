@@ -1,39 +1,72 @@
 import '../types/public.dart' as public;
 import '../impls/derived.dart' as impl;
 
-/// Creates a new [public.Derived] instance with the provided getter function.
+/// Creates a new [Derived] reference.
 ///
-/// The [getter] function is used to compute the value of the derived state.
-/// It takes the old value as an optional parameter and returns the new value.
+/// The [getter] function is used to compute the value of the derived reference.
 ///
-/// Returns a [public.Derived<T>] instance.
-public.Derived<T> derivedWith<T>(T Function(T? oldValue) getter) {
-  return impl.Derived(getter);
-}
-
-/// Creates a new [public.Derived] instance with the provided getter function.
+/// ```dart
+/// final count = ref(0);
+/// final doubleCount = derived(() => count.value * 2);
 ///
-/// The [getter] function is used to compute the value of the derived state.
-/// It takes no parameters and returns the computed value.
+/// print(doubleCount.value); // 0
 ///
-/// Returns a read-only [public.Derived<T>] instance.
+/// count.value = 10;
+/// print(doubleCount.value); // 20
+/// ```
 public.Derived<T> derived<T>(T Function() getter) {
   T inner(_) => getter();
-  return derivedWith(inner);
+  return impl.Derived(inner);
 }
 
-/// Creates a new writable [public.Derived] instance with the provided getter and setter functions.
-///
-/// The [getter] function is used to compute the value of the derived state.
-/// It takes the old value as an optional parameter and returns the new value.
-///
-/// The [setter] function is used to update the derived state.
-/// It takes the new value as a parameter.
-///
-/// Returns a writable [public.Derived<T>] instance.
-public.Derived<T> writableDerived<T>(
-  T Function(T? oldValue) getter,
-  void Function(T newValue) setter,
-) {
-  return impl.Derived(getter, setter);
+/// Utility extension for creating different types of derived references.
+extension DerivedUtils on public.Derived<T> Function<T>(T Function() _) {
+  /// Creates a writable derived reference.
+  ///
+  /// The [getter] function computes the value based on the old value.
+  /// The [setter] function is used to update the value call.
+  ///
+  /// ```dart
+  /// final count = ref(0);
+  /// final doubleCount = derived.writable<int>(
+  ///   (_) => count.value * 2, // compute double value
+  ///   (value) => count.value = value ~/ 2, // update count value
+  /// );
+  ///
+  /// doubleCount.value = 10; // count.value will be 5
+  /// print(count.value); // 5
+  ///
+  /// count.value = 10; // doubleCount.value will be 20
+  /// print(doubleCount.value); // 20
+  /// ```
+  public.Derived<T> writable<T>(
+    T Function(T? oldValue) getter,
+    void Function(T newValue) setter,
+  ) {
+    return impl.Derived(getter, setter);
+  }
+
+  /// Creates a derived reference that computes its value based on the previous value.
+  ///
+  /// The [getter] function computes the value based on the old value.
+  ///
+  /// **NOTE**: First value is always `null`.
+  ///
+  /// ```dart
+  /// final count = ref(0);
+  /// final total = derived.valuable<int>(
+  ///   (prev) => count.value + (prev ?? 0)
+  /// );
+  ///
+  /// print(total.value); // 0
+  ///
+  /// count.value = 10;
+  /// print(total.value); // 10
+  ///
+  /// count.value = 10;
+  /// print(total.value); // 20
+  /// ```
+  public.Derived<T> valuable<T>(T Function(T? oldValue) getter) {
+    return impl.Derived(getter);
+  }
 }

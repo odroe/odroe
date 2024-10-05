@@ -1,5 +1,5 @@
 import '../types/public.dart';
-import 'derived.dart' as api;
+import 'derived.dart';
 import 'effect.dart';
 import 'scope.dart';
 
@@ -21,11 +21,11 @@ WatchHandle watch<T extends Record>(
 
   scope.run(() {
     T? oldValue;
-    final derived = api.derived<T>(compute);
+    final computed = derived<T>(compute);
 
     effect(() {
       // Track the derived value to trigger the effect.
-      final value = derived.value;
+      final value = computed.value;
 
       // Skip the first run if immediate is false.
       if (!immediate && runCounter == 0) {

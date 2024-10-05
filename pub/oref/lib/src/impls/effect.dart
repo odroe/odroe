@@ -1,3 +1,4 @@
+import '../types/public.dart' as public;
 import '../types/private.dart' as private;
 import 'batch.dart' as impl;
 import 'sub.dart' as impl;
@@ -141,6 +142,16 @@ class Effect<T> implements private.Effect<T> {
       runIfDirty();
     }
   }
+}
+
+final class EffectRunner<T> implements public.EffectRunner<T> {
+  const EffectRunner(this.effect);
+
+  @override
+  final public.Effect<T> effect;
+
+  @override
+  T call() => effect.run();
 }
 
 void cleanupEffect(Effect effect) {

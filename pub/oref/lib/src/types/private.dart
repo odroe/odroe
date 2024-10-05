@@ -49,9 +49,6 @@ abstract interface class Effect<T> implements public.Effect<T>, Sub {
   T Function() get runner;
 
   void runIfDirty();
-  void pause();
-  void resume();
-  void trigger();
 }
 
 abstract interface class Scope implements public.Scope {
