@@ -4,6 +4,17 @@ version: 0.1.0
 repository: https://github.com/odroe/odroe/tree/main/pub/oref
 homepage: https://odroe.dev
 issue_tracker: https://github.com/odroe/odroe/issues
+resolution: workspace
+
+funding:
+  - https://github.com/sponsors/medz
+
+topics:
+  - state
+  - reactive
+  - ref
+  - derived
+  - effect
 
 environment:
   sdk: ^3.5.3
