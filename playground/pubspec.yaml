@@ -2,7 +2,7 @@ name: playground
 description: "Odroe playground"
 publish_to: "none"
 version: 0.0.0
-resolution: workspace
+# resolution: workspace
 
 environment:
   sdk: ^3.5.3
@@ -10,7 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  oref: ^0.1.0
+  oref_flutter:
+    path: ../pub/oref_flutter
 
 dev_dependencies:
   flutter_test:

@@ -5,6 +5,6 @@ environment:
   sdk: ^3.5.3
 
 workspace:
-  - playground
+  # - playground
   - pub/oref
-  - pub/oref_flutter
+  # - pub/oref_flutter
