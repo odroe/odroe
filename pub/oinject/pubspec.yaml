@@ -1,0 +1,21 @@
+name: oinject
+description: "A new Flutter package project."
+version: 0.0.1
+homepage: https://odroe.dev
+repository: https://github.com/odroe/odroe/tree/main/pub/oinject
+issue_tracker: https://github.com/odroe/odroe/issues
+resolution: workspace
+
+environment:
+  sdk: ^3.5.3
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  _octr: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
