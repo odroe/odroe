@@ -1,6 +1,7 @@
 import 'package:_octr/_octr.dart';
 import 'package:flutter/widgets.dart';
 
+final globalProvides = <Object, Provided>{};
 final provides = findOrCreateExpando<Map<dynamic, Provided>>();
 
 class Provided<T> {

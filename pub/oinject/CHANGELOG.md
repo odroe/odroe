@@ -1,6 +1,18 @@
-## 0.0.1 (2024-10-07)
+## 0.1.0
 
-First release version.
+2024-10-08
+
+### What's New
+
+* Added global dependency injection functionality
+* Introduced `provide.global` method for providing global dependencies
+* Enhanced `inject` function to support global dependency lookup
+* Improved documentation with detailed API comments
+* Optimized performance for global dependency resolution
+
+## 0.0.1
+
+2024-10-07 - First release version.
 
 ### What's New
 

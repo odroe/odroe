@@ -5,6 +5,12 @@ import 'provided.dart';
 
 final _targets = Expando<Map<Object, WeakReference<Element>>>();
 
+/// Injects a value of type [T] provided by an ancestor widget or globally.
+///
+/// [context] is the current build context.
+/// [key] is an optional key to differentiate between multiple instances of the same type.
+///
+/// Returns the injected value, or null if not found.
 T? inject<T>(BuildContext context, [Object? key]) {
   evalContextRef.value = context;
 
@@ -40,6 +46,15 @@ T? inject<T>(BuildContext context, [Object? key]) {
 
     return true;
   });
+
+  // Find global provides.
+  if (result == null) {
+    final provided = globalProvides[storeKey];
+    if (provided != null && provided.value is T) {
+      result = provided.value;
+      provided.track(element);
+    }
+  }
 
   return result;
 }

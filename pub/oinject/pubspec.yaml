@@ -1,6 +1,6 @@
 name: oinject
-description: "A new Flutter package project."
-version: 0.0.1
+description: A lightweight dependency injection package for Flutter, simplifying state and service management across widgets.
+version: 0.1.0
 homepage: https://odroe.dev
 repository: https://github.com/odroe/odroe/tree/main/pub/oinject
 issue_tracker: https://github.com/odroe/odroe/issues
