@@ -1,0 +1,29 @@
+name: oncecall
+description: A starting point for Dart libraries or applications.
+version: 0.0.0
+repository: https://github.com/odroe/odroe/tree/main/pub/oncecall
+homepage: https://odroe.dev
+issue_tracker: https://github.com/odroe/odroe/issues
+resolution: workspace
+
+funding:
+  - https://github.com/sponsors/medz
+
+topics:
+  - once
+  - call
+  - memo
+
+environment:
+  sdk: ^3.5.3
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  _octr: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0

@@ -12,6 +12,8 @@ dependencies:
     sdk: flutter
   oref_flutter:
     path: ../pub/oref_flutter
+  oncecall:
+    path: ../pub/oncecall
 
 dev_dependencies:
   flutter_test:

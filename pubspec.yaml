@@ -8,5 +8,6 @@ workspace:
   # - playground
   - pub/_octr
   - pub/oinject
+  - pub/oncecall
   - pub/oref
   - pub/oref_flutter
