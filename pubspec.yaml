@@ -5,7 +5,7 @@ environment:
   sdk: ^3.5.3
 
 workspace:
-  # - playground
+  - playground
   - pub/_octr
   - pub/oinject
   - pub/oncecall

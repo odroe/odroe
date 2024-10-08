@@ -2,7 +2,7 @@ name: playground
 description: "Odroe playground"
 publish_to: "none"
 version: 0.0.0
-# resolution: workspace
+resolution: workspace
 
 environment:
   sdk: ^3.5.3
