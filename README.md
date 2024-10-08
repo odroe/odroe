@@ -5,7 +5,7 @@ This repository contains a collection of Dart and Flutter packages developed by 
 ## Ecosystem
 
 | Package | Version | Description | Note |
-|:-------:|---------|-------------|------|
+|-------|---------|-------------|------|
 | [`oinject`](pub/oinject/) | [![Pub Version](https://img.shields.io/pub/v/oinject)](https://pub.dev/packages/oinject) | A lightweight dependency injection package for Flutter, simplifying state and service management across widgets. | |
 | [`oncecall`](pub/oncecall/) | [![Pub Version](https://img.shields.io/pub/v/oncecall)](https://pub.dev/packages/oncecall) | Oncecall is a memoization tool for use in the build method of Widgets. | |
 | [`oref`](pub/oref/) | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref) | A lightweight, high-performance reactive programming library for Dart. | |
