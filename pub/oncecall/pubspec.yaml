@@ -1,5 +1,6 @@
 name: oncecall
-description: A starting point for Dart libraries or applications.
+description: >-
+  Oncecall is a memoization tool for use in the build method of Widgets.
 version: 0.0.0
 repository: https://github.com/odroe/odroe/tree/main/pub/oncecall
 homepage: https://odroe.dev

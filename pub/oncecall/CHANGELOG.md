@@ -1,3 +1,7 @@
-## 1.0.0
+## 0.0.0
 
-- Initial version.
+2024-10-08
+
+## What's Changed
+
+- Add `oncecall` util function.
