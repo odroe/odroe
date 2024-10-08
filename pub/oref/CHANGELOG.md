@@ -1,3 +1,11 @@
+## 0.2.0
+
+2024-10-09
+
+## What's New
+
+- **feat**: Adds `watch` function.
+
 ## 0.1.0
 
 To install Oref v0.1.0, run this command:
