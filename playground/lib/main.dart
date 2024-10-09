@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:oncecall/oncecall.dart';
+import 'package:oref_flutter/oref_flutter.dart';
 
 main() {
   runApp(const App());
@@ -12,17 +12,26 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final test = oncecall(context, () {
-      print(11111);
-      return counter++;
+    final count = ref(context, 0);
+
+    void handle() {
+      count.value++;
+    }
+
+    effect(context, () {
+      print(count.value);
     });
-    final demo = oncecall(context, () => counter++);
-    final c = oncecall(context, () => counter++);
+
+    print(22222);
 
     return MaterialApp(
       home: Scaffold(
-        body: Center(
-          child: Text('Count: $test, $demo, $c'),
+        body: const Center(
+          child: Text('Count:'),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: handle,
+          child: Icon(Icons.add),
         ),
       ),
     );

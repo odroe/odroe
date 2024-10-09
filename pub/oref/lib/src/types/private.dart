@@ -58,7 +58,4 @@ abstract interface class Scope implements public.Scope {
 
   abstract covariant Scope? parent;
   abstract int? index;
-
-  void on();
-  void off();
 }

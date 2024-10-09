@@ -33,6 +33,12 @@ abstract interface class Scope {
   ///
   /// [runner] is the function to be executed within the scope.
   T? run<T>(T Function() runner);
+
+  /// Activates the scope, allowing effects within it to run.
+  void on();
+
+  /// Deactivates the scope, preventing effects within it from running.
+  void off();
 }
 
 /// Represents a reactive effect that automatically tracks and responds to changes in reactive references.
