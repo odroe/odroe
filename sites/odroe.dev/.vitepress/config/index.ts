@@ -18,11 +18,8 @@ export default defineConfig({
   },
 
   head: [
-    [
-      "link",
-      { ref: "alternate icon", type: "image/png", href: "/favicon.png" },
-    ],
-    ["link", { ref: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
+    ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
+    ["link", { rel: "icon", type: "image/png", href: "/favicon.png" }],
     ["meta", { name: "theme-color", content: "#000000" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "Odroe" }],
