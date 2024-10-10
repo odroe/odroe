@@ -23,3 +23,4 @@ export 'src/ref.dart';
 export 'src/scope.dart';
 export 'src/watch.dart';
 export 'src/widget_ref.dart';
+export 'src/utils/compose.dart';
