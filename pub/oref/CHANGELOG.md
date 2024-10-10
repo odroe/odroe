@@ -1,3 +1,11 @@
+## v0.3.0
+
+2024-10-10
+
+## What's New
+
+- **feat**: Exports the `on`/`off` API for `Scope`.
+
 ## v0.2.0
 
 2024-10-09
