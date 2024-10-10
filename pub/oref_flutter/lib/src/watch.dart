@@ -2,8 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:oncecall/oncecall.dart';
 import 'package:oref/oref.dart' as oref;
 
-import 'context_scope.dart';
-import 'widget_effect.dart';
+import 'internal/context_scope.dart';
+import 'internal/widget_effect.dart';
 
 oref.WatchHandle watch<T extends Record>(
   BuildContext context,

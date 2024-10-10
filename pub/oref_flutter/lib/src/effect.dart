@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:oncecall/oncecall.dart';
 import 'package:oref/oref.dart' as oref;
-import 'package:oref_flutter/src/widget_effect.dart';
 
-import 'context_scope.dart';
+import 'internal/context_scope.dart';
+import 'internal/widget_effect.dart';
 
 oref.EffectRunner<T> effect<T>(
   BuildContext context,

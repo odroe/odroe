@@ -1,3 +1,4 @@
+export 'src/upstream.dart';
 export 'src/derived.dart';
 export 'src/effect.dart';
 export 'src/ref.dart';

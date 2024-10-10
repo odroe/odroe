@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:oncecall/oncecall.dart';
 import 'package:oref/oref.dart' as oref;
 
-import 'widget_effect.dart';
+import 'internal/widget_effect.dart';
 
 oref.Ref<T> toWidgetRef<T extends Widget>(BuildContext context, T widget) {
   ensureInitializedWidgetEffect(context);
