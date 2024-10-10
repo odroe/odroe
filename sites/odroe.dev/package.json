@@ -1,0 +1,11 @@
+{
+  "private": "true",
+  "type": "module",
+  "dependencies": {
+    "vitepress": "^1.4.0"
+  },
+  "scripts": {
+    "dev": "vitepress dev .",
+    "build": "vitepress build ."
+  }
+}
