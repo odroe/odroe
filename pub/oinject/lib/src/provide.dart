@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 
-import 'eval_context.dart';
 import 'provided.dart';
 
 /// Provides a value of type [T] that can be injected into descendant widgets.
@@ -15,8 +14,6 @@ import 'provided.dart';
 /// If a value of the same type (or with the same key) already exists, it will be updated,
 /// and any widgets depending on it will be rebuilt.
 void provide<T>(BuildContext context, T value, {Object? key}) {
-  evalContextRef.value = context;
-
   final values = provides[context] ??= {};
   final storeKey = key ?? T;
   Provided? provided = values[storeKey];

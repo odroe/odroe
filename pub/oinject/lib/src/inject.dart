@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 
-import 'eval_context.dart';
 import 'provided.dart';
 
 final _targets = Expando<Map<Object, WeakReference<Element>>>();
@@ -12,8 +11,6 @@ final _targets = Expando<Map<Object, WeakReference<Element>>>();
 ///
 /// Returns the injected value, or null if not found.
 T? inject<T>(BuildContext context, [Object? key]) {
-  evalContextRef.value = context;
-
   final element = context as Element;
   final storeKey = key ?? T;
 
