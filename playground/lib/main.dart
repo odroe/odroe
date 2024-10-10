@@ -5,32 +5,27 @@ main() {
   runApp(const App());
 }
 
-int counter = 0;
-
 class App extends StatelessWidget {
   const App({super.key});
 
   @override
   Widget build(BuildContext context) {
     final count = ref(context, 0);
-
-    void handle() {
-      count.value++;
-    }
-
-    effect(context, () {
-      print(count.value);
-    });
-
-    print(22222);
+    final a = ref(context, 0);
 
     return MaterialApp(
       home: Scaffold(
-        body: const Center(
-          child: Text('Count:'),
+        body: Center(
+          child: Text('Count: ${count.value}, A: ${a.value}'),
         ),
         floatingActionButton: FloatingActionButton(
-          onPressed: handle,
+          onPressed: () {
+            if (count.value == a.value) {
+              count.value++;
+            } else {
+              a.value++;
+            }
+          },
           child: Icon(Icons.add),
         ),
       ),

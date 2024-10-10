@@ -9,15 +9,6 @@ oref.Scope createScope(BuildContext context, [bool detached = false]) {
   throw UnimplementedError();
 }
 
-oref.EffectRunner<T> effect<T>(
-  BuildContext context,
-  T Function() runner, {
-  void Function()? scheduler,
-  void Function()? onStop,
-}) {
-  throw UnimplementedError();
-}
-
 oref.WatchHandle watch<T>(
   BuildContext context,
   T Function() compute,
