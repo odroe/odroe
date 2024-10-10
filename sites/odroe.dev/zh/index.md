@@ -14,25 +14,25 @@ hero:
       link: https://github.com/odroe
 features:
   - title: Oref
-    details: Oref is a lightweight, high-performance reactive programming library.
+    details: Oref 是一个轻量级、高性能的反应式编程库。
   - title: Oinject
-    details: A lightweight dependency injection package for Flutter, simplifying state and service management across widgets.
+    details: Flutter 的轻量级依赖注入工具，简化跨小部件的状态和服务管理。
   - title: Oncecall
-    details: Oncecall is a memoization tool for use in the build method of Widgets.
+    details: Oncecall 是一个用于 Widget.build 方法的记忆工具。
   -
     icon:
       src: https://prisma.pub/prisma-dart.logo.svg
     title: Prisma Dart
-    details: Prisma Client Dart is an auto-generated type-safe ORM.
+    details: Prisma Dart 是一个自动生成的类型安全的 ORM。
     link: https://prisma.pub
   - icon:
       src: https://spry.fun/spry.svg
     title: Spry
-    details: A lightweight, composable Dart web framework designed to work collaboratively with various runtime platforms.
+    details: 轻量级、可组合的 Dart 网络框架，旨在与各种运行时平台协同工作。
     link: https://spry.fun
   - icon: 🛸
     title: Routing Kit
-    details: Lightweight and fast router for Dart.
+    details: 适用于 Dart 的轻量级且快速的路由器。
     link: https://github.com/medz/routingkit
 ---
 
@@ -43,7 +43,7 @@ import members from '../.vitepress/data/members';
 
 <VPTeamPageTitle>
   <template #title>
-    Our Team
+    认识一下我们的团队成员
   </template>
 </VPTeamPageTitle>
 
@@ -51,10 +51,10 @@ import members from '../.vitepress/data/members';
 
 <VPTeamPageTitle>
   <template #title>
-    Made by community
+    由社区制作
   </template>
   <template #lead>
-    Say hello to our awesome contributors.
+    向我们出色的贡献者问好。
   </template>
 </VPTeamPageTitle>
 
