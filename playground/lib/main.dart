@@ -11,21 +11,14 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = ref(context, 0);
-    final a = ref(context, 0);
 
     return MaterialApp(
       home: Scaffold(
         body: Center(
-          child: Text('Count: ${count.value}, A: ${a.value}'),
+          child: Text('Count: ${count.value}'),
         ),
         floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            if (count.value == a.value) {
-              count.value++;
-            } else {
-              a.value++;
-            }
-          },
+          onPressed: () => count.value++,
           child: Icon(Icons.add),
         ),
       ),
