@@ -1,4 +1,22 @@
-export 'src/upstream.dart';
+export 'package:oref/oref.dart'
+    show
+        Ref,
+        Derived,
+        DerivedUtils,
+        Effect,
+        EffectRunner,
+        Scope,
+        WatchHandle,
+        isRef,
+        triggerRef,
+        unref,
+        onEffectCleanup,
+        pauseTracking,
+        resetTracking,
+        enableTracking,
+        getCurrentScope,
+        onScopeDispose;
+
 export 'src/derived.dart';
 export 'src/effect.dart';
 export 'src/ref.dart';
