@@ -63,13 +63,15 @@ void removeSub(private.Link link, [bool soft = false]) {
     nextSub.prevSub = prevSub;
     link.nextSub = null;
   }
+
   if (dep.subs == link) {
     dep.subs = prevSub;
-  }
-  if (dep.subs != null && dep.derived != null) {
-    dep.derived!.flags &= ~Flags.tracking;
-    for (var link = dep.derived!.deps; link != null; link = link.nextDep) {
-      removeSub(link, true);
+
+    if (prevSub == null && dep.derived != null) {
+      dep.derived!.flags &= ~Flags.tracking;
+      for (var link = dep.derived!.deps; link != null; link = link.nextDep) {
+        removeSub(link, true);
+      }
     }
   }
 }
