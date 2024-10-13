@@ -1,7 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: "selector",
-  content: [".vitepress/theme/**/*.vue", "**/**.md"],
+  content: {
+    relative: true,
+    files: [".vitepress/theme/**/*.vue", "**/**.md"],
+  },
   theme: {
     extend: {},
   },
