@@ -63,8 +63,8 @@ extension DerivedUtils on public.Derived<T> Function<T>(T Function() _) {
   /// count.value = 10;
   /// print(total.value); // 10
   ///
-  /// count.value = 10;
-  /// print(total.value); // 20
+  /// count.value = 20;
+  /// print(total.value); // 30
   /// ```
   public.Derived<T> valuable<T>(T Function(T? oldValue) getter) {
     return impl.Derived(getter);

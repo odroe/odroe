@@ -20,6 +20,14 @@ export default defineConfig({
     sidebar: [
       { text: "依赖注入", link: "/docs/oinject" },
       { text: "记忆化", link: "/docs/oncecall" },
+      {
+        text: "响应式",
+        items: [
+          { text: "介绍", link: "/docs/oref/" },
+          { text: "快速开始", link: "/docs/oref/get-started" },
+          { text: "核心", link: "/docs/oref/core" },
+        ],
+      },
     ],
     lastUpdatedText: "更新于",
   },

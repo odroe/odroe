@@ -37,8 +37,8 @@ features:
           Vue.js
         </span>
       </div>
-    details: 一个轻量级、高性能的响应式编程库，它提供了一种简洁而强大的方法来管理应用程序状态和副作用。
-    link: /packages/oinject
+    details: 一个轻量级、高性能的响应式状态、编程库，它提供了一种简洁而强大的方法来管理应用程序状态和副作用。
+    link: /packages/oref
     linkText: 了解更多
   - title: Oref Flutter
     details: 将 Oref 与 Flutter 一起使用的桥，在 Flutter 中享受反应式状态的快乐。

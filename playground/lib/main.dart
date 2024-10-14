@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:oref_flutter/oref_flutter.dart';
 
@@ -11,6 +13,9 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = ref(context, 0);
+    final timer = Timer.periodic(Duration(seconds: 1), (_) {});
+
+    timer.cancel;
 
     return MaterialApp(
       home: Scaffold(
