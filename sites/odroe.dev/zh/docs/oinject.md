@@ -3,7 +3,7 @@ title: Oinject → 快速开始
 description: Oinject 是一个简单而强大的依赖注入包，使一个祖先组件作为其后代组件的依赖注入方，无论这个组件的层级有多深都可以注入成功，只要他们处于同一条组件链上。
 ---
 
-通常情况下，当我们需要从父 Widget 向子 Widget 传递数据是，我们会使用 Widget 构造参数。但通常，我们的 Widget 结构是多层嵌套
+通常情况下，当我们需要从父 Widget 向子 Widget 传递数据时，我们会使用 Widget 构造参数。但通常，我们的 Widget 结构是多层嵌套
 的，形成一颗巨大的 Widget Tree。而某一个较深层级的子 Widget 需要一个较远的祖先 Widget 中的部分数据。
 在这种情况下，仅仅使用构造参数沿着 Widget 链逐级向下传递就会非常麻烦。
 
@@ -13,7 +13,7 @@ description: Oinject 是一个简单而强大的依赖注入包，使一个祖�
 
 ## 为什么需要 Oinject？
 
-在 Flutter 生态中，又非常多的包可以做到类似的事情，例如 [Provider](https://pub.dev/packages/provider)。甚至 Flutter 本身就带有
+在 Flutter 生态中，有非常多的包可以做到类似的事情，例如 [Provider](https://pub.dev/packages/provider)。甚至 Flutter 本身就带有
 简易的数据提供方式 [InheritedWidget](https://api.flutter.dev/flutter/widgets/InheritedWidget-class.html)。
 
 而 Oinject 的优势在于非常少的样板代码、简单易用，这是一份简单的对比：
