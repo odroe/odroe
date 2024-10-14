@@ -14,4 +14,8 @@ export default defineConfig({
       },
     ],
   ],
+
+  themeConfig: {
+    nav: [{ text: "Packages", link: "/packages" }],
+  },
 });

@@ -23,11 +23,13 @@ const show = computed(() => whatIsNew.value.title && whatIsNew.value.link);
     >
         <span
             class="border px-4 py-1 rounded-full border-green-400 bg-green-50 text-gray-900 font-medium text-sm dark:bg-green-500/10 dark:text-white"
-            >{{ whatIsNew.name ?? "What's new" }}</span
         >
+            {{ whatIsNew.name ?? "What's new" }}
+        </span>
         <span
             class="text-sm text-gray-500 group-hover:text-gray-600 dark:text-gray-400 dark:group-hover:text-gray-300"
-            >{{ whatIsNew.title }}</span
         >
+            {{ whatIsNew.title }}
+        </span>
     </a>
 </template>
