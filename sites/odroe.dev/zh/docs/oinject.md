@@ -1,6 +1,12 @@
 ---
-title: Oinject → 快速开始
+title: 文档 → 依赖注入（Oinject）
 description: Oinject 是一个简单而强大的依赖注入包，使一个祖先组件作为其后代组件的依赖注入方，无论这个组件的层级有多深都可以注入成功，只要它们处于同一条组件链上。
+head:
+  - - meta
+    - property: og:title
+      content: Odroe | 文档 → 依赖注入（Oinject）
+prev: false
+next: false
 ---
 
 通常情况下，当我们需要从父 Widget 向子 Widget 传递数据时，我们会使用 Widget 构造参数。但通常，我们的 Widget 结构是多层嵌套

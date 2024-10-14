@@ -1,6 +1,10 @@
 ---
 title: Oinject 是一个简单而强大的依赖注入包
 description: Oinject 是一个简单而强大的依赖注入包，使一个祖先组件作为其后代组件的依赖注入方，无论这个组件的层级有多深都可以注入成功，只要他们处于同一条组件链上。
+head:
+  - - meta
+    - property: og:title
+      content: Odroe | Oinject 是一个简单而强大的依赖注入包
 layout: home
 hero:
   name: Oinject - 简单而强大的依赖注入

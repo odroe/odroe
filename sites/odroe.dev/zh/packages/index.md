@@ -26,8 +26,8 @@ features:
     link: /packages/oinject
     linkText: 了解更多
   - title: Oncecall
-    details: 用于 Flutter Widget.build 方法的记忆化工具。
-    link: /packages/oinject
+    details: 适用于 Flutter Widget.build 方法的记忆化工具。
+    link: /packages/oncecall
     linkText: 了解更多
   - title: >-
       <div class="flex flex-row items-center justify-between">
