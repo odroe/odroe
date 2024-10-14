@@ -1,10 +1,10 @@
 ---
 title: Oinject → 快速开始
-description: Oinject 是一个简单而强大的依赖注入包，使一个祖先组件作为其后代组件的依赖注入方，无论这个组件的层级有多深都可以注入成功，只要他们处于同一条组件链上。
+description: Oinject 是一个简单而强大的依赖注入包，使一个祖先组件作为其后代组件的依赖注入方，无论这个组件的层级有多深都可以注入成功，只要它们处于同一条组件链上。
 ---
 
 通常情况下，当我们需要从父 Widget 向子 Widget 传递数据时，我们会使用 Widget 构造参数。但通常，我们的 Widget 结构是多层嵌套
-的，形成一颗巨大的 Widget Tree。而某一个较深层级的子 Widget 需要一个较远的祖先 Widget 中的部分数据。
+的，形成一棵巨大的 Widget Tree。而某一个较深层级的子 Widget 需要一个较远的祖先 Widget 中的部分数据。
 在这种情况下，仅仅使用构造参数沿着 Widget 链逐级向下传递就会非常麻烦。
 
 ::: tip
@@ -24,7 +24,7 @@ description: Oinject 是一个简单而强大的依赖注入包，使一个祖�
 | InheritedWidget | 多 | 污染 | 不支持 |
 | `oinject` | 少 | 不 | 支持 |
 
-最重要的一点，Oinject 完全可以和任何 Widget 进行配合（只要它拥有 `BuildContext`)。这为你已有 App 向 Onject 迁移提供了极大的便利。
+最重要的一点，Oinject 完全可以和任何 Widget 进行配合（只要它拥有 `BuildContext`)。这为你已有 App 向 Oinject 迁移提供了极大的便利。
 
 ## 安装
 
@@ -34,7 +34,7 @@ description: Oinject 是一个简单而强大的依赖注入包，使一个祖�
 flutter pub add oinject
 ```
 
-或者在你的 `pubspace.yaml` 中添加：
+或者在你的 `pubspec.yaml` 中添加：
 
 ```yaml
 dependencies:
@@ -62,14 +62,14 @@ class MyWidget extends StatelessWidget {
 provide(context, 'value', key: #hello);
 ```
 
-Key 的最大用处莫过，准确的标注数据（依靠类型参数并不可靠）、或者进行不同类型数据的数据堆叠：
+Key 的最大用处莫过于准确地标注数据（依靠类型参数并不可靠）、或者进行不同类型数据的数据堆叠：
 
 ```dart
 provide(context, key: #user, 1);
 provide(context, key: #user, 'Seven');
 ```
 
-由此，我们可以简单的想后代传递 User 的 ID 和 Name。（仅适用于类型并不冲突的类型数据）
+由此，我们可以简单地向后代传递 User 的 ID 和 Name。（仅适用于类型并不冲突的类型数据）
 
 ## 全局的 Provide
 
