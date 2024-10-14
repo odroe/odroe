@@ -15,8 +15,8 @@ Oref 提供两个包：
 
 | 名称 | 版本 | 描述 |
 |----|----|----|
-| [`oref`](pub/oref/) | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref) | 响应式核心 |
-| [`oref_flutter`](pub/oref_flutter/) | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Oref 与 Flutter 的集成 |
+| `oref` | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref) | 响应式核心 |
+| oref_flutter | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Oref 与 Flutter 的集成 |
 
 我们使用下面命令进行安装：
 

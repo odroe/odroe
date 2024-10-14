@@ -8,7 +8,7 @@ head:
 
 Oref 核心 API
 
-## `ref()`
+## 引用（`ref()`）
 
 接收一个内部值，返回一个响应式的、可更改的 `Ref<T>` 对象，这个对象只有一个指向其内部值的属性 `.value`。
 
@@ -40,9 +40,9 @@ Oref 核心 API
   print(count.value); // 1
   ```
 
-## `derived()`
+## 派生（`derived()`）
 
-`derived()`（派生）接收一个 getter 函数（类型：`T Function()`），返回一个只读的响应式 `Derived<T>` 对象。该 `Derived<T>` 通过 `.value`
+`derived()`接收一个 getter 函数（类型：`T Function()`），返回一个只读的响应式 `Derived<T>` 对象。该 `Derived<T>` 通过 `.value`
 暴露 getter 函数的返回值。
 
 - 类型：
@@ -152,7 +152,7 @@ print(doubleCount.value); // 20
 
 由此，我们可以直接在派生响应式之上直接实现可逆转的响应式数据操作。
 
-## `effect()`
+## 副作用（`effect()`）
 
 立即运行一个函数，同时响应式地追踪函数内所使用的响应式数据作为依赖，并在被追踪的依赖更改时重新执行函数：
 
@@ -255,7 +255,7 @@ effect(context, () {
 ```
 :::
 
-### 停止侦听器
+### 终止副作用
 
 当我们不希望副作用函数继续侦听响应式属性时，我们可以这样停止它：
 
@@ -298,3 +298,114 @@ runner.effect.pause();
 runner.effect.resume();
 ```
 :::
+
+## 侦听器（`watch()`）
+
+侦听一个或多个响应式数据源构造为 `Record`，并在数据源变化时调用所给的回调函数。
+
+- `watch()` 类型签名
+  ::: code-group
+  ```dart [Dart]
+  WatchHandle watch<T extends Record>(
+    T Function() compute,
+    void Function(T value, T? oldValue) runner, {
+    bool immediate = false,
+    bool once = false,
+  })
+  ```
+  ```dart [Flutter]
+  WatchHandle watch<T extends Record>(
+    BuildContext context,
+    T Function() compute,
+    void Function(T value, T? oldValue) runner, {
+    bool immediate = false,
+    bool once = false,
+  })
+  ```
+  :::
+- 类型
+  ```dart
+  extension type WatchHandle {
+    void stop();
+    void pause();
+    void resume();
+    void call(); // 可调用重载符号，等同于 stop()
+  }
+  ```
+- 详细信息
+
+  `watch()` 与 [effect](#副作用-effect) 行为一致，但存在一些功能差异
+
+  > 1. 采用计算函数的方式将多个值封装成 `Record`
+  > 2. runner 同时提供新值和久值。
+  > 3. 默认时懒监听的，即仅在侦听源发生变化时才执行回调函数。
+
+  - `immediate`: 在侦听器创建时立即触发回调。第一次调用时旧值是 `null`。
+  - `once`: 回调函数只会运行一次。侦听器将在回调函数首次运行后自动停止。
+- 示例
+
+  侦听一个 `Ref<T>`:
+  ::: code-group
+  ```dart [Dart]
+  final count = ref(0);
+  watch(
+      () => (count.value),
+      (value, prev) {...}
+  );
+  ```
+  ```dart [Flutter]
+  final count = ref(context, 0);
+  watch(
+      context,
+      () => (count.value),
+      (value, prev) {...}
+  );
+  ```
+  :::
+
+  侦听多个：
+
+  ::: code-group
+  ```dart [Dart]
+  final count = ref(0);
+  final plusOne = derived(() => count + 1);
+  watch(
+      () => (count.value, plusOne.value),
+      (value, prev) {...}
+  );
+  ```
+  ```dart [Flutter]
+  final count = ref(context, 0);
+  final plusOne = derived(context, () => count + 1);
+  watch(
+      context,
+      () => (count.value, plusOne.value),
+      (value, prev) {...}
+  );
+  ```
+  :::
+
+### 停止侦听器
+
+```dart
+final stop = watch(...);
+
+stop(); // 停止侦听器
+```
+
+### 暂停/恢复侦听器
+
+```dart
+final WatchHandle(:stop, :pause, :resume) = watch(...);
+
+pause(); // 暂停侦听器
+resume(); // 稍后回复侦听
+stop(); // 停止
+```
+
+### 侦听器的副作用清理
+
+在 `watch()` 中和在 [Effect - 副作用清除](#副作用清除) 一样，都是使用 `onEffectCleanup()` 函数。
+
+> [!IMPORTANT] 温馨提示
+> `watch()` 是基于 `effect()` 进行高度优化封装的。
