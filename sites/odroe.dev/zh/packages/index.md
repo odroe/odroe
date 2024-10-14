@@ -12,10 +12,6 @@ hero:
     - theme: alt
       text: 在 pub.dev 上探索
       link: https://pub.dev/publishers/odroe.com/packages
-  what-is-new:
-    name: "正在制作: Oref"
-    title: 了解关于 Oref 的未来与规划路线图
-    link: https://github.com/odroe/odroe/issues/17
 features:
   - title: Prisma Dart
     details: Dart/Flutter 的下一代 ORM，自动为您生成类型安全的数据库客户端。

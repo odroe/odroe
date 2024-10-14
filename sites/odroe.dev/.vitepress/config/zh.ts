@@ -16,6 +16,7 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    nav: [{ text: "Packages", link: "/packages" }],
+    nav: [{ text: "Packages", link: "/packages/" }],
+    sidebar: [{ text: "依赖注入", link: "/docs/oinject" }],
   },
 });

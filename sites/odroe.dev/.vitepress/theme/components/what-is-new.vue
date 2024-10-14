@@ -12,12 +12,11 @@ const { frontmatter } = useData();
 const whatIsNew = computed<WhatIsNew>(
     () => frontmatter.value.hero["what-is-new"] ?? {},
 );
-const show = computed(() => whatIsNew.value.title && whatIsNew.value.link);
 </script>
 
 <template>
     <a
-        v-if="show"
+        v-if="whatIsNew.name || whatIsNew.title"
         :href="whatIsNew.link"
         class="group flex flex-row gap-4 mb-6 items-center"
     >
@@ -27,9 +26,9 @@ const show = computed(() => whatIsNew.value.title && whatIsNew.value.link);
             {{ whatIsNew.name ?? "What's new" }}
         </span>
         <span
+            v-if="whatIsNew.title"
+            v-html="whatIsNew.title"
             class="text-sm text-gray-500 group-hover:text-gray-600 dark:text-gray-400 dark:group-hover:text-gray-300"
-        >
-            {{ whatIsNew.title }}
-        </span>
+        ></span>
     </a>
 </template>
