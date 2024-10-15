@@ -18,7 +18,7 @@ const whatIsNew = computed<WhatIsNew>(
     <a
         v-if="whatIsNew.name || whatIsNew.title"
         :href="whatIsNew.link"
-        class="group flex flex-row gap-4 mb-6 items-center"
+        class="group flex flex-row gap-4 mb-6 items-center text-nowrap max-w-full"
     >
         <span
             class="border px-4 py-1 rounded-full border-green-400 bg-green-50 text-gray-900 font-medium text-sm dark:bg-green-500/10 dark:text-white"
@@ -28,7 +28,7 @@ const whatIsNew = computed<WhatIsNew>(
         <span
             v-if="whatIsNew.title"
             v-html="whatIsNew.title"
-            class="text-sm text-gray-500 group-hover:text-gray-600 dark:text-gray-400 dark:group-hover:text-gray-300"
+            class="text-sm text-gray-500 group-hover:text-gray-600 dark:text-gray-400 dark:group-hover:text-gray-300 truncate"
         ></span>
     </a>
 </template>

@@ -1,4 +1,5 @@
 import { defineConfig } from "vitepress";
+import en from "./en";
 import zh from "./zh";
 
 export default defineConfig({
@@ -10,7 +11,7 @@ export default defineConfig({
   lastUpdated: true,
 
   rewrites: {
-    "zh/:rest*": ":rest*",
+    "en/:rest*": ":rest*",
   },
 
   sitemap: {
@@ -45,6 +46,7 @@ export default defineConfig({
   },
 
   locales: {
-    root: { label: "简体中文", ...zh },
+    root: { label: "English", ...en },
+    zh: { label: "简体中文", ...zh },
   },
 });
