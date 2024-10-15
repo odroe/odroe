@@ -23,11 +23,11 @@ features:
     linkText: 访问 Spry 官网
   - title: Oinject
     details: 一个简单而强大的依赖注入包。透穿数据、简易状态管理、平滑替代 Provider 和 InheritedWidget。
-    link: /packages/oinject
+    link: ./oinject
     linkText: 了解更多
   - title: Oncecall
     details: 适用于 Flutter Widget.build 方法的记忆化工具。
-    link: /packages/oncecall
+    link: ./oncecall
     linkText: 了解更多
   - title: >-
       <div class="flex flex-row items-center justify-between">
@@ -38,10 +38,10 @@ features:
         </span>
       </div>
     details: 一个轻量级、高性能的响应式状态、编程库，它提供了一种简洁而强大的方法来管理应用程序状态和副作用。
-    link: /packages/oref
+    link: ./oref.md
     linkText: 了解更多
   - title: Oref Flutter
     details: 将 Oref 与 Flutter 一起使用的桥，在 Flutter 中享受反应式状态的快乐。
-    link: /docs/oref/get-started
+    link: ../docs/oref/get-started.md
     linkText: 快速开始
 ---

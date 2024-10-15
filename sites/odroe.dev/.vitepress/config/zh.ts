@@ -23,7 +23,7 @@ export default defineConfig({
       {
         text: "响应式",
         items: [
-          { text: "介绍", link: "/docs/oref/" },
+          { text: "介绍", link: "/docs/oref/introduction" },
           { text: "快速开始", link: "/docs/oref/get-started" },
           { text: "核心", link: "/docs/oref/core" },
           { text: "工具", link: "/docs/oref/utils" },

@@ -4,6 +4,7 @@ head:
   - - meta
     - property: og:title
       content: Odroe | 文档 → Oref - 进阶
+next: false
 ---
 
 ## `createScope()`
@@ -95,3 +96,25 @@ head:
 ## `onScopeDispose()`
 
 在当前活跃的 effect 作用域上注册一个处理回调函数。当相关 effect 作用域停止时会调用这个回调函数。
+
+## `triggerRef()`
+
+强制触发依赖于一个 `Ref<T>` 的副作用，这通常在对浅引用的内部值进行深度变更后使用。
+
+- 类型
+  ```dart
+  void triggerRef<T>(Ref<T> ref)
+  ```
+- 示例
+  ```dart
+  final shallow = ref({'greet': 'Hello'});
+
+  // 打印：Hello
+  effect(() => print(shallow.value['greet']));
+
+  // 这里不会触发 effect 副作用的运行，因为 shallow 是一个浅层的。
+  shallow.value['greet'] = 'Hi!!!';
+
+  // 打印：Hi!!!
+  triggerRef(shallow);
+  ```

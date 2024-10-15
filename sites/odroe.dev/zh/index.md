@@ -10,7 +10,7 @@ hero:
   actions:
     - theme: brand
       text: 探索 Odroe 生态 →
-      link: /packages
+      link: ./packages/
   what-is-new:
     title: Odroe 生态正在建设中，请在 GitHub 给我们一个 🌟
     link: https://github.com/odroe/odroe

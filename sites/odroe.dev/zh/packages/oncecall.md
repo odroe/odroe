@@ -12,7 +12,7 @@ hero:
   actions:
     - theme: brand
       text: 阅读文档 →
-      link: /docs/oncecall
+      link: ../docs/oncecall.md
     - theme: alt
       text: 在 GitHub 查看
       link: https://github.com/odroe/odroe/tree/main/pub/oncecall

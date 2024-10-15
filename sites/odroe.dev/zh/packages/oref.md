@@ -11,8 +11,8 @@ hero:
   tagline: 一种简洁而强大的方法来管理应用程序状态和副作用。
   actions:
     - theme: brand
-      text: 阅读文档 →
-      link: /docs/oref
+      text: 快速开始 →
+      link: ../docs/oref/get-started.md
     - theme: alt
       text: 在 GitHub 查看
       link: https://github.com/odroe/odroe/tree/main/pub/oref
