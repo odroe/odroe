@@ -16,18 +16,18 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    nav: [{ text: "Packages", link: "/packages/" }],
+    nav: [{ text: "Packages", link: "/zh/packages/" }],
     sidebar: [
-      { text: "依赖注入", link: "/docs/oinject" },
-      { text: "记忆化", link: "/docs/oncecall" },
+      { text: "依赖注入", link: "/zh/docs/oinject" },
+      { text: "记忆化", link: "/zh/docs/oncecall" },
       {
         text: "响应式",
         items: [
-          { text: "介绍", link: "/docs/oref/introduction" },
-          { text: "快速开始", link: "/docs/oref/get-started" },
-          { text: "核心", link: "/docs/oref/core" },
-          { text: "工具", link: "/docs/oref/utils" },
-          { text: "进阶", link: "/docs/oref/advanced" },
+          { text: "介绍", link: "/zh/docs/oref/introduction" },
+          { text: "快速开始", link: "/zh/docs/oref/get-started" },
+          { text: "核心", link: "/zh/docs/oref/core" },
+          { text: "工具", link: "/zh/docs/oref/utils" },
+          { text: "进阶", link: "/zh/docs/oref/advanced" },
         ],
       },
     ],
