@@ -19,7 +19,7 @@ features:
     linkText: Visit Prisma Dart's website
   - title: Spry
     details: A lightweight composable Web framework.
-    link: https://spry.fub
+    link: https://spry.fun
     linkText: Visit Spry's official website
   - title: Oinject
     details: A simple yet powerful dependency injection package. Transparent data, simple state management, smooth replacement for Provider and InheritedWidget.
