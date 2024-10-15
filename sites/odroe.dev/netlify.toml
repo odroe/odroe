@@ -2,9 +2,3 @@
 base = "sites/odroe.dev"
 command = "vitepress build"
 publish = ".vitepress/dist"
-
-[[redirects]]
-from = "/chat"
-to = "https://discord.gg/ms2X9TQMR8"
-status = 200
-force = true
