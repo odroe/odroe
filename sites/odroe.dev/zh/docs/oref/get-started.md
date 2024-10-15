@@ -9,7 +9,7 @@ head:
 
 {{ $frontmatter.description }}
 
-## 安装
+## 安装 {#installation}
 
 Oref 提供两个包：
 
@@ -43,7 +43,7 @@ dependencies:
 ```
 :::
 
-## 声明响应式状态
+## 声明响应式状态 {#declaring-reactive-state}
 
 要声明一个响应式状态，我们使用 `ref()` 函数
 
@@ -87,15 +87,15 @@ class MyWidget extends StatelessWidget {
 ```
 :::
 
-## 声明响应式集合
+## 声明响应式集合 {#declaring-reactive-collections}
 
 ::: tip WIP
 正在开发中，请阅读我们的[路线图](https://github.com/odroe/odroe/issues/17)。
 :::
 
-## 细粒度重建 <Badge type="tip" text="Flutter" />
+## 细粒度重建 <Badge type="tip" text="Flutter" /> {#fine-grained-rebuild}
 
-例如 [声明响应式状态](#声明响应式状态) 例子中的 Counter 代码，当我们更新 `count` 的值的时候，整个 `Counter` Widget 都会重建。
+例如 [声明响应式状态](#declaring-reactive-state) 例子中的 Counter 代码，当我们更新 `count` 的值的时候，整个 `Counter` Widget 都会重建。
 这是没有意义的，因为我们只需要 `Text` 重建即可。
 
 推荐使用 `Observer` Widget 来进行优化：
@@ -138,10 +138,10 @@ class Counter extends StatelessWidget {
 ```
 
 > [!TIP]
-> 有关 `obs()` 更多细节，请查看[核心 → 可观测](/zh/docs/oref/core#可观测-obs)。
+> 有关 `obs()` 更多细节，请查看[核心 → 可观测](/zh/docs/oref/core#obs)。
 
 对于细粒度重建可以有多种实现方式：
 
 * 使用 `Observer` 包装观测响应性数据
-* 使用 [`obs()`](/zh/docs/oref/core#可观测-obs) 进行观测。
-* 使用 [`derived() - 派生`](/zh/docs/oref/core#派生-derived) 将值进行组合。
+* 使用 [`obs()`](/zh/docs/oref/core#obs) 进行观测。
+* 使用 [`derived() - 派生`](/zh/docs/oref/core#derived) 将值进行组合。

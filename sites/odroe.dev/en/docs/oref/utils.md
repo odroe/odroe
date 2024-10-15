@@ -8,7 +8,7 @@ head:
 
 This chapter will explain some useful tools in Oref.
 
-## `isRef()`
+## `isRef()` {#is-ref}
 
 Checks if a value is a `Ref<T>`.
 
@@ -19,7 +19,7 @@ Checks if a value is a `Ref<T>`.
 
 `isRef()` doesn't declare anything special, it's just a functional encapsulation of `is`. If you don't like the function style, you can completely use `value is Ref` instead.
 
-## `unref()`
+## `unref()` {#unref}
 
 If the parameter is a `Ref<T>`, it returns its internal reactive value, otherwise it returns itself.
 
@@ -43,7 +43,7 @@ This is a ternary computation syntactic sugar for `return isRef(value) ? value.v
   final unwrapped = unref(value);
   ```
 
-## `toWidgetRef()` <Badge type="tip" text="Flutter" />
+## `toWidgetRef()` <Badge type="tip" text="Flutter" /> {#to-widget-ref}
 
 Converts a Widget object to a reference of a `Ref<T extends Widget>` object.
 
@@ -109,7 +109,7 @@ class Counter extends StatelessWidget {
 }
 ```
 
-## `compose()` <Badge type="tip" text="Flutter" />
+## `compose()` <Badge type="tip" text="Flutter" /> {#compose}
 
 `compose()` passes the input function as-is and performs correct type wrapping:
 
@@ -126,7 +126,7 @@ final useCounter = compose((BuildContext context) {
 });
 ```
 
-### Why do we need it?
+### Why do we need it? {#compose-why-do-need-it}
 
 When we use Oref's reactive API to construct new composable APIs, Dart functions usually require us to explicitly define `out Type`:
 
@@ -145,7 +145,7 @@ When we use Oref's reactive API to construct new composable APIs, Dart functions
 
 This adds a lot of boilerplate code for us.
 
-### lint rule warning
+### lint rule warning {#compose-lint-rule-warn}
 
 Although using variables to define functions can achieve the same effect:
 
@@ -164,7 +164,7 @@ final useCounter = (BuildContext context) {
 
 But lint rules will issue non-standard warnings, so we should use `compose()` to wrap it, and there's no need to write boilerplate types.
 
-### Manual implementation
+### Manual implementation {#compose-manual-impl}
 
 `compose()` is not a sophisticated technique, it's just one line of code:
 

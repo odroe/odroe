@@ -8,7 +8,7 @@ head:
 
 本章将为你讲解一些 Oref 的实用工具。
 
-## `isRef()`
+## `isRef()` {#is-ref}
 
 检查一个值是否是 `Ref<T>`。
 
@@ -19,7 +19,7 @@ head:
 
 `isRef()` 没有声明特别的，它只是 `is` 的函数式封装。如果你不喜欢函数风格，你完全可以使用 `value is Ref` 替代。
 
-## `unref()`
+## `unref()` {#unref}
 
 如果参数是一个 `Ref<T>` 那么返回其内部的响应式值，否则返回本身。
 
@@ -43,7 +43,7 @@ head:
   final unwrapped = unref(value);
   ```
 
-## `toWidgetRef()` <Badge type="tip" text="Flutter" />
+## `toWidgetRef()` <Badge type="tip" text="Flutter" /> {#to-widget-ref}
 
 将一个 Widget 对象转换为 `Ref<T extends Widget>` 对象的引用。
 
@@ -109,7 +109,7 @@ class Counter extends StatelessWidget {
 }
 ```
 
-## `compose()` <Badge type="tip" text="Flutter" />
+## `compose()` <Badge type="tip" text="Flutter" /> {#compose}
 
 `compose()` 将传入的函数原样并进行正确的类型包装：
 
@@ -126,7 +126,7 @@ final useCounter = compose((BuildContext context) {
 });
 ```
 
-### 为什么需要它？
+### 为什么需要它？ {#compose-why-do-need-it}
 
 当我们使用 Oref 的反应性 API 来构造制造新的可组合 API 时，Dart 函数通常需要我们显示定义 `out Type`：
 
@@ -145,7 +145,7 @@ final useCounter = compose((BuildContext context) {
 
 这给让我们增加了大量的样板代码。
 
-### lint 规则警告
+### lint 规则警告 {#compose-lint-rule-warn}
 
 虽然使用变量定义函数可以达到完全一致的效果：
 
@@ -164,7 +164,7 @@ final useCounter = (BuildContext context) {
 
 但 lint rules 会发出不规范的警告，因此，我们应该使用 `compose()` 来进行包装，并无需编写样板类型。
 
-### 手动实现
+### 手动实现 {#compose-manual-impl}
 
 `compose()` 并不是什么高深的技术，它仅仅一行代码：
 

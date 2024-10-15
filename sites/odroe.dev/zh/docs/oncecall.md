@@ -11,13 +11,13 @@ next: false
 
 {{ $frontmatter.description }}
 
-## 为什么需要它？
+## 为什么需要它？ {#why-do-we-need-it}
 
 我们总是想构造一些具有动态属性又符合 `const` Widget 的用例，或者我们有一些逻辑必须放在 `build` 方法中。
 
 而 Oncecall 允许你在 `build` 中编写仅运行一次的代码。
 
-## 安装
+## 安装 {#installation}
 
 我们使用下面的命令：
 
@@ -32,7 +32,7 @@ dependencies:
   oncecall: latest
 ```
 
-## 基本用法
+## 基本用法 {#basic-usage}
 
 ```dart
 class MyWidget extends StatelessWidget {
@@ -60,7 +60,7 @@ class MyWidget extends StatelessWidget {
 }
 ```
 
-## 用于一次性计算
+## 用于一次性计算 {#for-one-time-calculations}
 
 `oncecall()` 函数除了用于运行一次性函数之外，它还可以进行一些对象的初始化工作：
 
@@ -78,6 +78,6 @@ class Counter extends StatelessWidget {
 }
 ```
 
-## 更多
+## 更多 {#more}
 
 Oncecall 作为 Odroe 生态的基础建设，你会在其他包中无处不在地看到它。它是一个非常低级且简单的 API，和它的名字一样仅仅用于依赖于 context 进行值的记忆化和初始化工作。

@@ -9,7 +9,7 @@ head:
 
 {{ $frontmatter.description }}
 
-## Installation
+## Installation {#installation}
 
 Oref provides two packages:
 
@@ -43,7 +43,7 @@ dependencies:
 ```
 :::
 
-## Declaring Reactive State
+## Declaring Reactive State {#declaring-reactive-state}
 
 To declare a reactive state, we use the `ref()` function
 
@@ -87,13 +87,13 @@ class MyWidget extends StatelessWidget {
 ```
 :::
 
-## Declaring Reactive Collections
+## Declaring Reactive Collections {#declaring-reactive-collections}
 
 ::: tip WIP
 In development, please read our [roadmap](https://github.com/odroe/odroe/issues/17).
 :::
 
-## Fine-grained Rebuilding <Badge type="tip" text="Flutter" />
+## Fine-grained Rebuilding <Badge type="tip" text="Flutter" /> {#fine-grained-rebuild}
 
 For example, in the Counter code from the [Declaring Reactive State](#declaring-reactive-state) example, when we update the value of `count`, the entire `Counter` Widget gets rebuilt.
 This is unnecessary, as we only need to rebuild the `Text`.
@@ -138,10 +138,10 @@ class Counter extends StatelessWidget {
 ```
 
 > [!TIP]
-> For more details about `obs()`, please check [Core → Observable](/docs/oref/core#observable-obs).
+> For more details about `obs()`, please check [Core → Observable](/docs/oref/core#obs).
 
 There are multiple ways to implement fine-grained rebuild:
 
 * Use `Observer` to wrap and observe reactive data.
-* Use [`obs()`](/docs/oref/core#observable-obs) for observation.
-* Use [`derived() - Derivation`](/docs/oref/core#derivation-derived) to combine values.
+* Use [`obs()`](/docs/oref/core#obs) for observation.
+* Use [`derived() - Derivation`](/docs/oref/core#derived) to combine values.

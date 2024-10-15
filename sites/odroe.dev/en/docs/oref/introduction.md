@@ -13,7 +13,7 @@ prev: false
 In many frameworks, similar reactive base types are called "signals". Fundamentally, Oref has the same reactive base type as the signal concept.
 It is a value container that tracks dependencies when accessed and triggers side effects when changed.
 
-## What is reactivity?
+## What is reactivity? {#what-is-reactivity}
 
 Essentially, reactivity is a programming paradigm that allows us to handle changes declaratively. Many front-end frameworks emphasize its importance:
 
@@ -22,7 +22,7 @@ Essentially, reactivity is a programming paradigm that allows us to handle chang
 - [Solid Signals](https://www.solidjs.com/docs/latest/api#createsignal)
 - [Dart: `signals` package](https://dartsignals.dev/reference/overview)
 
-## Installation
+## Installation {#installation}
 
 You can directly add Oref to any Dart project using this command:
 
@@ -37,7 +37,7 @@ dependencies:
   oref: latest
 ```
 
-## Basic Usage
+## Basic Usage {#base-usage}
 
 ```dart
 import 'package:oref/oref.dart';

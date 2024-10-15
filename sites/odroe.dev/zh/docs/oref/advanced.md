@@ -7,7 +7,7 @@ head:
 next: false
 ---
 
-## `createScope()`
+## `createScope()` {#create-scope}
 
 创建一个 effect 作用域，可以捕获其中所创建的响应式副作用 (即计算属性和侦听器)，这样捕获到的副作用可以一起处理。
 
@@ -70,12 +70,12 @@ next: false
   ```
   :::
 
-### 暂停/恢复作用域
+### 暂停/恢复作用域 {#pause-resume-scope}
 
 `Scope` 对象公开 `pause()`/`resume()` 方法，允许你临时暂停和恢复作用域中的所有副作用。
 它与 effect 类似，区别在于 scope 通常用于批量管理 effect。
 
-### 进阶操作
+### 进阶操作 {#advanced-operations}
 
 `Scope` 暴露了两个低 API `on()`/`off()`，通常适用于对 Oref 的深度定制使用。
 
@@ -84,7 +84,7 @@ next: false
 
 > 例如，在 Oref 的 Flutter 集成中，我们就使用了它来暂停和恢复收集 Widget 内的响应性范围。
 
-## `getCurrentScope()`
+## `getCurrentScope()` {#get-current-scope}
 
 如果有的话，返回当前活跃的 effect 作用域。
 
@@ -93,11 +93,11 @@ next: false
   Scope? getCurrentScope();
   ```
 
-## `onScopeDispose()`
+## `onScopeDispose()` {#on-scope-dispose}
 
 在当前活跃的 effect 作用域上注册一个处理回调函数。当相关 effect 作用域停止时会调用这个回调函数。
 
-## `triggerRef()`
+## `triggerRef()` {#trigger-ref}
 
 强制触发依赖于一个 `Ref<T>` 的副作用，这通常在对浅引用的内部值进行深度变更后使用。
 

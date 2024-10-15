@@ -7,7 +7,7 @@ head:
 next: false
 ---
 
-## `createScope()`
+## `createScope()` {#create-scope}
 
 Creates an effect scope that can capture reactive side effects (i.e., computed properties and watchers) created within it, allowing the captured side effects to be handled together.
 
@@ -70,7 +70,7 @@ Creates an effect scope that can capture reactive side effects (i.e., computed p
   ```
   :::
 
-### Pause/Resume Scope
+### Pause/Resume Scope {#pause-resume-scope}
 
 The `Scope` object exposes `pause()`/`resume()` methods, allowing you to temporarily pause and resume all side effects within the scope.
 It's similar to effect, but the difference is that scope is typically used for batch management of effects.
@@ -84,7 +84,7 @@ It's similar to effect, but the difference is that scope is typically used for b
 
 > For example, in Oref's Flutter integration, we use it to pause and resume collecting reactive ranges within Widgets.
 
-## `getCurrentScope()`
+## `getCurrentScope()` {#get-current-scope}
 
 Returns the current active effect scope, if any.
 
@@ -93,11 +93,11 @@ Returns the current active effect scope, if any.
   Scope? getCurrentScope();
   ```
 
-## `onScopeDispose()`
+## `onScopeDispose()` {#on-scope-dispose}
 
 Registers a cleanup callback function on the current active effect scope. This callback function will be called when the related effect scope stops.
 
-## `triggerRef()`
+## `triggerRef()` {#trigger-ref}
 
 Forcibly triggers side effects dependent on a `Ref<T>`, typically used after making deep changes to the internal value of a shallow reference.
 

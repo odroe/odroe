@@ -8,7 +8,7 @@ head:
 
 Oref Core API
 
-## Reference (`ref()`)
+## Reference (`ref()`) {#ref}
 
 Accepts an internal value and returns a reactive, mutable `Ref<T>` object, which has only one property `.value` pointing to its internal value.
 
@@ -40,7 +40,7 @@ Accepts an internal value and returns a reactive, mutable `Ref<T>` object, which
   print(count.value); // 1
   ```
 
-## Derivation (`derived()`)
+## Derivation (`derived()`) {#derived}
 
 `derived()` accepts a getter function (type: `T Function()`) and returns a read-only reactive `Derived<T>` object. This `Derived<T>` exposes the return value of the getter function through `.value`.
 
@@ -79,7 +79,7 @@ Accepts an internal value and returns a reactive, mutable `Ref<T>` object, which
   ```
   :::
 
-### Valuable Derived (`derived.valuable()`)
+### Valuable Derived (`derived.valuable()`) {#valuable-derived}
 
 Sometimes when implementing derivation, we need to use the previous value in the calculation. In such cases, we need `derived.valuable`:
 
@@ -115,7 +115,7 @@ print(total.value); // 30
 ```
 :::
 
-### Writable Derived (`derived.writable()`)
+### Writable Derived (`derived.writable()`) {#writable-derived}
 
 Writable derived allows you to implement reverse calculation-like functionality. We need to use the `derived.writable()` function:
 
@@ -151,7 +151,7 @@ print(doubleCount.value); // 20
 
 Thus, we can directly implement reversible reactive data operations on top of derived reactivity.
 
-## Side Effect (`effect()`)
+## Effect (`effect()`) {#effect}
 
 Immediately runs a function while reactively tracking the reactive data used within the function as dependencies, and re-executes the function when the tracked dependencies change:
 
@@ -215,7 +215,7 @@ Immediately runs a function while reactively tracking the reactive data used wit
   ```
   :::
 
-### Side Effect Cleanup
+### Effect Cleanup {#effect-cleanup}
 
 Sometimes, before re-running the side effect function, we run another function to clean up previous resources:
 
@@ -254,7 +254,7 @@ effect(context, () {
 ```
 :::
 
-### Stop Effect
+### Stop Effect {#stop-effect}
 
 When we don't want the side effect function to continue listening to reactive properties, we can stop it like this:
 
@@ -273,7 +273,7 @@ runner.effect.stop();
 ```
 :::
 
-### Pause/Resume
+### Pause/Resume {#pause-resume-effect}
 
 Sometimes, we want to pause rather than terminate the listener:
 
@@ -298,7 +298,7 @@ runner.effect.resume();
 ```
 :::
 
-## Watcher (`watch()`)
+## Watcher (`watch()`) {#watch}
 
 Watches one or more reactive data sources constructed as a `Record`, and calls the given callback function when the data source changes.
 
@@ -333,7 +333,7 @@ Watches one or more reactive data sources constructed as a `Record`, and calls t
   ```
 - Details:
 
-  `watch()` behaves consistently with [effect](#side-effect-effect), but there are some functional differences
+  `watch()` behaves consistently with [effect](#effect), but there are some functional differences
 
   > 1. Uses a computation function to encapsulate multiple values into a `Record`
   > 2. The runner provides both new and old values.
@@ -384,7 +384,7 @@ Watches one or more reactive data sources constructed as a `Record`, and calls t
   ```
   :::
 
-### Stopping the Watcher
+### Stop Watcher {#stop-watch}
 
 ```dart
 final stop = watch(...);
@@ -392,7 +392,7 @@ final stop = watch(...);
 stop(); // Stop the watcher
 ```
 
-### Pause/Resume Watcher
+### Pause/Resume Watcher {#pause-resume-watcher}
 
 ```dart
 final WatchHandle(:stop, :pause, :resume) = watch(...);
@@ -402,14 +402,14 @@ resume(); // Resume watching later
 stop(); // Stop
 ```
 
-### Watcher Side Effect Cleanup
+### Watcher Cleanup {#watcher-cleanup}
 
-In `watch()`, like in [Effect - Side Effect Cleanup](#side-effect-cleanup), we use the `onEffectCleanup()` function.
+In `watch()`, like in [Effect - Side Effect Cleanup](#effect-cleanup), we use the `onEffectCleanup()` function.
 
 > [!IMPORTANT] Friendly Reminder
 > `watch()` is highly optimized based on `effect()`.
 
-## Observable (`obs()`) <Badge type="tip" text="Flutter" /><Badge type="info" text="oref_flutter: 0.2+" />
+## Observable (`obs()`) <Badge type="tip" text="Flutter" /><Badge type="info" text="oref_flutter: 0.2+" /> {#obs}
 
 `obs()` allows you to observe a `Ref<T>` and get its value to construct a Widget. When the ref updates, it only updates this specific Widget instead of rebuilding all nodes in the current Widget tree:
 

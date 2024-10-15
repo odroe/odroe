@@ -13,7 +13,7 @@ prev: false
 在许多框架中类似的响应性基础类型被称之为 "信号"，从根本上来讲，Oref 是与信号概念一样拥有相同的响应性基础类型。
 它是一个在访问时跟踪依赖、在变更时触发副作用的值容器。
 
-## 什么是响应性？
+## 什么是响应性？ {#what-is-reactivity}
 
 本质上响应性是一种可以使我们声明式地处理变化的编程范式。有太多的前端框架都在讲述它的重要性：
 
@@ -22,7 +22,7 @@ prev: false
 - [Solid 信号](https://www.solidjs.com/docs/latest/api#createsignal)
 - [Dart: `signals` package](https://dartsignals.dev/reference/overview)
 
-## 安装
+## 安装 {#installation}
 
 你可以直接将 Oref 通过这个命令添加到任何 Dart 项目中：
 
@@ -37,7 +37,7 @@ dependencies:
   oref: latest
 ```
 
-## 基本用法
+## 基本用法 {#basic-usage}
 
 ```dart
 import 'package:oref/oref.dart';

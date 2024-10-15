@@ -15,7 +15,7 @@ Typically, when we need to pass data from a parent Widget to a child Widget, we 
 We can read [Flutter Simple State Management - Lifting state up](https://docs.flutter.dev/data-and-backend/state-mgmt/simple#lifting-state-up) to understand its importance.
 :::
 
-## Why do we need Oinject?
+## Why do we need Oinject? {#why-do-we-need-oinject}
 
 In the Flutter ecosystem, there are many packages that can do similar things, such as [Provider](https://pub.dev/packages/provider). Even Flutter itself comes with a simple way to provide data: [InheritedWidget](https://api.flutter.dev/flutter/widgets/InheritedWidget-class.html).
 
@@ -29,7 +29,7 @@ The advantage of Oinject lies in its minimal boilerplate code and ease of use. H
 
 Most importantly, Oinject can work with any Widget (as long as it has a `BuildContext`). This provides great convenience for migrating your existing App to Oinject.
 
-## Installation
+## Installation {#installation}
 
 We run the following command:
 
@@ -44,7 +44,7 @@ dependencies:
   oinject: latest
 ```
 
-## Provide
+## Provide {#provide}
 
 To provide data to Widget descendants, we need to use the `provide()` function:
 
@@ -73,7 +73,7 @@ provide(context, key: #user, 'Seven');
 
 With this, we can easily pass the User's ID and Name to descendants. (Only applicable to type data that does not conflict)
 
-## Global Provide
+## Global Provide {#global-provide}
 
 In addition to providing data in the Widget tree, you may also want to provide global data at the entry point of the Flutter application. We need to use the `provide.global()` function:
 
@@ -96,7 +96,7 @@ void main() {
 }
 ```
 
-## Inject
+## Inject {#inject}
 
 To inject data provided by upper-level Widgets, use the `inject` function:
 
@@ -117,7 +117,7 @@ final id = inject<int>(context, #user);
 final name = inject<String>(context, #user);
 ```
 
-### Default Injection Value
+### Default Injection Value {#default-injection-value}
 
 By default, `inject()` assumes that the passed type parameter or Key ancestor is not provided. Therefore, it will always return a `T?` type. If the value you inject is not required to be provided, you can use `??` to set a default value:
 

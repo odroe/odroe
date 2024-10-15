@@ -17,7 +17,7 @@ next: false
 我们可以阅读 [Flutter 简易状态管理 - 提高状态层级](https://docs.flutter.dev/data-and-backend/state-mgmt/simple#lifting-state-up) 了解它的重要性。
 :::
 
-## 为什么需要 Oinject？
+## 为什么需要 Oinject？ {#why-do-we-need-oinject}
 
 在 Flutter 生态中，有非常多的包可以做到类似的事情，例如 [Provider](https://pub.dev/packages/provider)。甚至 Flutter 本身就带有
 简易的数据提供方式 [InheritedWidget](https://api.flutter.dev/flutter/widgets/InheritedWidget-class.html)。
@@ -32,7 +32,7 @@ next: false
 
 最重要的一点，Oinject 完全可以和任何 Widget 进行配合（只要它拥有 `BuildContext`)。这为你已有 App 向 Oinject 迁移提供了极大的便利。
 
-## 安装
+## 安装 {#installation}
 
 我们运行下面的命令：
 
@@ -47,7 +47,7 @@ dependencies:
   oinject: latest
 ```
 
-## Provide（提供）
+## Provide（提供） {#provide}
 
 要向 Widget 后代提供数据，需要使用到 `provide()` 函数：
 
@@ -77,7 +77,7 @@ provide(context, key: #user, 'Seven');
 
 由此，我们可以简单地向后代传递 User 的 ID 和 Name。（仅适用于类型并不冲突的类型数据）
 
-## 全局的 Provide
+## 全局的 Provide {#global-provide}
 
 除了在 Widget 树中进行数据提供，也许你也希望在 Flutter 应用入口进行全局的数据提供。我们需要用到 `provide.global()` 函数：
 
@@ -101,7 +101,7 @@ void main() {
 }
 ```
 
-## Inject（注入）
+## Inject（注入） {#inject}
 
 要注入上层 Widget 提供的数据，需使用 `inject` 函数：
 
@@ -122,7 +122,7 @@ final id = inject<int>(context, #user);
 final name = inject<String>(context, #user);
 ```
 
-### 默认注入值
+### 默认注入值 {#default-injection-value}
 
 默认情况下，`inject()` 假设传入的类型参数或者 Key 祖先并未提供。因此，它始终会返回 `T?` 类型。
 如果你注入的值不要求必须提供，可以使用 `??` 设置默认值：
