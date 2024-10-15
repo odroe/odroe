@@ -8,7 +8,7 @@ export default [
     sponsor: "https://github.com/sponsors/medz",
     links: [
       { icon: "github", link: "https://github.com/medz" },
-      { icon: "x", link: "https://twitter.com/shiweidu" },
+      { icon: "x", link: "https://x.com/shiweidu" },
     ],
   },
   {
@@ -17,6 +17,6 @@ export default [
     org: "Odroe",
     orgLink: "https://github.com/odroe",
     title: "Account Manager · IOS Engineer",
-    links: [{ icon: "x", link: "https://github.com/skillLan" }],
+    links: [{ icon: "github", link: "https://github.com/skillLan" }],
   },
 ];
