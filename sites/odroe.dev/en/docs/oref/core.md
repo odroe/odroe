@@ -40,7 +40,7 @@ Accepts an internal value and returns a reactive, mutable `Ref<T>` object, which
   print(count.value); // 1
   ```
 
-## Derived (`derived()`)
+## Derivation (`derived()`)
 
 `derived()` accepts a getter function (type: `T Function()`) and returns a read-only reactive `Derived<T>` object. This `Derived<T>` exposes the return value of the getter function through `.value`.
 
@@ -408,3 +408,43 @@ In `watch()`, like in [Effect - Side Effect Cleanup](#side-effect-cleanup), we u
 
 > [!IMPORTANT] Friendly Reminder
 > `watch()` is highly optimized based on `effect()`.
+
+## Observable (`obs()`) <Badge type="tip" text="Flutter" /><Badge type="info" text="oref_flutter: 0.2+" />
+
+`obs()` allows you to observe a `Ref<T>` and get its value to construct a Widget. When the ref updates, it only updates this specific Widget instead of rebuilding all nodes in the current Widget tree:
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: obs(count, (count) => Text('Count: ${count}')), // [!code focus]
+        );
+    }
+}
+```
+
+When the internal value of `count` updates, it will only rebuild the `Text` Widget without causing the entire `Counter` to rebuild.
+
+If you prefer functional programming, you might prefer this usage:
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: count.obs((count) => Text('Count: ${count}')), // [!code focus]
+        );
+    }
+}
+```

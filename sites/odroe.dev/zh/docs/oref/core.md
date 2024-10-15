@@ -409,3 +409,43 @@ stop(); // 停止
 
 > [!IMPORTANT] 温馨提示
 > `watch()` 是基于 `effect()` 进行高度优化封装的。
+
+## 可观测（`obs()`）<Badge type="tip" text="Flutter" /><Badge type="info" text="oref_flutter: 0.2+" />
+
+`obs()` 允许你观测一个 `Ref<T>` 并获取它的值构造 Widget，当 ref 更新时，仅仅更新这一个 Widget 而不是重建当前 Widget 树的所有节点：
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: obs(count, (count) => Text('Count: ${count}')), // [!code focus]
+        );
+    }
+}
+```
+
+当 `count` 内部的值更新时，只会重建 `Text` Widget而不会让整个 `Counter` 重建。
+
+如果你更喜欢函数式编程，也许你会更喜欢这样的使用方法：
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: count.obs((count) => Text('Count: ${count}')), // [!code focus]
+        );
+    }
+}
+```

@@ -92,3 +92,56 @@ class MyWidget extends StatelessWidget {
 ::: tip WIP
 正在开发中，请阅读我们的[路线图](https://github.com/odroe/odroe/issues/17)。
 :::
+
+## 细粒度重建 <Badge type="tip" text="Flutter" />
+
+例如 [声明响应式状态](#声明响应式状态) 例子中的 Counter 代码，当我们更新 `count` 的值的时候，整个 `Counter` Widget 都会重建。
+这是没有意义的，因为我们只需要 `Text` 重建即可。
+
+推荐使用 `Builder` Widget 来进行优化：
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: Builder( // [!code focus]
+                builder: (_) => Text('Count: ${count.value}'), // [!code focus]
+            ), // [!code focus]
+        );
+    }
+}
+```
+
+当 `count` 内部值更新的时候，就只会重建 `Text` 了。
+不过 `Builder` 适合用于收集多个响应性值，对于简单的使用我们推荐 `obs()` 函数：
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: count.obs((value) => Text('Count: ${value}')), // [!code focus]
+        );
+    }
+}
+```
+
+> [!TIP]
+> 有关 `obs()` 更多细节，请查看[核心 → 可观测](/zh/docs/oref/core#可观测-obs)。
+
+对于细粒度更新可以有多种实现方式：
+
+* 使用 `Builder` 包装收集作用域。
+* 使用 [`obs()`](/zh/docs/oref/core#可观测-obs) 进行观测。
+* 使用 [`derived() - 派生`](/zh/docs/oref/core#派生-derived) 将值进行组合。

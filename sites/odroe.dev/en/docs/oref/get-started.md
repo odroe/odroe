@@ -92,3 +92,56 @@ class MyWidget extends StatelessWidget {
 ::: tip WIP
 In development, please read our [roadmap](https://github.com/odroe/odroe/issues/17).
 :::
+
+## Fine-grained Rebuilding <Badge type="tip" text="Flutter" />
+
+For example, in the Counter code from the [Declaring Reactive State](#declaring-reactive-state) example, when we update the value of `count`, the entire `Counter` Widget gets rebuilt.
+This is unnecessary, as we only need to rebuild the `Text`.
+
+It is recommended to use the `Builder` Widget for optimization:
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: Builder( // [!code focus]
+                builder: (_) => Text('Count: ${count.value}'), // [!code focus]
+            ), // [!code focus]
+        );
+    }
+}
+```
+
+When the internal value of `count` updates, only the `Text` will be rebuilt.
+However, `Builder` is suitable for collecting multiple reactive values. For simple usage, we recommend the `obs()` function:
+
+```dart
+class Counter extends StatelessWidget {
+    const Counter({super.key});
+
+    @override
+    Widget build(BuildContext context) {
+        final count = ref(context, 0);
+
+        return TextButton(
+            onPressed: () => count.value++,
+            child: count.obs((value) => Text('Count: ${value}')), // [!code focus]
+        );
+    }
+}
+```
+
+> [!TIP]
+> For more details about `obs()`, please check [Core → Observable](/docs/oref/core#observable-obs).
+
+There are multiple ways to implement fine-grained updates:
+
+* Use `Builder` to wrap the collection scope.
+* Use [`obs()`](/docs/oref/core#observable-obs) for observation.
+* Use [`derived() - Derivation`](/docs/oref/core#derivation-derived) to combine values.
