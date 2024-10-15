@@ -1,6 +1,6 @@
 name: oref_flutter
 description: "Oref is a lightweight, high-performance reactive programming library for Flutter."
-version: 0.2.0
+version: 0.2.1
 homepage: https://odroe.dev
 repository: https://github.com/odroe/odroe/tree/main/pub/oref_fultter
 issue_tracker: https://github.com/odroe/odroe/issues
