@@ -42,6 +42,6 @@ features:
     linkText: 了解更多
   - title: Oref Flutter
     details: 将 Oref 与 Flutter 一起使用的桥，在 Flutter 中享受反应式状态的快乐。
-    link: /packages/oinject
-    linkText: 开始集成
+    link: /docs/oref/get-started
+    linkText: 快速开始
 ---

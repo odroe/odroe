@@ -26,6 +26,8 @@ export default defineConfig({
           { text: "介绍", link: "/docs/oref/" },
           { text: "快速开始", link: "/docs/oref/get-started" },
           { text: "核心", link: "/docs/oref/core" },
+          { text: "工具", link: "/docs/oref/utils" },
+          { text: "进阶", link: "/docs/oref/advanced" },
         ],
       },
     ],
