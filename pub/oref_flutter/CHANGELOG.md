@@ -1,3 +1,11 @@
+## v0.2.1
+
+2024-10-15
+
+## What's New
+
+- **fix**: Fixed `obs` not correctly applying scope
+
 ## v0.2.0
 
 2024-10-15

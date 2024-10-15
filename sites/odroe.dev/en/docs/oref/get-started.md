@@ -98,7 +98,7 @@ In development, please read our [roadmap](https://github.com/odroe/odroe/issues/
 For example, in the Counter code from the [Declaring Reactive State](#declaring-reactive-state) example, when we update the value of `count`, the entire `Counter` Widget gets rebuilt.
 This is unnecessary, as we only need to rebuild the `Text`.
 
-It is recommended to use the `Builder` Widget for optimization:
+It is recommended to use the `Observer` Widget for optimization:
 
 ```dart
 class Counter extends StatelessWidget {
@@ -110,7 +110,7 @@ class Counter extends StatelessWidget {
 
         return TextButton(
             onPressed: () => count.value++,
-            child: Builder( // [!code focus]
+            child: Observer( // [!code focus]
                 builder: (_) => Text('Count: ${count.value}'), // [!code focus]
             ), // [!code focus]
         );
@@ -119,7 +119,7 @@ class Counter extends StatelessWidget {
 ```
 
 When the internal value of `count` updates, only the `Text` will be rebuilt.
-However, `Builder` is suitable for collecting multiple reactive values. For simple usage, we recommend the `obs()` function:
+However, `Observer` is suitable for collecting multiple reactive values. For simple usage, we recommend the `obs()` function:
 
 ```dart
 class Counter extends StatelessWidget {
@@ -140,8 +140,8 @@ class Counter extends StatelessWidget {
 > [!TIP]
 > For more details about `obs()`, please check [Core → Observable](/docs/oref/core#observable-obs).
 
-There are multiple ways to implement fine-grained updates:
+There are multiple ways to implement fine-grained rebuild:
 
-* Use `Builder` to wrap the collection scope.
+* Use `Observer` to wrap and observe reactive data.
 * Use [`obs()`](/docs/oref/core#observable-obs) for observation.
 * Use [`derived() - Derivation`](/docs/oref/core#derivation-derived) to combine values.

@@ -16,7 +16,7 @@ Oref 提供两个包：
 | 名称 | 版本 | 描述 |
 |----|----|----|
 | `oref` | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref) | 响应式核心 |
-| oref_flutter | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Oref 与 Flutter 的集成 |
+| `oref_flutter` | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Oref 与 Flutter 的集成 |
 
 我们使用下面命令进行安装：
 
@@ -98,7 +98,7 @@ class MyWidget extends StatelessWidget {
 例如 [声明响应式状态](#声明响应式状态) 例子中的 Counter 代码，当我们更新 `count` 的值的时候，整个 `Counter` Widget 都会重建。
 这是没有意义的，因为我们只需要 `Text` 重建即可。
 
-推荐使用 `Builder` Widget 来进行优化：
+推荐使用 `Observer` Widget 来进行优化：
 
 ```dart
 class Counter extends StatelessWidget {
@@ -110,7 +110,7 @@ class Counter extends StatelessWidget {
 
         return TextButton(
             onPressed: () => count.value++,
-            child: Builder( // [!code focus]
+            child: Observer( // [!code focus]
                 builder: (_) => Text('Count: ${count.value}'), // [!code focus]
             ), // [!code focus]
         );
@@ -119,7 +119,7 @@ class Counter extends StatelessWidget {
 ```
 
 当 `count` 内部值更新的时候，就只会重建 `Text` 了。
-不过 `Builder` 适合用于收集多个响应性值，对于简单的使用我们推荐 `obs()` 函数：
+不过 `Observer` 适合用于收集多个响应性值，对于简单的使用我们推荐 `obs()` 函数：
 
 ```dart
 class Counter extends StatelessWidget {
@@ -140,8 +140,8 @@ class Counter extends StatelessWidget {
 > [!TIP]
 > 有关 `obs()` 更多细节，请查看[核心 → 可观测](/zh/docs/oref/core#可观测-obs)。
 
-对于细粒度更新可以有多种实现方式：
+对于细粒度重建可以有多种实现方式：
 
-* 使用 `Builder` 包装收集作用域。
+* 使用 `Observer` 包装观测响应性数据
 * 使用 [`obs()`](/zh/docs/oref/core#可观测-obs) 进行观测。
 * 使用 [`derived() - 派生`](/zh/docs/oref/core#派生-derived) 将值进行组合。
