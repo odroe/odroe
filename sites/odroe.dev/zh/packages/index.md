@@ -19,7 +19,7 @@ features:
     linkText: 查看 Prisma Dart 的网站
   - title: Spry
     details: 轻量级的组合式 Web 框架。
-    link: https://spry.fub
+    link: https://spry.fun
     linkText: 访问 Spry 官网
   - title: Oinject
     details: 一个简单而强大的依赖注入包。透穿数据、简易状态管理、平滑替代 Provider 和 InheritedWidget。
