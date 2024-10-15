@@ -25,10 +25,7 @@ export default defineConfig({
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "Odroe" }],
     ["meta", { property: "og:url", content: "https://odroe.dev/" }],
-    [
-      "meta",
-      { property: "og:image", content: "https://odroe.dev/social-preview.png" },
-    ],
+    ["meta", { property: "og:image", content: "https://odroe.dev/logo.png" }],
   ],
 
   themeConfig: {
