@@ -11,7 +11,7 @@ hero:
       link: https://github.com/sponsors/medz
     - theme: alt
       text: Explore on pub.dev
-      link: https://pub.dev/publishers/odroe.com/packages
+      link: https://pub.dev/publishers/odroe.dev
 features:
   - title: Prisma Dart
     details: The next generation ORM for Dart/Flutter, automatically generates type-safe database clients for you.

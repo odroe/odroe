@@ -11,7 +11,7 @@ hero:
       link: https://github.com/sponsors/medz
     - theme: alt
       text: 在 pub.dev 上探索
-      link: https://pub.dev/publishers/odroe.com/packages
+      link: https://pub.dev/publishers/odroe.dev
 features:
   - title: Prisma Dart
     details: Dart/Flutter 的下一代 ORM，自动为您生成类型安全的数据库客户端。
