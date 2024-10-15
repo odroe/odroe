@@ -1,0 +1,7 @@
+http://odroe.com/* https://odroe.dev/:splat 301!
+https://odroe.com/* https://odroe.dev/:splat 301!
+
+http://www.odroe.com/* https://odroe.dev/:splat 301!
+https://www.odroe.com/* https://odroe.dev/splat 301!
+
+/chat https://discord.gg/ms2X9TQMR8 200
