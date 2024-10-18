@@ -59,3 +59,8 @@ abstract interface class Scope implements public.Scope {
   abstract covariant Scope? parent;
   abstract int? index;
 }
+
+abstract interface class Reactive<T> implements Ref<T> {
+  abstract T raw;
+  bool get shallow;
+}
