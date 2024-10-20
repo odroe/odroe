@@ -22,19 +22,19 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
       return;
     }
 
-    trigger();
+    dep.trigger();
   }
 
   @override
   void add(E value) {
     raw.add(value);
-    trigger();
+    dep.trigger();
   }
 
   @override
   void addAll(Iterable<E> iterable) {
     raw.addAll(iterable);
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -48,13 +48,13 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
   @override
   void clear() {
     raw.clear();
-    trigger();
+    dep.trigger();
   }
 
   @override
   void fillRange(int start, int end, [E? fillValue]) {
     raw.fillRange(start, end, fillValue);
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -63,7 +63,7 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
     raw.first = value;
 
     if (!identical(prev, value)) {
-      trigger();
+      dep.trigger();
     }
   }
 
@@ -85,13 +85,13 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
   @override
   void insert(int index, E element) {
     raw.insert(index, element);
-    trigger();
+    dep.trigger();
   }
 
   @override
   void insertAll(int index, Iterable<E> iterable) {
     raw.insertAll(index, iterable);
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -100,7 +100,7 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
     raw.last = value;
 
     if (!identical(prev, value)) {
-      trigger();
+      dep.trigger();
     }
   }
 
@@ -120,14 +120,14 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
     raw.length = newLength;
 
     if (prevLength != newLength) {
-      trigger();
+      dep.trigger();
     }
   }
 
   @override
   bool remove(Object? value) {
     if (remove(value)) {
-      trigger();
+      dep.trigger();
       return true;
     }
 
@@ -139,7 +139,7 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
     try {
       return raw.removeAt(index);
     } finally {
-      trigger();
+      dep.trigger();
     }
   }
 
@@ -148,14 +148,14 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
     try {
       return raw.removeLast();
     } finally {
-      trigger();
+      dep.trigger();
     }
   }
 
   @override
   void removeRange(int start, int end) {
     raw.removeRange(start, end);
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -169,7 +169,7 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
     });
 
     if (markNeedTrigger) {
-      trigger();
+      dep.trigger();
     }
   }
 
@@ -177,7 +177,7 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
   void replaceRange(int start, int end, Iterable<E> replacements) {
     raw.replaceRange(start, end, replacements);
     if (replacements.isNotEmpty) {
-      trigger();
+      dep.trigger();
     }
   }
 
@@ -193,7 +193,7 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
       return false;
     });
 
-    if (makrNeedTrigger) trigger();
+    if (makrNeedTrigger) dep.trigger();
   }
 
   @override
@@ -202,25 +202,25 @@ class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
   @override
   void setAll(int index, Iterable<E> iterable) {
     raw.setAll(index, iterable);
-    trigger();
+    dep.trigger();
   }
 
   @override
   void setRange(int start, int end, Iterable<E> iterable, [int skipCount = 0]) {
     raw.setRange(start, end, iterable, skipCount);
-    trigger();
+    dep.trigger();
   }
 
   @override
   void shuffle([Random? random]) {
     raw.shuffle(random);
-    trigger();
+    dep.trigger();
   }
 
   @override
   void sort([int Function(E a, E b)? compare]) {
     raw.sort(compare);
-    trigger();
+    dep.trigger();
   }
 
   @override

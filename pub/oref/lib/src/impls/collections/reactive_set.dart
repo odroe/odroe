@@ -13,7 +13,7 @@ class ReactiveSet<E> extends impl.ReactiveIterable<E, Set<E>>
   @override
   bool add(E value) {
     if (raw.add(value)) {
-      trigger();
+      dep.trigger();
       return true;
     }
 
@@ -23,13 +23,13 @@ class ReactiveSet<E> extends impl.ReactiveIterable<E, Set<E>>
   @override
   void addAll(Iterable<E> elements) {
     raw.addAll(elements);
-    trigger();
+    dep.trigger();
   }
 
   @override
   void clear() {
     raw.clear();
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -55,7 +55,7 @@ class ReactiveSet<E> extends impl.ReactiveIterable<E, Set<E>>
   @override
   bool remove(Object? value) {
     if (raw.remove(value)) {
-      trigger();
+      dep.trigger();
       return true;
     }
 
@@ -65,7 +65,7 @@ class ReactiveSet<E> extends impl.ReactiveIterable<E, Set<E>>
   @override
   void removeAll(Iterable<Object?> elements) {
     raw.removeAll(elements);
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -78,13 +78,13 @@ class ReactiveSet<E> extends impl.ReactiveIterable<E, Set<E>>
       return false;
     });
 
-    if (markNeedTrigger) trigger();
+    if (markNeedTrigger) dep.trigger();
   }
 
   @override
   void retainAll(Iterable<Object?> elements) {
     raw.retainAll(elements);
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -96,7 +96,7 @@ class ReactiveSet<E> extends impl.ReactiveIterable<E, Set<E>>
       return false;
     });
 
-    if (makrNeedTrigger) trigger();
+    if (makrNeedTrigger) dep.trigger();
   }
 
   @override

@@ -15,7 +15,7 @@ class ReactiveIterable<E, T extends Iterable<E>>
 
   @override
   T get value {
-    track();
+    dep.track();
     return raw;
   }
 
@@ -24,26 +24,8 @@ class ReactiveIterable<E, T extends Iterable<E>>
     final prev = raw;
     raw = value;
     if (!identical(prev, value)) {
-      trigger();
+      dep.trigger();
     }
-  }
-
-  @override
-  bool active = true;
-
-  @override
-  void track() {
-    if (active) dep.track();
-  }
-
-  @override
-  void trigger() {
-    if (active) dep.trigger();
-  }
-
-  @override
-  void dispose() {
-    active = false;
   }
 
   @override
@@ -95,7 +77,7 @@ class ReactiveIterable<E, T extends Iterable<E>>
   @override
   @Deprecated('Try using for loop.')
   void forEach(void Function(E element) action) {
-    track();
+    dep.track();
     impl.startBatch();
     for (final element in raw) {
       action(element);

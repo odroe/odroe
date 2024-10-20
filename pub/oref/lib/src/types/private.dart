@@ -60,9 +60,4 @@ abstract interface class Scope implements public.Scope {
   abstract int? index;
 }
 
-abstract interface class Reactive<T> implements Ref<T> {
-  bool get active;
-  void dispose();
-  void track();
-  void trigger();
-}
+abstract interface class Reactive<T> implements Ref<T> {}

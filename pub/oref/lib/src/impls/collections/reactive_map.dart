@@ -1,13 +1,9 @@
 import '../../types/private.dart' as private;
 import '../batch.dart' as impl;
 import '../dep.dart' as impl;
-import '../reactive.dart' as impl;
 
 class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
   ReactiveMap(this.raw);
-
-  @override
-  bool active = true;
 
   @override
   Map<K, V> raw;
@@ -27,23 +23,8 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
     raw = value;
 
     if (!identical(prev, value)) {
-      trigger();
+      dep.trigger();
     }
-  }
-
-  @override
-  void track() {
-    if (active) dep.track();
-  }
-
-  @override
-  void trigger() {
-    if (active) dep.trigger();
-  }
-
-  @override
-  void dispose() {
-    active = false;
   }
 
   @override
@@ -55,20 +36,20 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
     this.value[key] = value;
 
     if (!identical(prev, value)) {
-      trigger();
+      dep.trigger();
     }
   }
 
   @override
   void addAll(Map<K, V> other) {
     raw.addAll(other);
-    trigger();
+    dep.trigger();
   }
 
   @override
   void addEntries(Iterable<MapEntry<K, V>> newEntries) {
     raw.addEntries(newEntries);
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -77,7 +58,7 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
   @override
   void clear() {
     raw.clear();
-    trigger();
+    dep.trigger();
   }
 
   @override
@@ -96,7 +77,7 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
   @override
   @Deprecated('Try using for loop.')
   void forEach(void Function(K key, V value) action) {
-    track();
+    dep.track();
     impl.startBatch();
     for (final MapEntry(:key, :value) in entries) {
       action(key, value);
@@ -130,14 +111,14 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
         return ifAbsent();
       });
     } finally {
-      if (markNeedTrigger) trigger();
+      if (markNeedTrigger) dep.trigger();
     }
   }
 
   @override
   V? remove(Object? key) {
     final removed = raw.remove(key);
-    if (removed != null) trigger();
+    if (removed != null) dep.trigger();
 
     return removed;
   }
@@ -153,7 +134,7 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
       return false;
     });
 
-    if (makeNeedTrigger) trigger();
+    if (makeNeedTrigger) dep.trigger();
   }
 
   @override
@@ -162,7 +143,7 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
     final value = raw.update(key, update, ifAbsent: ifAbsent);
 
     if (!identical(prev, value)) {
-      trigger();
+      dep.trigger();
     }
 
     return value;
@@ -172,7 +153,7 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
   void updateAll(V Function(K key, V value) update) {
     bool needTrigger = false;
     raw.updateAll((key, oldValue) {
-      final newValue = update(key, oldValue)
+      final newValue = update(key, oldValue);
       if (!needTrigger && !identical(oldValue, newValue)) {
         needTrigger = true;
       }
@@ -180,7 +161,7 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
       return newValue;
     });
 
-    if (needTrigger) trigger();
+    if (needTrigger) dep.trigger();
   }
 
   @override
