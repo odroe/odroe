@@ -13,34 +13,39 @@ head:
 
 Oref provides two packages:
 
-| Name | Version | Description |
-|----|----|----|
-| `oref` | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref) | Reactive core |
+| Name                              | Version                                                                                            | Description                      |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `oref`                            | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref)                 | Reactive core                    |
 | oref_flutter | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Integration of Oref with Flutter |
 
 We use the following commands for installation:
 
 ::: code-group
 
-```bash [Dart Project]
+```bash [Dart 项目]
 dart pub add oref
 ```
+
 ```bash [Flutter]
 flutter pub add oref_flutter
 ```
+
 :::
 
 Or update your `pubspec.yaml` file:
 
 ::: code-group
-```yaml [Dart Project]
+
+```yaml [Dart 项目]
 dependencies:
   oref: latest
 ```
+
 ```yaml [Flutter]
 dependencies:
   oref_flutter: latest
 ```
+
 :::
 
 ## Declaring Reactive State {#declaring-reactive-state}
@@ -48,17 +53,21 @@ dependencies:
 To declare a reactive state, we use the `ref()` function
 
 ::: code-group
+
 ```dart [Dart]
 final count = ref(0)
 ```
+
 ```dart [Flutter]
 final count = ref(context, 0)
 ```
+
 :::
 
 `ref()` accepts parameters and returns a `Ref<T>` object wrapped with a `.value` property:
 
 ::: code-group
+
 ```dart [Dart]
 void main() {
     final count = ref(0);
@@ -70,6 +79,7 @@ void main() {
     print(count.value); // 1
 }
 ```
+
 ```dart [Flutter]
 class MyWidget extends StatelessWidget {
     const MyWidget({super.key});
@@ -85,11 +95,12 @@ class MyWidget extends StatelessWidget {
     }
 }
 ```
+
 :::
 
 ## Declaring Reactive Collections {#declaring-reactive-collections}
 
-::: tip WIP
+:::tip WIP
 In development, please read our [roadmap](https://github.com/odroe/odroe/issues/17).
 :::
 
@@ -97,6 +108,7 @@ In development, please read our [roadmap](https://github.com/odroe/odroe/issues/
 
 For example, in the Counter code from the [Declaring Reactive State](#declaring-reactive-state) example, when we update the value of `count`, the entire `Counter` Widget gets rebuilt.
 This is unnecessary, as we only need to rebuild the `Text`.
+这是没有意义的，因为我们只需要 `Text` 重建即可。
 
 It is recommended to use the `Observer` Widget for optimization:
 
@@ -120,6 +132,7 @@ class Counter extends StatelessWidget {
 
 When the internal value of `count` updates, only the `Text` will be rebuilt.
 However, `Observer` is suitable for collecting multiple reactive values. For simple usage, we recommend the `obs()` function:
+不过 `Observer` 适合用于收集多个响应性值，对于简单的使用我们推荐 `obs()` 函数：
 
 ```dart
 class Counter extends StatelessWidget {
@@ -142,6 +155,6 @@ class Counter extends StatelessWidget {
 
 There are multiple ways to implement fine-grained rebuild:
 
-* Use `Observer` to wrap and observe reactive data.
-* Use [`obs()`](/docs/oref/core#obs) for observation.
-* Use [`derived() - Derivation`](/docs/oref/core#derived) to combine values.
+- Use `Observer` to wrap and observe reactive data.
+- Use [`obs()`](/docs/oref/core#obs) for observation.
+- Use [`derived() - Derivation`](/docs/oref/core#derived) to combine values.
