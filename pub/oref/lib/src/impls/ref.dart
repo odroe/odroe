@@ -27,6 +27,30 @@ abstract base class BaseRef<T> implements private.Ref<T> {
   }
 }
 
-base class Ref<T> extends BaseRef<T> {
-  Ref(super.raw);
+final class ShallowRef<T> extends BaseRef<T> {
+  ShallowRef(super.raw);
+}
+
+final class CustomRef<T> implements private.Ref<T> {
+  const CustomRef(this.dep, this.getter, this.setter);
+
+  final T Function() getter;
+  final void Function(T) setter;
+
+  @override
+  T get raw => throw UnsupportedError('Custom ref not support read raw value.');
+
+  @override
+  set raw(T _) {
+    throw UnsupportedError('Custom ref not support set raw value.');
+  }
+
+  @override
+  T get value => getter();
+
+  @override
+  set value(T value) => setter(value);
+
+  @override
+  final private.Dep dep;
 }
