@@ -21,15 +21,17 @@ Accepts an internal value and returns a reactive, mutable `Ref<T>` object, which
   Ref<T> ref<T>(BuildContext context, T value);
   ```
   :::
+
 - Return Type:
   ```dart
   abstract interface class Ref<T> {
       T value;
   }
   ```
+
 - Details
 
-  The `Ref<T>` object is mutable, which means we can assign new values using `.value`. It is also reactive, meaning all operations that read `.value` will be tracked, and assignment operations will trigger related side effects.
+  `Ref<T>` 对象是可更改的，也就是说我们可以使用 `.value` 赋予新的值。The `Ref<T>` object is mutable, which means we can assign new values using `.value`. It is also reactive, meaning all operations that read `.value` will be tracked, and assignment operations will trigger related side effects.
 
 - Example:
   ```dart
@@ -42,7 +44,8 @@ Accepts an internal value and returns a reactive, mutable `Ref<T>` object, which
 
 ## Derivation (`derived()`) {#derived}
 
-`derived()` accepts a getter function (type: `T Function()`) and returns a read-only reactive `Derived<T>` object. This `Derived<T>` exposes the return value of the getter function through `.value`.
+`derived()` accepts a getter function (type: `T Function()`) and returns a read-only reactive `Derived<T>` object. This `Derived<T>` exposes the return value of the getter function through `.value`.该 `Derived<T>` 通过 `.value`
+暴露 getter 函数的返回值。
 
 - Type:
   ::: code-group
@@ -84,6 +87,7 @@ Accepts an internal value and returns a reactive, mutable `Ref<T>` object, which
 Sometimes when implementing derivation, we need to use the previous value in the calculation. In such cases, we need `derived.valuable`:
 
 ::: code-group
+
 ```dart [Dart]
 final count = ref(0);
 final total = derived.valuable<int>(
@@ -98,6 +102,7 @@ print(total.value); // 10
 count.value = 20;
 print(total.value); // 30
 ```
+
 ```dart [Flutter]
 final count = ref(context, 0);
 final total = derived.valuable<int>(
@@ -113,6 +118,7 @@ print(total.value); // 10
 count.value = 20;
 print(total.value); // 30
 ```
+
 :::
 
 ### Writable Derived (`derived.writable()`) {#writable-derived}
@@ -120,6 +126,7 @@ print(total.value); // 30
 Writable derived allows you to implement reverse calculation-like functionality. We need to use the `derived.writable()` function:
 
 ::: code-group
+
 ```dart [Dart]
 final count = ref(0);
 final doubleCount = derived.writable<int>(
@@ -133,6 +140,7 @@ print(count.value); // 5
 count.value = 10;
 print(doubleCount.value); // 20
 ```
+
 ```dart [Flutter]
 final count = ref(context, 0);
 final doubleCount = derived.writable<int>(
@@ -147,6 +155,7 @@ print(count.value); // 5
 count.value = 10;
 print(doubleCount.value); // 20
 ```
+
 :::
 
 Thus, we can directly implement reversible reactive data operations on top of derived reactivity.
@@ -188,12 +197,13 @@ Immediately runs a function while reactively tracking the reactive data used wit
   ```
   > Click "[Effect\<T\> class API](https://pub.dev/documentation/oref/latest/oref/Effect-class.html)" for more information
 - Details:
-  - `context`: Context of Flutter Widget. <Badge type="tip" text="Flutter" />
+  - `context`: Context of Flutter Widget. <Badge type="tip" text="Flutter" /><Badge type="tip" text="Flutter" />
   - `runner`: The side effect function to be executed.
   - `scheduler`: Custom side effect trigger
   - `onStop`: Executed when the side effect is stopped.
 - Example:
   ::: code-group
+
   ```dart [Dart]
   final count = ref(0);
 
@@ -213,6 +223,7 @@ Immediately runs a function while reactively tracking the reactive data used wit
   count.value++;
   // -> Prints 1
   ```
+
   :::
 
 ### Effect Cleanup {#effect-cleanup}
@@ -220,6 +231,7 @@ Immediately runs a function while reactively tracking the reactive data used wit
 Sometimes, before re-running the side effect function, we run another function to clean up previous resources:
 
 ::: code-group
+
 ```dart [Dart]
 final tick = ref(0);
 final duration = ref(const Duration(seconds: 1))
@@ -236,6 +248,7 @@ effect(() {
     });
 });
 ```
+
 ```dart [Flutter]
 final tick = ref(context, 0);
 final duration = ref(context, const Duration(seconds: 1))
@@ -252,6 +265,7 @@ effect(context, () {
     });
 });
 ```
+
 :::
 
 ### Stop Effect {#stop-effect}
@@ -259,18 +273,21 @@ effect(context, () {
 When we don't want the side effect function to continue listening to reactive properties, we can stop it like this:
 
 ::: code-group
+
 ```dart [Dart]
 final runner = effect(() => ...);
 
 // Stop the side effect from listening to reactive properties.
 runner.effect.stop();
 ```
+
 ```dart [Flutter]
 final runner = effect(context, () => ...);
 
 // Stop the side effect from listening to reactive properties.
 runner.effect.stop();
 ```
+
 :::
 
 ### Pause/Resume {#pause-resume-effect}
@@ -278,6 +295,7 @@ runner.effect.stop();
 Sometimes, we want to pause rather than terminate the listener:
 
 ::: code-group
+
 ```dart [Dart]
 final runner = effect(() => ...);
 
@@ -287,6 +305,7 @@ runner.effect.pause();
 // Resume later
 runner.effect.resume();
 ```
+
 ```dart [Flutter]
 final runner = effect(context, () => ...);
 
@@ -296,6 +315,7 @@ runner.effect.pause();
 // Resume later
 runner.effect.resume();
 ```
+
 :::
 
 ## Watcher (`watch()`) {#watch}
@@ -339,12 +359,13 @@ Watches one or more reactive data sources constructed as a `Record`, and calls t
   > 2. The runner provides both new and old values.
   > 3. By default, it's lazy watching, meaning the callback function is only executed when the watched source changes.
 
-  - `immediate`: Triggers the callback immediately when the watcher is created. The old value is `null` on the first call.
-  - `once`: The callback function will only run once. The watcher will automatically stop after the callback function runs for the first time.
+  - `immediate`: Triggers the callback immediately when the watcher is created. The old value is `null` on the first call.第一次调用时旧值是 `null`。
+  - `once`: 回调函数只会运行一次。`once`: The callback function will only run once. The watcher will automatically stop after the callback function runs for the first time.
 - Example:
 
   Watching a `Ref<T>`:
   ::: code-group
+
   ```dart [Dart]
   final count = ref(0);
   watch(
@@ -352,6 +373,7 @@ Watches one or more reactive data sources constructed as a `Record`, and calls t
       (value, prev) {...}
   );
   ```
+
   ```dart [Flutter]
   final count = ref(context, 0);
   watch(
@@ -360,11 +382,13 @@ Watches one or more reactive data sources constructed as a `Record`, and calls t
       (value, prev) {...}
   );
   ```
+
   :::
 
   Watching multiple:
 
   ::: code-group
+
   ```dart [Dart]
   final count = ref(0);
   final plusOne = derived(() => count + 1);
@@ -373,6 +397,7 @@ Watches one or more reactive data sources constructed as a `Record`, and calls t
       (value, prev) {...}
   );
   ```
+
   ```dart [Flutter]
   final count = ref(context, 0);
   final plusOne = derived(context, () => count + 1);
@@ -382,6 +407,7 @@ Watches one or more reactive data sources constructed as a `Record`, and calls t
       (value, prev) {...}
   );
   ```
+
   :::
 
 ### Stop Watcher {#stop-watch}
