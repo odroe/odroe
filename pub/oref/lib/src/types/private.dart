@@ -35,13 +35,13 @@ abstract interface class Dep {
 
 abstract interface class Ref<T> implements public.Ref<T> {
   Dep get dep;
+  abstract covariant T raw;
 }
 
 abstract interface class Derived<T> implements public.Derived<T>, Sub, Ref<T> {
   abstract int version;
   T Function(T?) get getter;
   void Function(T)? get setter;
-  abstract dynamic innerValue;
 }
 
 abstract interface class Effect<T> implements public.Effect<T>, Sub {
@@ -61,6 +61,8 @@ abstract interface class Scope implements public.Scope {
 }
 
 abstract interface class Reactive<T> implements Ref<T> {
-  abstract T raw;
-  bool get shallow;
+  bool get active;
+  void dispose();
+  void track();
+  void trigger();
 }

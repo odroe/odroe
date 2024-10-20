@@ -2,26 +2,27 @@ import '../types/private.dart' as private;
 import 'dep.dart' as impl;
 
 class Ref<T> implements private.Ref<T> {
-  Ref(T value) : _value = value;
+  Ref(this.raw);
 
   @override
   late final private.Dep dep = impl.Dep();
 
-  T _value;
+  @override
+  T raw;
 
   @override
   T get value {
     dep.track();
-    return _value;
+    return raw;
   }
 
   @override
-  set value(T newValue) {
-    if (identical(_value, newValue)) {
+  set value(T value) {
+    if (identical(raw, value)) {
       return;
     }
 
-    _value = newValue;
+    raw = value;
     dep.trigger();
   }
 }

@@ -34,7 +34,8 @@ class Derived<T> implements private.Derived<T> {
   late final private.Dep dep = impl.Dep(this);
 
   @override
-  dynamic innerValue;
+  late T raw;
+  bool initialized = false;
 
   @override
   T get value {
@@ -48,13 +49,13 @@ class Derived<T> implements private.Derived<T> {
       link.version = dep.version;
     }
 
-    return innerValue;
+    return raw;
   }
 
   @override
-  set value(T newValue) {
+  set value(T value) {
     if (setter != null) {
-      setter!(newValue);
+      setter!(value);
     } else {
       warn('Derived value is readonly');
     }
@@ -100,12 +101,19 @@ void refreshDerived<T>(private.Derived<T> derived) {
 
   try {
     impl.prepareDeps(derived);
-    final value = derived.getter(derived.innerValue);
-    if (dep.version == 0 || !identical(derived.innerValue, value)) {
-      derived.innerValue = value;
+    final value = derived.getter(derived.raw);
+    if (dep.version == 0 || !identical(derived.raw, value)) {
+      derived.raw = value;
       dep.version++;
     }
-  } catch (_) {
+  } catch (e) {
+    if (e.runtimeType.toString() == 'LateError' &&
+        e.toString().startsWith('LateInitializationError')) {
+      derived.raw = derived.getter(null);
+      dep.version++;
+      return;
+    }
+
     dep.version++;
     rethrow;
   } finally {
