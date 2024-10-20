@@ -17,7 +17,7 @@ Checks if a value is a `Ref<T>`.
   bool isRef(Object? value) => value is Ref;
   ```
 
-`isRef()` doesn't declare anything special, it's just a functional encapsulation of `is`. If you don't like the function style, you can completely use `value is Ref` instead.
+`isRef()` doesn't declare anything special, it's just a functional encapsulation of `is`. If you don't like the function style, you can completely use `value is Ref` instead.如果你不喜欢函数风格，你完全可以使用 `value is Ref` 替代。
 
 ## `unref()` {#unref}
 
@@ -64,9 +64,10 @@ class MyWidget extends StatelessWidget {
 }
 ```
 
+当你的 Widget 与 Oref 进行搭配使用时，如果你使用 `this.name` 仅在第一次 build 时生效。
 When using your Widget with Oref, if you use `this.name`, it only takes effect on the first build.
 When you update the `name` parameter of `MyWidget` in the ancestor, since `name` is not reactive, `rebuild` will not
-take effect in Oref's scope. Let's look at this simple example:
+take effect in Oref's scope. Let's look at this simple example:我们看这个简单的例子：
 
 ```dart
 class Counter extends StatelessWidget {
@@ -86,9 +87,9 @@ class Counter extends StatelessWidget {
 }
 ```
 
-No matter how we update the value of `correct` in the upper layer, it won't take effect. The reason is that ordinary objects are not reactive, so we need to convert `correct` to a reactive value.
-But if we wrap every property reactively, it would be too troublesome, after all, there may be many property values in real scenarios.
-So converting the entire Widget object to Ref is the most secure way:
+在上层无论我们如何更新 `correct` 的值，都不会生效。原因普通对象不具备响应性，因此我们需要将 `correct` 转换为响应式的值。
+但如果我们为每一个属性都进行响应式包装未免也太过于麻烦，毕竟实际场景下可能会有许多属性值。
+所以将整个 Widget 对象转换为 Ref 是最为稳妥的方式：
 
 ```dart
 class Counter extends StatelessWidget {
@@ -126,7 +127,7 @@ final useCounter = compose((BuildContext context) {
 });
 ```
 
-### Why do we need it? {#compose-why-do-need-it}
+### 为什么需要它？ Why do we need it? {#compose-why-do-need-it}
 
 When we use Oref's reactive API to construct new composable APIs, Dart functions usually require us to explicitly define `out Type`:
 
