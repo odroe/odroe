@@ -74,6 +74,7 @@ Creates an effect scope that can capture reactive side effects (i.e., computed p
 
 The `Scope` object exposes `pause()`/`resume()` methods, allowing you to temporarily pause and resume all side effects within the scope.
 It's similar to effect, but the difference is that scope is typically used for batch management of effects.
+它与 effect 类似，区别在于 scope 通常用于批量管理 effect。
 
 ### Advanced Operations
 
@@ -95,7 +96,7 @@ Returns the current active effect scope, if any.
 
 ## `onScopeDispose()` {#on-scope-dispose}
 
-Registers a cleanup callback function on the current active effect scope. This callback function will be called when the related effect scope stops.
+Registers a cleanup callback function on the current active effect scope. This callback function will be called when the related effect scope stops.当相关 effect 作用域停止时会调用这个回调函数。
 
 ## `triggerRef()` {#trigger-ref}
 
