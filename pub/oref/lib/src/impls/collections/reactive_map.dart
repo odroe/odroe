@@ -1,80 +1,74 @@
 import '../../types/private.dart' as private;
+import '../batch.dart' as impl;
+import '../dep.dart' as impl;
 import '../reactive.dart' as impl;
 
 class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
-  ReactiveMap(this.raw, this.dep, this.shallow);
+  ReactiveMap(this.raw);
 
-  late final Map<K, V> targets = {};
+  @override
+  bool active = true;
 
   @override
   Map<K, V> raw;
 
   @override
-  final bool shallow;
-
-  @override
-  final private.Dep dep;
+  late final private.Dep dep = impl.Dep();
 
   @override
   Map<K, V> get value {
     dep.track();
-    return this;
+    return raw;
   }
 
   @override
-  set value(Map<K, V> newValue) {
-    raw = impl.toRaw(newValue);
-    dep.trigger();
-  }
+  set value(Map<K, V> value) {
+    final prev = raw;
+    raw = value;
 
-  @override
-  V? operator [](Object? key) {
-    dep.track();
-
-    final value = raw[key];
-    if (key is K && !shallow && impl.isCollection(value)) {
-      return targets[key] ??= impl.createReactive(value as V, dep, shallow);
+    if (!identical(prev, value)) {
+      trigger();
     }
-
-    return value;
   }
+
+  @override
+  void track() {
+    if (active) dep.track();
+  }
+
+  @override
+  void trigger() {
+    if (active) dep.trigger();
+  }
+
+  @override
+  void dispose() {
+    active = false;
+  }
+
+  @override
+  V? operator [](Object? key) => value[key];
 
   @override
   void operator []=(K key, V value) {
-    final oldValue = raw[key];
-    final newValue = impl.toRaw(value);
+    final prev = raw[key];
+    this.value[key] = value;
 
-    if (identical(oldValue, newValue)) {
-      return;
+    if (!identical(prev, value)) {
+      trigger();
     }
-
-    raw[key] = newValue;
-    if (!shallow) {
-      targets.remove(key);
-    }
-
-    dep.trigger();
   }
 
   @override
   void addAll(Map<K, V> other) {
-    final rawOther = impl.toRaw(other);
-    raw.addAll(rawOther);
-    for (final key in other.keys) {
-      targets.remove(key);
-    }
-
-    dep.trigger();
+    raw.addAll(other);
+    trigger();
   }
 
   @override
   void addEntries(Iterable<MapEntry<K, V>> newEntries) {
-    raw.addEntries(newEntries.map((e) => MapEntry(e.key, impl.toRaw(e.value))));
-    for (final key in newEntries.map((e) => e.key)) {
-      targets.remove(key);
-    }
-
-    dep.trigger();
+    raw.addEntries(newEntries);
+    trigger();
   }
 
   @override
@@ -83,205 +77,112 @@ class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
   @override
   void clear() {
     raw.clear();
-    targets.clear();
-    dep.trigger();
+    trigger();
   }
 
   @override
-  bool containsKey(Object? key) {
-    dep.track();
-
-    return raw.containsKey(key);
-  }
+  bool containsKey(Object? key) => value.containsKey(key);
 
   @override
   bool containsValue(Object? value) {
-    dep.track();
-
-    return raw.containsValue(value);
+    return this.value.containsValue(value);
   }
 
   @override
-  Iterable<MapEntry<K, V>> get entries sync* {
-    dep.track();
-
-    if (shallow) {
-      yield* raw.entries;
-      return;
-    }
-
-    for (final MapEntry(:key, :value) in raw.entries) {
-      if (impl.isCollection(value)) {
-        yield MapEntry(
-          key,
-          targets[key] ??= impl.createReactive(value, dep, shallow),
-        );
-        continue;
-      }
-
-      yield MapEntry(key, value);
-    }
+  Iterable<MapEntry<K, V>> get entries {
+    return value.entries;
   }
 
   @override
   @Deprecated('Try using for loop.')
   void forEach(void Function(K key, V value) action) {
+    track();
+    impl.startBatch();
     for (final MapEntry(:key, :value) in entries) {
       action(key, value);
     }
+    impl.endBatch();
   }
 
   @override
-  bool get isEmpty {
-    dep.track();
-    return raw.isEmpty;
-  }
+  bool get isEmpty => value.isEmpty;
 
   @override
-  bool get isNotEmpty {
-    dep.track();
-    return raw.isNotEmpty;
-  }
+  bool get isNotEmpty => value.isNotEmpty;
 
   @override
-  Iterable<K> get keys {
-    dep.track();
-
-    return raw.keys;
-  }
+  Iterable<K> get keys => value.keys;
 
   @override
-  int get length {
-    dep.track();
-
-    return raw.length;
-  }
+  int get length => value.length;
 
   @override
   Map<K2, V2> map<K2, V2>(MapEntry<K2, V2> Function(K key, V value) convert) {
-    dep.track();
-    return raw.map(convert);
+    return value.map(convert);
   }
 
   @override
   V putIfAbsent(K key, V Function() ifAbsent) {
-    dep.track();
-
     bool markNeedTrigger = false;
     try {
-      final value = raw.putIfAbsent(key, () {
+      return value.putIfAbsent(key, () {
         markNeedTrigger = true;
         return ifAbsent();
       });
-
-      if (shallow || !impl.isCollection(value)) {
-        return value;
-      }
-
-      return targets[key] ??= impl.createReactive(value, dep, shallow);
     } finally {
-      if (markNeedTrigger) dep.trigger();
+      if (markNeedTrigger) trigger();
     }
   }
 
   @override
   V? remove(Object? key) {
-    final oldValue = raw[key];
-    final removedValue = raw.remove(key);
+    final removed = raw.remove(key);
+    if (removed != null) trigger();
 
-    targets.remove(key);
-    if (!identical(oldValue, removedValue)) {
-      dep.trigger();
-    }
-
-    return impl.toRaw(removedValue);
+    return removed;
   }
 
   @override
   void removeWhere(bool Function(K key, V value) test) {
-    final keys = <K>[];
     bool makeNeedTrigger = false;
     raw.removeWhere((key, value) {
-      final result = test(key, impl.toRaw(value));
-      if (result) {
-        makeNeedTrigger = true;
-        keys.add(key);
+      if (test(key, value)) {
+        return makeNeedTrigger = true;
       }
 
-      return result;
+      return false;
     });
 
-    for (final key in keys) {
-      targets.remove(key);
-    }
-
-    if (makeNeedTrigger) {
-      dep.trigger();
-    }
+    if (makeNeedTrigger) trigger();
   }
 
   @override
   V update(K key, V Function(V value) update, {V Function()? ifAbsent}) {
-    final oldValue = raw[key];
-    final newValue = raw.update(
-      key,
-      (value) => update(impl.toRaw(value)),
-      ifAbsent: switch (ifAbsent) {
-        null => null,
-        _ => () => impl.toRaw(ifAbsent()),
-      },
-    );
+    final prev = raw[key];
+    final value = raw.update(key, update, ifAbsent: ifAbsent);
 
-    if (!identical(oldValue, value)) {
-      dep.trigger();
+    if (!identical(prev, value)) {
+      trigger();
     }
 
-    targets.remove(key);
-    if (shallow || !impl.isCollection(value)) {
-      return newValue;
-    }
-
-    return targets[key] = impl.createReactive(newValue, dep, shallow);
+    return value;
   }
 
   @override
   void updateAll(V Function(K key, V value) update) {
-    final keys = <K>[];
     bool needTrigger = false;
     raw.updateAll((key, oldValue) {
-      final newValue = impl.toRaw(update(key, impl.toRaw(oldValue)));
+      final newValue = update(key, oldValue)
       if (!needTrigger && !identical(oldValue, newValue)) {
         needTrigger = true;
-        keys.add(key);
       }
 
       return newValue;
     });
 
-    for (final key in keys) {
-      targets.remove(key);
-    }
-
-    if (needTrigger) {
-      dep.trigger();
-    }
+    if (needTrigger) trigger();
   }
 
   @override
-  Iterable<V> get values sync* {
-    dep.track();
-    if (shallow) {
-      yield* raw.values;
-      return;
-    }
-
-    for (final MapEntry(:key, :value) in raw.entries) {
-      if (impl.isCollection(value)) {
-        yield targets[key] ??= impl.createReactive(value, dep, shallow);
-        continue;
-      }
-
-      yield value;
-    }
-  }
+  Iterable<V> get values => value.values;
 }
