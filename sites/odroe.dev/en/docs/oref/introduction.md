@@ -12,10 +12,11 @@ prev: false
 
 In many frameworks, similar reactive base types are called "signals". Fundamentally, Oref has the same reactive base type as the signal concept.
 It is a value container that tracks dependencies when accessed and triggers side effects when changed.
+它是一个在访问时跟踪依赖、在变更时触发副作用的值容器。
 
-## What is reactivity? {#what-is-reactivity}
+## 什么是响应性？ What is reactivity? {#what-is-reactivity}
 
-Essentially, reactivity is a programming paradigm that allows us to handle changes declaratively. Many front-end frameworks emphasize its importance:
+本质上响应性是一种可以使我们声明式地处理变化的编程范式。有太多的前端框架都在讲述它的重要性：
 
 - [Preact.js Signals](https://preactjs.com/blog/introducing-signals/)
 - [Vue.js In-Depth Reactivity](https://vuejs.org/guide/extras/reactivity-in-depth.html#what-is-reactivity)
