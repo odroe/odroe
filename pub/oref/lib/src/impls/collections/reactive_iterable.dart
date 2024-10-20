@@ -1,32 +1,15 @@
 import '../../types/private.dart' as private;
 import '../batch.dart' as impl;
-import '../dep.dart' as impl;
 import '../reactive.dart' as impl;
+import '../ref.dart' as impl;
 
-class ReactiveIterable<E, T extends Iterable<E>>
-    implements private.Reactive<T>, Iterable<E> {
-  ReactiveIterable(this.raw);
+final class ReactiveIterable<E> extends BaseReactiveIterable<E, Iterable<E>> {
+  ReactiveIterable(super.raw);
+}
 
-  @override
-  T raw;
-
-  @override
-  late final private.Dep dep = impl.Dep();
-
-  @override
-  T get value {
-    dep.track();
-    return raw;
-  }
-
-  @override
-  set value(covariant T value) {
-    final prev = raw;
-    raw = value;
-    if (!identical(prev, value)) {
-      dep.trigger();
-    }
-  }
+abstract base class BaseReactiveIterable<E, T extends Iterable<E>>
+    extends impl.BaseRef<T> implements private.Reactive<T>, Iterable<E> {
+  BaseReactiveIterable(super.raw);
 
   @override
   bool any(bool Function(E element) test) {

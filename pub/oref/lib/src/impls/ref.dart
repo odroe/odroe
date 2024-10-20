@@ -1,14 +1,14 @@
 import '../types/private.dart' as private;
 import 'dep.dart' as impl;
 
-class Ref<T> implements private.Ref<T> {
-  Ref(this.raw);
-
-  @override
-  late final private.Dep dep = impl.Dep();
+abstract base class BaseRef<T> implements private.Ref<T> {
+  BaseRef(this.raw);
 
   @override
   T raw;
+
+  @override
+  late final private.Dep dep = impl.Dep();
 
   @override
   T get value {
@@ -25,4 +25,8 @@ class Ref<T> implements private.Ref<T> {
     raw = value;
     dep.trigger();
   }
+}
+
+base class Ref<T> extends BaseRef<T> {
+  Ref(super.raw);
 }

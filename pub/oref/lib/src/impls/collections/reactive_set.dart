@@ -1,7 +1,7 @@
 import '../../types/private.dart' as private;
 import 'reactive_iterable.dart' as impl;
 
-class ReactiveSet<E> extends impl.ReactiveIterable<E, Set<E>>
+final class ReactiveSet<E> extends impl.BaseReactiveIterable<E, Set<E>>
     implements Set<E>, private.Reactive<Set<E>> {
   ReactiveSet(super.raw);
 

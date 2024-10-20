@@ -3,7 +3,7 @@ import 'dart:math';
 import '../../types/private.dart' as private;
 import 'reactive_iterable.dart' as impl;
 
-class ReactiveList<E> extends impl.ReactiveIterable<E, List<E>>
+final class ReactiveList<E> extends impl.BaseReactiveIterable<E, List<E>>
     implements private.Reactive<List<E>>, List<E> {
   ReactiveList(super.raw);
 

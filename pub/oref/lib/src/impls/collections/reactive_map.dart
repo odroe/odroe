@@ -1,31 +1,10 @@
 import '../../types/private.dart' as private;
 import '../batch.dart' as impl;
-import '../dep.dart' as impl;
+import '../ref.dart' as impl;
 
-class ReactiveMap<K, V> implements private.Reactive<Map<K, V>>, Map<K, V> {
-  ReactiveMap(this.raw);
-
-  @override
-  Map<K, V> raw;
-
-  @override
-  late final private.Dep dep = impl.Dep();
-
-  @override
-  Map<K, V> get value {
-    dep.track();
-    return raw;
-  }
-
-  @override
-  set value(Map<K, V> value) {
-    final prev = raw;
-    raw = value;
-
-    if (!identical(prev, value)) {
-      dep.trigger();
-    }
-  }
+final class ReactiveMap<K, V> extends impl.BaseRef<Map<K, V>>
+    implements private.Reactive<Map<K, V>>, Map<K, V> {
+  ReactiveMap(super.raw);
 
   @override
   V? operator [](Object? key) => value[key];
