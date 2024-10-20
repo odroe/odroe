@@ -22,14 +22,14 @@ features:
     link: https://spry.fun
     linkText: Visit Spry's official website
   - title: Oinject
-    details: A simple yet powerful dependency injection package. Transparent data, simple state management, smooth replacement for Provider and InheritedWidget.
+    details: 一个简单而强大的依赖注入包。A simple yet powerful dependency injection package. Transparent data, simple state management, smooth replacement for Provider and InheritedWidget.
     link: /packages/oinject
     linkText: Learn more
   - title: Oncecall
     details: A memoization tool for Flutter Widget.build method.
     link: /packages/oncecall
     linkText: Learn more
-  - title: >-
+  - title: |-
       <div class="flex flex-row items-center justify-between">
         <span>Oref</span>
         <span class="text-xs text-green-500">
