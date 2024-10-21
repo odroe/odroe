@@ -1,3 +1,7 @@
+## v0.1.2
+
+- Correct pub metadata information
+
 ## 0.1.1
 
 2024-10-10

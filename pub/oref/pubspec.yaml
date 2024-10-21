@@ -1,8 +1,9 @@
 name: oref
 description: Oref is a lightweight, high-performance reactive programming library.
-version: 0.4.0
+version: 0.4.1
 repository: https://github.com/odroe/odroe/tree/main/pub/oref
-homepage: https://odroe.dev
+homepage: https://odroe.dev/packages/oref
+documentation: https://odroe.dev/docs/oref/get-started
 issue_tracker: https://github.com/odroe/odroe/issues
 resolution: workspace
 

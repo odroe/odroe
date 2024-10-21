@@ -1,9 +1,10 @@
 name: oncecall
 description: >-
   Oncecall is a memoization tool for use in the build method of Widgets.
-version: 0.0.1
+version: 0.0.2
 repository: https://github.com/odroe/odroe/tree/main/pub/oncecall
-homepage: https://odroe.dev
+homepage: https://odroe.dev/packages/oncecall
+documentation: https://odroe.dev/docs/oncecall
 issue_tracker: https://github.com/odroe/odroe/issues
 resolution: workspace
 
