@@ -26,7 +26,7 @@ dependencies:
     sdk: flutter
   _octr: ^0.1.0
   oref: ^0.4.0
-  oncecall: ^0.0.1
+  oncecall: ^0.0.2
 
 dev_dependencies:
   flutter_test:
