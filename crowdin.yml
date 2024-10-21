@@ -1,5 +1,0 @@
-files:
-  - source: /sites/odroe.dev/.vitepress/config/zh.ts
-    translation: /sites/odroe.dev/.vitepress/config/%two_letters_code%.ts
-  - source: /sites/odroe.dev/zh/**/*.md
-    translation: /sites/odroe.dev/%two_letters_code%/**/%original_file_name%
