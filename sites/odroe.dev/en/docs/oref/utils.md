@@ -12,12 +12,23 @@ This chapter will explain some useful tools in Oref.
 
 Checks if a value is a `Ref<T>`.
 
-- Implementation
+- Type
+
   ```dart
-  bool isRef(Object? value) => value is Ref;
+  bool isRef(Object? value);
   ```
 
 `isRef()` doesn't declare anything special, it's just a functional encapsulation of `is`. If you don't like the function style, you can completely use `value is Ref` instead.
+
+## `isReactive()` <Badge type="tip" text="v0.4+" /> {#is-reactive}
+
+Checks if an object is a [reactive collection](/docs/oref/core#reactive-collections).
+
+- Type
+  ```dart
+  bool isReactive<T>(T value);
+  ```
+
 
 ## `unref()` {#unref}
 
