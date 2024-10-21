@@ -1,3 +1,20 @@
+## v0.4.0
+
+2024-10-21
+
+## What's New
+
+- **feat**: Support [`untracked`](https://odroe.dev/docs/oref/advanced#untracked) api
+- **feat**: Support [`batch`](https://odroe.dev/docs/oref/advanced#batch) api
+- **feat**: Support [`customRef`](https://odroe.dev/docs/oref/advanced#custom-ref) api
+- **feat**: Support [`reactiveMap`](https://odroe.dev/docs/oref/core#reactive-collections) api
+- **feat**: Support [`reactiveSet`](https://odroe.dev/docs/oref/core#reactive-collections) api
+- **feat**: Support [`reactiveList`](https://odroe.dev/docs/oref/core#reactive-collections) api
+- **feat**: Support [`reactiveIterable`](https://odroe.dev/docs/oref/core#reactive-collections) api
+- **feat**: Support [`isReactive`](https://odroe.dev/docs/oref/utils#is-reactive) api
+- **feat**: Support [`toRaw`](https://odroe.dev/docs/oref/advanced#to-raw) api
+- **feat**: [PRIVATE] - Base ref class support `raw` prop, sub impl cleanup internal to raw.
+
 ## v0.3.0
 
 2024-10-10

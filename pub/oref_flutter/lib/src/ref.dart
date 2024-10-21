@@ -20,3 +20,37 @@ oref.Ref<T> ref<T>(BuildContext context, T value) {
 
   return oncecall(context, () => oref.ref(value));
 }
+
+/// Creates a custom reference of type [T] within the given [BuildContext].
+///
+/// This function allows you to create a custom reference with custom getter and setter logic.
+/// It takes a [factory] function that receives [track] and [trigger] functions and returns
+/// a record containing [get] and [set] functions for the custom reference.
+///
+/// The [ensureInitializedWidgetEffect] is called to initialize the widget effect for the given [context].
+/// The custom reference is created only once for each [BuildContext] using [oncecall].
+///
+/// Example:
+/// ```dart
+/// final myCustomRef = customRef<int>(context, (track, trigger) => (
+///   get: () {
+///     track();
+///     return someValue;
+///   },
+///   set: (newValue) {
+///     someValue = newValue;
+///     trigger();
+///   },
+/// ));
+/// ```
+oref.Ref<T> customRef<T>(
+  BuildContext context,
+  ({T Function() get, void Function(T) set}) Function(
+    void Function() track,
+    void Function() trigger,
+  ) factory,
+) {
+  ensureInitializedWidgetEffect(context);
+
+  return oncecall(context, () => oref.customRef(factory));
+}

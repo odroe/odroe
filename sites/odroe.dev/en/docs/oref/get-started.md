@@ -16,7 +16,7 @@ Oref provides two packages:
 | Name | Version | Description |
 |----|----|----|
 | `oref` | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref) | Reactive core |
-| oref_flutter | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Integration of Oref with Flutter |
+| `oref_flutter` | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Integration of Oref with Flutter |
 
 We use the following commands for installation:
 

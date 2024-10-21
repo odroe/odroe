@@ -1,5 +1,6 @@
 import '../types/public.dart' as public;
 import '../types/private.dart' as private;
+import '../impls/dep.dart' as impl;
 import '../impls/ref.dart' as impl;
 import '../impls/utils.dart';
 
@@ -20,7 +21,7 @@ public.Ref<T> ref<T>(T value) {
     warn('ref() was called with a Ref instance.');
   }
 
-  return impl.Ref<T>(value);
+  return impl.ShallowRef<T>(value);
 }
 
 /// Triggers the update of a [Ref] instance.
@@ -34,6 +35,26 @@ void triggerRef<T>(public.Ref<T> ref) {
   } else if (dev) {
     warn('The ref is an external impl ref, please use your impl trigger.');
   }
+}
+
+/// Creates a custom [Ref] with user-defined getter and setter behavior.
+///
+/// The [factory] function receives [track] and [trigger] functions to manage
+/// dependencies and updates, and should return a record with [get] and [set] functions.
+///
+/// [T] is the type of the value held by the custom [Ref].
+///
+/// Returns a new [Ref] instance with the custom behavior.
+public.Ref<T> customRef<T>(
+  ({T Function() get, void Function(T) set}) Function(
+    void Function() track,
+    void Function() trigger,
+  ) factory,
+) {
+  final dep = impl.Dep();
+  final (:get, :set) = factory(dep.track, dep.trigger);
+
+  return impl.CustomRef(dep, get, set);
 }
 
 /// Checks if a value is a [Ref] instance.

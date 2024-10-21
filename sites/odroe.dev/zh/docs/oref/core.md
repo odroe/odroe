@@ -152,6 +152,52 @@ print(doubleCount.value); // 20
 
 由此，我们可以直接在派生响应式之上直接实现可逆转的响应式数据操作。
 
+## 响应式集合 <Badge type="tip" text="v0.4+" /><Badge type="info" text="oref_flutter: v0.3+" /> {#reactive-collections}
+
+一种保持类型不变的响应式状态的方法，与使用内部 `.value` 包装在内部对象中的 ref 不同。响应式集合不改变
+数据本身类型而保持响应性。
+
+> [!IMPORTANT]
+> 只有 `Map`、`List`、`Set`、`Iterable` 集合类型支持。
+
+创建一个响应式集合，如果本身具有响应性那么保持不变原样返回。
+
+- 类型
+
+  ::: code-group
+  ```dart [dart]
+  Map<K, V> reactiveMap<K, V>(Map<K, V> map);
+  Set<E> reactiveSet<E>(Set<E> set);
+  List<E> reactiveList<E>(List<E> list);
+  Iterable<E> reactiveIterable<E>(Iterable<E> iterable);
+  ```
+  ```dart [flutter]
+  Map<K, V> reactiveMap<K, V>(BuildContext context, Map<K, V> map);
+  Set<E> reactiveSet<E>(BuildContext context, Set<E> set);
+  List<E> reactiveList<E>(BuildContext context, List<E> list);
+  Iterable<E> reactiveIterable<E>(BuildContext context, Iterable<E> iterable);
+  ```
+  :::
+
+- 示例
+
+  ::: code-group
+  ```dart [dart]
+  final obj = reactiveMap({"count": 0});
+  obj["count"] += 1;
+  ```
+  ```dart [flutter]
+  final obj = reactiveMap({"count": 0});
+  obj["count"] += 1;
+  ```
+  :::
+
+响应式集合是一个自定义实现集合接口的封装，与普通集合类型一样。不同的是，Oref 能够收集和拦截响应式集合所有属性
+的访问和修改。
+
+> [!WARNING]
+> 由于响应式集合具有不明显的响应性特征，很多时候可能会误导开发者。因此我们应该尽量使用 `ref` 来管理状态。
+
 ## 副作用（`effect()`） {#effect}
 
 立即运行一个函数，同时响应式地追踪函数内所使用的响应式数据作为依赖，并在被追踪的依赖更改时重新执行函数：

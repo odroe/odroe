@@ -12,12 +12,22 @@ head:
 
 检查一个值是否是 `Ref<T>`。
 
-- 实现
+- 类型
+
   ```dart
-  bool isRef(Object? value) => value is Ref;
+  bool isRef(Object? value);
   ```
 
 `isRef()` 没有声明特别的，它只是 `is` 的函数式封装。如果你不喜欢函数风格，你完全可以使用 `value is Ref` 替代。
+
+## `isReactive()` <Badge type="tip" text="0.4+" /> {#is-reactive}
+
+检查一个对象是否是一个[响应式集合](/zh/docs/oref/core#reactive-collections)。
+
+- 类型
+  ```dart
+  bool isReactive<T>(T value);
+  ```
 
 ## `unref()` {#unref}
 

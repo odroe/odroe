@@ -151,6 +151,50 @@ print(doubleCount.value); // 20
 
 Thus, we can directly implement reversible reactive data operations on top of derived reactivity.
 
+## Reactive Collections <Badge type="tip" text="v0.4+" /><Badge type="info" text="oref_flutter: v0.3+" /> {#reactive-collections}
+
+A method of maintaining reactive state without changing the type, unlike ref which wraps the internal object with `.value`. Reactive collections maintain reactivity without changing the data type itself.
+
+> [!IMPORTANT]
+> Only `Map`, `List`, `Set`, `Iterable` collection types are supported.
+
+Creates a reactive collection, if it's already reactive, it returns it unchanged.
+
+- Types
+
+  ::: code-group
+  ```dart [dart]
+  Map<K, V> reactiveMap<K, V>(Map<K, V> map);
+  Set<E> reactiveSet<E>(Set<E> set);
+  List<E> reactiveList<E>(List<E> list);
+  Iterable<E> reactiveIterable<E>(Iterable<E> iterable);
+  ```
+  ```dart [flutter]
+  Map<K, V> reactiveMap<K, V>(BuildContext context, Map<K, V> map);
+  Set<E> reactiveSet<E>(BuildContext context, Set<E> set);
+  List<E> reactiveList<E>(BuildContext context, List<E> list);
+  Iterable<E> reactiveIterable<E>(BuildContext context, Iterable<E> iterable);
+  ```
+  :::
+
+- Example
+
+  ::: code-group
+  ```dart [dart]
+  final obj = reactiveMap({"count": 0});
+  obj["count"] += 1;
+  ```
+  ```dart [flutter]
+  final obj = reactiveMap({"count": 0});
+  obj["count"] += 1;
+  ```
+  :::
+
+Reactive collections are wrappers that implement collection interfaces, similar to regular collection types. The difference is that Oref can collect and intercept access and modification of all properties of reactive collections.
+
+> [!WARNING]
+> Because reactive collections have non-obvious reactive characteristics, they can often mislead developers. Therefore, we should try to use `ref` to manage state as much as possible.
+
 ## Effect (`effect()`) {#effect}
 
 Immediately runs a function while reactively tracking the reactive data used within the function as dependencies, and re-executes the function when the tracked dependencies change:
