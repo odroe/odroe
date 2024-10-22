@@ -64,7 +64,7 @@ final _widgetRefs =
 WidgetRef<T> useWidgetRef<T extends SetupWidget>([Symbol? key]) {
   assert(currentElement != null,
       'odroe/setup: Cannot be called outside of SetupWidget');
-  assert(T != SetupWidget && key != null,
+  assert(T != SetupWidget || key != null,
       'odroe/setup: Please provide a specific SetupWidget subclass or a non-null key');
 
   if (currentElement == null) {

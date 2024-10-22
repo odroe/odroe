@@ -41,11 +41,11 @@ abstract class SetupWidget extends Widget {
   @override
   @nonVirtual
   SetupElement createElement() {
-    return _SetupElement(this);
+    return SetupElementImpl(this);
   }
 }
 
-final class _SetupElement extends Element implements SetupElement {
+final class SetupElementImpl extends Element implements SetupElement {
   static FlutterErrorDetails reportException(
     DiagnosticsNode context,
     Object exception,
@@ -63,11 +63,31 @@ final class _SetupElement extends Element implements SetupElement {
     return details;
   }
 
-  _SetupElement(SetupWidget super.widget) {
+  SetupElementImpl(SetupWidget super.widget) {
     parent = currentElement;
+
+    effect = oref_impl.Effect(_loop, scheduler: scheduler);
+    effect.flags |= oref_impl.Flags.allowRecurse | oref_impl.Flags.running;
+    oref_impl.cleanupDeps(effect);
+    oref_impl.prepareDeps(effect);
+
+    final reset = setCurrentElement(this);
+    pauseTracking();
+
+    try {
+      build = widget.setup();
+    } finally {
+      oref_impl.cleanupDeps(effect);
+      effect.flags &= ~oref_impl.Flags.running;
+
+      resetTracking();
+    }
+
     if (widget.widgetRefKey != null && parent != null) {
       setWidgetRef(parent!, widget.widgetRefKey!, widget);
     }
+
+    reset();
   }
 
   @override
@@ -89,7 +109,8 @@ final class _SetupElement extends Element implements SetupElement {
   SetupWidget get widget => super.widget as SetupWidget;
 
   late final Widget Function() build;
-  late final SetupElement? parent;
+  late final SetupElementImpl? parent;
+  late Map<Object, Object?>? provides = parent?.provides;
 
   @override
   void performRebuild() {
@@ -119,9 +140,9 @@ final class _SetupElement extends Element implements SetupElement {
         debugDoingBuild = false;
         return true;
       }());
-      super.performRebuild();
       reset();
       resetTracking();
+      super.performRebuild();
     }
 
     try {
@@ -175,10 +196,6 @@ final class _SetupElement extends Element implements SetupElement {
         markNeedsBuild();
       }
     } finally {
-      if (kDebugMode && oref_impl.activeSub != effect) {
-        debugPrint('setup: Active effect was not restored correctly');
-      }
-
       oref_impl.cleanupDeps(effect);
       effect.flags &= ~oref_impl.Flags.running;
     }
@@ -186,29 +203,10 @@ final class _SetupElement extends Element implements SetupElement {
 
   @override
   void mount(Element? parent, Object? newSlot) {
-    pauseTracking();
     final reset = setCurrentElement(this);
+    pauseTracking();
 
     try {
-      effect = oref_impl.Effect(_loop, scheduler: scheduler);
-      effect.flags |= oref_impl.Flags.allowRecurse | oref_impl.Flags.running;
-
-      oref_impl.cleanupDeps(effect);
-      oref_impl.prepareDeps(effect);
-
-      final prevSub = oref_impl.activeSub;
-      enableTracking();
-      oref_impl.activeSub = effect;
-
-      try {
-        build = widget.setup();
-      } finally {
-        oref_impl.cleanupDeps(effect);
-        oref_impl.activeSub = prevSub;
-        resetTracking();
-        effect.flags &= ~oref_impl.Flags.running;
-      }
-
       lifecycleHooks(Lifecycle.beforeMount);
       super.mount(parent, newSlot);
       assert(renderObjectAttachingChild == null);
@@ -223,35 +221,70 @@ final class _SetupElement extends Element implements SetupElement {
 
   @override
   void unmount() {
-    //
-    super.unmount();
+    final reset = setCurrentElement(this);
+    pauseTracking();
+
+    try {
+      lifecycleHooks(Lifecycle.beforeUnmount);
+      super.unmount();
+      lifecycleHooks(Lifecycle.unmounted);
+    } finally {
+      scope.stop();
+      reset();
+      resetTracking();
+    }
   }
 
   @override
   void update(covariant SetupWidget newWidget) {
-    lifecycleHooks(Lifecycle.beforeUpdate);
-    if (parent != null &&
-        widget != newWidget &&
-        newWidget.widgetRefKey != null &&
-        Widget.canUpdate(widget, newWidget)) {
-      setWidgetRef(parent!, newWidget.widgetRefKey!, newWidget,
-          trigger: !dirty);
-      setWidgetRef(this, SetupElementSymbol(this), newWidget, trigger: !dirty);
-    }
+    final reset = setCurrentElement(this);
+    pauseTracking();
 
-    super.update(newWidget);
-    lifecycleHooks(Lifecycle.updated);
+    try {
+      lifecycleHooks(Lifecycle.beforeUpdate);
+      if (parent != null &&
+          widget != newWidget &&
+          newWidget.widgetRefKey != null &&
+          Widget.canUpdate(widget, newWidget)) {
+        setWidgetRef(parent!, newWidget.widgetRefKey!, newWidget,
+            trigger: !dirty);
+        setWidgetRef(this, SetupElementSymbol(this), newWidget,
+            trigger: !dirty);
+      }
+
+      super.update(newWidget);
+      lifecycleHooks(Lifecycle.updated);
+    } finally {
+      reset();
+      resetTracking();
+    }
   }
 
   @override
   void activate() {
-    super.activate();
-    lifecycleHooks(Lifecycle.activated);
+    final reset = setCurrentElement(this);
+    pauseTracking();
+
+    try {
+      super.activate();
+      lifecycleHooks(Lifecycle.activated);
+    } finally {
+      reset();
+      resetTracking();
+    }
   }
 
   @override
   void deactivate() {
-    super.deactivate();
-    lifecycleHooks(Lifecycle.deactivated);
+    final reset = setCurrentElement(this);
+    pauseTracking();
+
+    try {
+      super.deactivate();
+      lifecycleHooks(Lifecycle.deactivated);
+    } finally {
+      reset();
+      resetTracking();
+    }
   }
 }

@@ -1,24 +1,50 @@
-import 'package:oinject/oinject.dart' as oinject;
-// ignore: implementation_imports
-import 'package:oinject/src/provided.dart' as oinject;
+import 'package:flutter/foundation.dart';
 
 import 'global.dart';
 
-void provide<T>(T value, {Object? key}) {
+void provide<T>(Object key, T value) {
   if (currentElement == null) {
-    return oinject.provide.global<T>(value, key: key);
+    if (kDebugMode) {
+      debugPrint('odroe/setup: provide() can only be used inside setup().');
+    }
+
+    return;
   }
 
-  return oinject.provide<T>(currentElement!, value, key: key);
+  var provides = currentElement!.provides;
+  final parentProvides = currentElement!.parent?.provides;
+
+  if (provides == parentProvides) {
+    provides = currentElement!.provides = {...?parentProvides};
+  }
+
+  provides![key] = value;
 }
 
-T? inject<T>([Object? key]) {
+T? internalInject<T>(Object key, [T Function()? orElse]) {
   if (currentElement == null) {
-    final provided = oinject.globalProvides[key ?? T];
-    if (provided != null && provided.value is T) {
-      return provided.value as T;
+    if (kDebugMode) {
+      debugPrint('odroe/setup: inject() can only be used inside setup().');
     }
+    return null;
   }
 
-  return oinject.inject<T>(currentElement!, key);
+  final provides = currentElement!.parent?.provides;
+  if (provides != null && provides.containsKey(key)) {
+    return provides[key] as T;
+  } else if (orElse != null) {
+    return orElse();
+  } else if (kDebugMode) {
+    debugPrint('odroe/setup: inject($key) not fount.');
+  }
+
+  return null;
+}
+
+T? inject<T>(Object key) {
+  return internalInject(key);
+}
+
+T injectOr<T>(Object key, T Function() orElse) {
+  return internalInject<T>(key, orElse) as T;
 }
