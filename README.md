@@ -1,10 +1,14 @@
-# Odroe Project
+# Odroe Ecosystem Project
 
 This repository contains a collection of Dart and Flutter packages developed by Odroe. These packages provide various utilities and tools for reactive programming and dependency injection in Dart and Flutter applications.
 
 [![Netlify Status](https://api.netlify.com/api/v1/badges/eb5a4ff6-172e-45fb-9c0b-b610bfdd905e/deploy-status)](https://app.netlify.com/sites/odroe/deploys)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/medz?label=github%20sponsors)](https://github.com/sponsors/medz)
+[![Discord](https://img.shields.io/discord/1035043284457881620?label=discord)](https://discord.gg/ms2X9TQMR8)
+[![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/shiweidu)
+](https://twitter.com/shiweidu)
 
-## Ecosystem
+## Packages
 
 | Package | Version | Description |
 |-------|---------|-------------|
