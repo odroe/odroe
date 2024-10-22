@@ -10,8 +10,6 @@ import 'package:oref/src/impls/effect.dart' as oref_impl;
 import 'package:oref/src/impls/flags.dart' as oref_impl;
 // ignore: implementation_imports
 import 'package:oref/src/impls/sub.dart' as oref_impl;
-// ignore: implementation_imports
-import 'package:oref/src/impls/global.dart' as oref_impl;
 
 import 'global.dart';
 import 'helpers/use_widget_ref.dart';
