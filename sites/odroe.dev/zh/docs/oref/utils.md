@@ -1,12 +1,13 @@
 ---
-title: 文档 → Oref - 工具函数
+title: 文档 → Oref 工具函数
+description: 本章节详细介绍了 Oref 提供的实用工具函数。这些函数旨在简化开发过程，提高代码效率，并增强类型安全性。无论您是在处理响应式引用、进行类型检查，还是优化 Flutter 小部件，这里的工具函数都能为您的开发工作提供有力支持。
 head:
   - - meta
     - property: og:title
-      content: Odroe | 文档 → Oref - 工具函数
+      content: Odroe | 文档 → Oref 工具函数
 ---
 
-本章将为你讲解一些 Oref 的实用工具。
+{{ $frontmatter.description }}
 
 ## `isRef()` {#is-ref}
 
@@ -119,65 +120,57 @@ class Counter extends StatelessWidget {
 }
 ```
 
-## `compose()` <Badge type="tip" text="Flutter" /> {#compose}
+## 推测返回类型（`inferReturnType()`） <Badge type="tip" text="v0.5+" /> {#infer-return-type}
 
-`compose()` 将传入的函数原样并进行正确的类型包装：
+`inferReturnType()` 函数用于推断并正确包装传入函数的返回类型：
 
 ```dart
-final useCounter = compose((BuildContext context) {
-    final count = ref(context, 0);
-
-    void increment() => count.value++;
-
-    return (
-        valueOf: () => count.value,
-        increment: increment
-    );
-});
+// 推断的返回类型: ({String name, DateTime createdAt})
+final say = inferReturnType((String name) => (name: name, createdAt: DateTime.now()));
 ```
 
-### 为什么需要它？ {#compose-why-do-need-it}
+### 为什么需要它？ {#why-do-need-infer-return-type}
 
-当我们使用 Oref 的反应性 API 来构造制造新的可组合 API 时，Dart 函数通常需要我们显示定义 `out Type`：
+在使用 Oref 的响应式 API 构建新的可组合 API 时，Dart 通常要求我们显式定义函数的返回类型：
 
 ```dart
-({T Function() valueOf, void Function() increment}) useCountter(BuildContext context) {
-    final count = ref(context, 0);
+({T Function() valueOf, void Function() increment}) useCounter<T>() {
+  final count = ref(0);
+  void increment() => count.value++;
 
-    void increment() => count.value++;
-
-    return (
-        valueOf: () => count.value,
-        increment: increment
-    );
+  return (
+    valueOf: () => count.value as T,
+    increment: increment
+  );
 }
 ```
 
-这给让我们增加了大量的样板代码。
+这种做法会导致大量样板代码，降低了代码的可读性和维护性。
 
-### lint 规则警告 {#compose-lint-rule-warn}
+### 规避 lint 规则警告 {#avoid-lint-rule-warn}
 
-虽然使用变量定义函数可以达到完全一致的效果：
-
-```dart
-final useCounter = (BuildContext context) {
-    final count = ref(context, 0);
-
-    void increment() => count.value++;
-
-    return (
-        valueOf: () => count.value,
-        increment: increment
-    );
-}
-```
-
-但 lint rules 会发出不规范的警告，因此，我们应该使用 `compose()` 来进行包装，并无需编写样板类型。
-
-### 手动实现 {#compose-manual-impl}
-
-`compose()` 并不是什么高深的技术，它仅仅一行代码：
+虽然使用变量定义函数可以达到类似的效果：
 
 ```dart
-F compose<F extends Function>(F fn) => fn;
+final useCounter = () {
+  final count = ref(0);
+  void increment() => count.value++;
+
+  return (
+    valueOf: () => count.value,
+    increment: increment
+  );
+};
 ```
+
+但这种写法会触发 lint 规则警告（`prefer_function_declarations_over_variables`）。为了规避这个问题并避免编写冗长的类型声明，我们可以使用 `inferReturnType()` 函数。
+
+### 实现原理 {#infer-return-type-impl}
+
+`inferReturnType()` 的实现非常简单，仅需一行代码：
+
+```dart
+F inferReturnType<F extends Function>(F fn) => fn;
+```
+
+这个函数利用 Dart 的类型推断机制，帮助开发者在不显式声明复杂返回类型的情况下，保持代码的简洁性和类型安全性。

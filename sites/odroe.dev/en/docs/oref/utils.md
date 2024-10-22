@@ -1,12 +1,13 @@
 ---
-title: Documentation → Oref - Utility Functions
+title: Documentation → Oref Utility Functions
+description: This chapter provides a detailed introduction to the utility functions offered by Oref. These functions are designed to simplify the development process, improve code efficiency, and enhance type safety. Whether you're dealing with reactive references, performing type checks, or optimizing Flutter widgets, the utility functions here can provide powerful support for your development work.
 head:
   - - meta
     - property: og:title
-      content: Odroe | Documentation → Oref - Utility Functions
+      content: Odroe | Documentation → Oref Utility Functions
 ---
 
-This chapter will explain some useful tools in Oref.
+{{ $frontmatter.description }}
 
 ## `isRef()` {#is-ref}
 
@@ -120,65 +121,57 @@ class Counter extends StatelessWidget {
 }
 ```
 
-## `compose()` <Badge type="tip" text="Flutter" /> {#compose}
+## Infer Return Type (`inferReturnType()`) <Badge type="tip" text="v0.5+" /> {#infer-return-type}
 
-`compose()` passes the input function as-is and performs correct type wrapping:
+The `inferReturnType()` function is used to infer and correctly wrap the return type of the input function:
 
 ```dart
-final useCounter = compose((BuildContext context) {
-    final count = ref(context, 0);
-
-    void increment() => count.value++;
-
-    return (
-        valueOf: () => count.value,
-        increment: increment
-    );
-});
+// Inferred return type: ({String name, DateTime createdAt})
+final say = inferReturnType((String name) => (name: name, createdAt: DateTime.now()));
 ```
 
-### Why do we need it? {#compose-why-do-need-it}
+### Why do we need it? {#why-do-need-infer-return-type}
 
-When we use Oref's reactive API to construct new composable APIs, Dart functions usually require us to explicitly define `out Type`:
+When building new composable APIs using Oref's reactive API, Dart usually requires us to explicitly define the function's return type:
 
 ```dart
-({T Function() valueOf, void Function() increment}) useCountter(BuildContext context) {
-    final count = ref(context, 0);
+({T Function() valueOf, void Function() increment}) useCounter<T>() {
+  final count = ref(0);
+  void increment() => count.value++;
 
-    void increment() => count.value++;
-
-    return (
-        valueOf: () => count.value,
-        increment: increment
-    );
+  return (
+    valueOf: () => count.value as T,
+    increment: increment
+  );
 }
 ```
 
-This adds a lot of boilerplate code for us.
+This approach leads to a lot of boilerplate code, reducing code readability and maintainability.
 
-### lint rule warning {#compose-lint-rule-warn}
+### Avoiding lint rule warnings {#avoid-lint-rule-warn}
 
-Although using variables to define functions can achieve the same effect:
-
-```dart
-final useCounter = (BuildContext context) {
-    final count = ref(context, 0);
-
-    void increment() => count.value++;
-
-    return (
-        valueOf: () => count.value,
-        increment: increment
-    );
-}
-```
-
-But lint rules will issue non-standard warnings, so we should use `compose()` to wrap it, and there's no need to write boilerplate types.
-
-### Manual implementation {#compose-manual-impl}
-
-`compose()` is not a sophisticated technique, it's just one line of code:
+Although using variable-defined functions can achieve a similar effect:
 
 ```dart
-F compose<F extends Function>(F fn) => fn;
+final useCounter = () {
+  final count = ref(0);
+  void increment() => count.value++;
+
+  return (
+    valueOf: () => count.value,
+    increment: increment
+  );
+};
 ```
+
+This approach triggers a lint rule warning (`prefer_function_declarations_over_variables`). To avoid this issue and prevent writing lengthy type declarations, we can use the `inferReturnType()` function.
+
+### Implementation principle {#infer-return-type-impl}
+
+The implementation of `inferReturnType()` is very simple, requiring only one line of code:
+
+```dart
+F inferReturnType<F extends Function>(F fn) => fn;
+```
+
+This function utilizes Dart's type inference mechanism to help developers maintain code conciseness and type safety without explicitly declaring complex return types.
