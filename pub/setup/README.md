@@ -21,7 +21,7 @@ Then run:
 flutter pub get
 ```
 
-## Sponsoring
+## Sponsorship
 
 If you find Setup helpful, please consider [sponsoring the project](https://github.com/sponsors/medz). Your support helps maintain and improve the framework.
 

@@ -12,22 +12,32 @@ This repository contains a collection of Dart and Flutter packages developed by 
 | [`oncecall`](pub/oncecall/) | [![Pub Version](https://img.shields.io/pub/v/oncecall)](https://pub.dev/packages/oncecall) | Oncecall is a memoization tool for use in the build method of Widgets. |
 | [`oref`](pub/oref/) | [![Pub Version](https://img.shields.io/pub/v/oref)](https://pub.dev/packages/oref) | A lightweight, high-performance reactive programming library for Dart. |
 | [`oref_flutter`](pub/oref_flutter/) | [![Pub Version](https://img.shields.io/pub/v/oref_flutter)](https://pub.dev/packages/oref_flutter) | Oref extension for Flutter, providing reactive programming capabilities tailored for Flutter widgets and state management. |
+| [`setup`](pub/setup/) | [![Pub Version](https://img.shields.io/pub/v/setup)](https://pub.dev/packages/setup) | A Progressive reactivity framework. An approachable, performant, and versatile framework for building Flutter user interfaces. |
 
-## Contributing
 
-We welcome contributions to any of the packages in this repository. Please read our contributing guidelines (link to CONTRIBUTING.md if you have one) before submitting any pull requests.
-
-## Support
-
-For support, please open an issue in the respective package's GitHub issue tracker.
-
-### Sponsorship
+## Sponsorship
 
 If you find these packages helpful, please consider sponsoring the development:
 
 - [Sponsor on GitHub](https://github.com/sponsors/medz)
 
 Your support helps maintain and improve these packages for the community.
+
+<p align="center">
+  <a target="_blank" href="https://github.com/sponsors/medz#:~:text=Featured-,sponsors,-Current%20sponsors">
+    <img alt="sponsors" src="https://github.com/medz/public/raw/main/sponsors.tiers.svg">
+  </a>
+</p>
+
+## Contributing
+
+We welcome contributions to any of the packages in this repository. Please read our contributing guidelines (link to CONTRIBUTING.md if you have one) before submitting any pull requests.
+
+[![Contributors](https://contrib.rocks/image?repo=medz/prisma-dart)](https://github.com/odroe/prisma-dart/graphs/contributors)
+
+## Support
+
+For support, please open an issue in the respective package's [GitHub issue tracker](https://github.com/odroe/odroe/issues).
 
 ### Issue Tracker
 
@@ -39,4 +49,4 @@ We appreciate your feedback and contributions to improve our packages.
 
 ## License
 
-All packages in this repository are released under the MIT License. See the LICENSE file in each package directory for details.
+All packages in this repository are released under the [MIT License](LICENSE).
