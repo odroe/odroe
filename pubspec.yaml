@@ -11,6 +11,7 @@ workspace:
   - pub/oncecall
   - pub/oref
   - pub/oref_flutter
+  - pub/setup
 
 dev_dependencies:
   benchmark_harness: ^2.2.2
