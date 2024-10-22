@@ -44,4 +44,5 @@
 ///     );
 /// });
 /// ```
+@Deprecated('Try useing inferReturnType(), remove in v0.4')
 F compose<F extends Function>(F fn) => fn;

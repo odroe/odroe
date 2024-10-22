@@ -19,7 +19,8 @@ export 'package:oref/oref.dart'
         enableTracking,
         getCurrentScope,
         onScopeDispose,
-        toRaw;
+        toRaw,
+        inferReturnType;
 
 export 'src/derived.dart';
 export 'src/effect.dart';

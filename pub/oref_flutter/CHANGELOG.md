@@ -1,3 +1,9 @@
+## v0.3.2
+
+- Upgraded `oref` to version constraint `v0.5.0`.
+- Exported the `inferReturnType` utility from `oref`.
+- Marked `compose` as deprecated - will be removed in `v0.4` version.
+
 ## v0.3.1
 
 - Correct pub metadata information
