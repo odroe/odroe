@@ -34,3 +34,37 @@ T untracked<T>(T Function() runner) {
     public.resetTracking();
   }
 }
+
+/// Enables precise type inference for function return types.
+///
+/// Acts as an identity function for functions, allowing the Dart analyzer
+/// to infer the specific return type of the passed function. This is particularly
+/// useful in reactive contexts where complex return types may be challenging
+/// for Dart's type system to infer accurately.
+///
+/// ## Usage
+///
+/// Use this function when you want to leverage Dart's type inference capabilities
+/// without explicitly declaring types, especially for complex return types.
+///
+/// Example:
+/// ```dart
+/// // Without inferReturnType, type might be inferred as dynamic.
+/// hello() => (name: "seven", age: 30);
+///
+/// // Without inferReturnType, violate lint rules
+/// final hello = () => (name: "seven", age: 30);
+///
+///
+/// // With inferReturnType:
+/// final hello = inferReturnType(() => (name: "seven", age: 30));
+/// // Specific return type is correctly inferred
+/// ```
+///
+/// By using `inferReturnType`, you can maintain code clarity and benefit from
+/// precise type inference in your development environment without sacrificing
+/// the advantages of Dart's type system.
+///
+/// > [!IMPORTANT]
+/// > inferReturnType is effective when the return type is Record and is complex. It is not recommended for other types.
+F inferReturnType<F extends Function>(F fn) => fn;

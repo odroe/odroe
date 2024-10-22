@@ -1,3 +1,7 @@
+## v0.5.0
+
+- **feat**: added a [`inferReturnType`](https://odroe.deb/docs/oref/utils#infer-return-type) utility.
+
 ## v0.4.1
 
 - Correct pub metadata information
