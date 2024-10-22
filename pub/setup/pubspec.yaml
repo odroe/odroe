@@ -1,8 +1,21 @@
 name: setup
-description: Dart Setup widget
-version: 0.0.0
-# repository: https://github.com/my_org/my_repo
+description: >-
+  Setup - A Progressive reactivity framework.
+  An approachable, performant, and versatile framework for building Flutter user interfaces.
+version: 0.0.1
+repository: https://github.com/odroe/odroe/tree/main/pub/setup
+homepage: https://odroe.dev
 resolution: workspace
+
+topics:
+  - framework
+  - reactive
+  - composition
+  - state-management
+  - user-interface
+
+funding:
+  - https://github.com/sponsors/medz
 
 environment:
   sdk: ^3.5.3
