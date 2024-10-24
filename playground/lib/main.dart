@@ -15,7 +15,10 @@ class App extends SetupWidget {
     return () {
       return MaterialApp(
         home: Scaffold(
-          body: Center(child: TestWidget(count.value)),
+          body: KeepAlive(
+            keepAlive: true,
+            child: obs(count, TestWidget.new),
+          ),
           floatingActionButton: FloatingActionButton(
             onPressed: () => count.value++,
             child: Text('Rebuild'),
@@ -34,6 +37,10 @@ class TestWidget extends SetupWidget {
   @override
   Widget Function() setup() {
     final ref = useWidgetRef<TestWidget>();
+
+    onActivated(() {
+      print('onActivated');
+    });
 
     return () {
       return Text('Count: ${ref.widget?.count}');
