@@ -4,7 +4,7 @@ import 'package:oref/oref.dart';
 import '../setup_widget.dart';
 
 class Observer extends SetupWidget {
-  const Observer({super.key, required this.builder});
+  const Observer(this.builder, {super.key});
 
   final Widget Function() builder;
 
@@ -15,11 +15,11 @@ class Observer extends SetupWidget {
 }
 
 extension RefObserverUtils<T> on Ref<T> {
-  SetupWidget obs(Widget Function() builder, {Key? key}) {
-    return Observer(key: key, builder: builder);
+  SetupWidget obs(Widget Function(T value) builder, {Key? key}) {
+    return Observer(key: key, () => builder(value));
   }
 }
 
-SetupWidget obs<T>(Ref<T> ref, Widget Function() builder, {Key? key}) {
+SetupWidget obs<T>(Ref<T> ref, Widget Function(T value) builder, {Key? key}) {
   return ref.obs(key: key, builder);
 }

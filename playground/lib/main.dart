@@ -10,28 +10,29 @@ class App extends SetupWidget {
 
   @override
   Widget Function() setup() {
-    final count = ref(0);
-    provide(#count, count);
+    final viewSize = ref<Size?>(null);
+    final context = useContext();
 
-    return () => MaterialApp(
-          home: Scaffold(
-            body: Center(child: Text('Count: ${count.value}')),
-            floatingActionButton: const _Button(),
+    // ⚠️ You cannot directly use context in setup
+    // because the Widget has not been mounted yet.
+    // viewSize.value = MediaQuery.maybeSizeOf(context);
+
+    onMounted(() {
+      // Can safely use context
+      viewSize.value = MediaQuery.maybeSizeOf(context);
+    });
+
+    return () {
+      // Context can be safely used in render
+      print(MediaQuery.maybeSizeOf(context));
+
+      return MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Observer(() => Text('View Size: ${viewSize.value}')),
           ),
-        );
-  }
-}
-
-class _Button extends SetupWidget {
-  const _Button();
-
-  @override
-  Widget Function() setup() {
-    final count = inject<Ref<int>>(#count)!;
-
-    return () => FloatingActionButton(
-          onPressed: () => count.value++,
-          child: Icon(Icons.add),
-        );
+        ),
+      );
+    };
   }
 }

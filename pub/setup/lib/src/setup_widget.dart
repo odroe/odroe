@@ -63,29 +63,8 @@ final class SetupElementImpl extends Element implements SetupElement {
 
   SetupElementImpl(SetupWidget super.widget) {
     parent = currentElement;
-
     effect = oref_impl.Effect(_loop, scheduler: scheduler);
-    effect.flags |= oref_impl.Flags.allowRecurse | oref_impl.Flags.running;
-    oref_impl.cleanupDeps(effect);
-    oref_impl.prepareDeps(effect);
-
-    final reset = setCurrentElement(this);
-    pauseTracking();
-
-    try {
-      build = widget.setup();
-    } finally {
-      oref_impl.cleanupDeps(effect);
-      effect.flags &= ~oref_impl.Flags.running;
-
-      resetTracking();
-    }
-
-    if (widget.widgetRefKey != null && parent != null) {
-      setWidgetRef(parent!, widget.widgetRefKey!, widget);
-    }
-
-    reset();
+    initializeSetup();
   }
 
   @override
@@ -109,6 +88,30 @@ final class SetupElementImpl extends Element implements SetupElement {
   late final Widget Function() build;
   late final SetupElementImpl? parent;
   late Map<Object, Object?>? provides = parent?.provides;
+
+  void initializeSetup() {
+    effect.flags |= oref_impl.Flags.allowRecurse | oref_impl.Flags.running;
+    oref_impl.cleanupDeps(effect);
+    oref_impl.prepareDeps(effect);
+
+    final reset = setCurrentElement(this);
+    pauseTracking();
+
+    try {
+      build = widget.setup();
+    } finally {
+      oref_impl.cleanupDeps(effect);
+      effect.flags &= ~oref_impl.Flags.running;
+
+      resetTracking();
+    }
+
+    if (widget.widgetRefKey != null && parent != null) {
+      setWidgetRef(parent!, widget.widgetRefKey!, widget);
+    }
+
+    reset();
+  }
 
   @override
   void performRebuild() {
