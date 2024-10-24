@@ -11,37 +11,44 @@ import 'package:oref/src/types/private.dart' as oref_private;
 import '../global.dart';
 import '../setup_widget.dart';
 
-abstract interface class WidgetRef<T extends SetupWidget> implements Ref<T?> {
-  @override
-  @internal
-  @Deprecated('Widget ref unsupported calling setter')
-  set value(T? _);
+abstract interface class WidgetRef<T extends SetupWidget>
+    implements Ref<SetupElement?> {
+  BuildContext? get context;
+  T? get widget;
 }
 
 final class WidgetRefImpl<T extends SetupWidget>
-    implements oref_private.Ref<T?>, WidgetRef<T> {
+    implements oref_private.Ref<SetupElement?>, WidgetRef<T> {
   WidgetRefImpl(this.key, [this.raw]);
 
   final Symbol key;
 
   @override
-  T? raw;
-
-  @override
   late final oref_private.Dep dep = oref_impl.Dep();
 
   @override
-  T? get value {
+  SetupElementImpl? raw;
+
+  @override
+  SetupElementImpl? get value {
     dep.track();
     return raw;
   }
 
   @override
-  set value(T? _) {
+  @internal
+  @Deprecated('Widget ref unsupported calling setter')
+  set value(_) {
     if (kDebugMode) {
       debugPrint('odroe/setup: Widget ref do not allow calling setter');
     }
   }
+
+  @override
+  BuildContext? get context => value;
+
+  @override
+  T? get widget => value?.widget as T?;
 }
 
 class SetupElementSymbol implements Symbol {
@@ -76,7 +83,7 @@ WidgetRef<T> useWidgetRef<T extends SetupWidget>([Symbol? key]) {
   } else if (key == null && currentElement!.widget is T) {
     final ref = WidgetRefImpl<T>(
       SetupElementSymbol(currentElement!),
-      currentElement!.widget as T,
+      currentElement,
     );
 
     (_widgetRefs[currentElement!] ??= []).add(ref);
@@ -100,15 +107,17 @@ WidgetRef<T> useWidgetRef<T extends SetupWidget>([Symbol? key]) {
   return ref;
 }
 
-setWidgetRef(SetupElement parent, Symbol key, SetupWidget value,
-    {bool trigger = true}) {
+void setWidgetRef(SetupElement parent, Symbol key, dynamic element) {
   final ref = _widgetRefs[parent]?.where((ref) => ref.key == key).singleOrNull;
-
-  ref?.raw = value;
-  if (trigger &&
-      ref != null &&
-      ref.raw != value &&
-      Widget.canUpdate(ref.raw!, value)) {
-    ref.dep.trigger();
+  if (ref != null && ref.raw == null) {
+    ref.raw = element;
   }
+}
+
+void triggerWidgetRef(SetupElement parent, Symbol key) {
+  _widgetRefs[parent]
+      ?.where((ref) => ref.key == key)
+      .singleOrNull
+      ?.dep
+      .trigger();
 }

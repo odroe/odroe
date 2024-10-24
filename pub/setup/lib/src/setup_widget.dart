@@ -31,9 +31,10 @@ abstract base class SetupElement extends Element {
 abstract class SetupWidget extends Widget {
   @literal
   const SetupWidget({super.key, @mustBeConst final Symbol? ref})
-      : widgetRefKey = ref;
+      : _widgetReferenceKey = ref;
 
-  final Symbol? widgetRefKey;
+  final Symbol? _widgetReferenceKey;
+
   Widget Function() setup();
 
   @override
@@ -104,13 +105,8 @@ final class SetupElementImpl extends Element implements SetupElement {
       effect.flags &= ~oref_impl.Flags.running;
 
       resetTracking();
+      reset();
     }
-
-    if (widget.widgetRefKey != null && parent != null) {
-      setWidgetRef(parent!, widget.widgetRefKey!, widget);
-    }
-
-    reset();
   }
 
   @override
@@ -214,6 +210,10 @@ final class SetupElementImpl extends Element implements SetupElement {
       rebuild();
       assert(renderObjectAttachingChild != null);
       lifecycleHooks(Lifecycle.mounted);
+
+      if (widget._widgetReferenceKey != null && this.parent != null) {
+        setWidgetRef(this.parent!, widget._widgetReferenceKey!, this);
+      }
     } finally {
       reset();
       resetTracking();
@@ -243,17 +243,15 @@ final class SetupElementImpl extends Element implements SetupElement {
 
     try {
       lifecycleHooks(Lifecycle.beforeUpdate);
+      super.update(newWidget);
+
       if (parent != null &&
-          widget != newWidget &&
-          newWidget.widgetRefKey != null &&
+          widget._widgetReferenceKey != null &&
+          widget._widgetReferenceKey == newWidget._widgetReferenceKey &&
           Widget.canUpdate(widget, newWidget)) {
-        setWidgetRef(parent!, newWidget.widgetRefKey!, newWidget,
-            trigger: !dirty);
-        setWidgetRef(this, SetupElementSymbol(this), newWidget,
-            trigger: !dirty);
+        triggerWidgetRef(parent!, newWidget._widgetReferenceKey!);
       }
 
-      super.update(newWidget);
       lifecycleHooks(Lifecycle.updated);
     } finally {
       reset();

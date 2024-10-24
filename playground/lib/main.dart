@@ -10,29 +10,41 @@ class App extends SetupWidget {
 
   @override
   Widget Function() setup() {
-    final viewSize = ref<Size?>(null);
-    final context = useContext();
+    final testWidget = useWidgetRef<TestWidget>(#test);
+    void handleRebuildTest() {
+      testWidget.widget?.handleRebuild();
+    }
 
-    // ⚠️ You cannot directly use context in setup
-    // because the Widget has not been mounted yet.
-    // viewSize.value = MediaQuery.maybeSizeOf(context);
-
-    onMounted(() {
-      // Can safely use context
-      viewSize.value = MediaQuery.maybeSizeOf(context);
+    onUpdated(() {
+      print('App updated');
     });
 
     return () {
-      // Context can be safely used in render
-      print(MediaQuery.maybeSizeOf(context));
-
       return MaterialApp(
         home: Scaffold(
-          body: Center(
-            child: Observer(() => Text('View Size: ${viewSize.value}')),
+          body: Center(child: TestWidget(ref: #test)),
+          floatingActionButton: FloatingActionButton(
+            onPressed: handleRebuildTest,
+            child: Text('Rebuild'),
           ),
         ),
       );
     };
   }
+}
+
+class TestWidget extends SetupWidget {
+  TestWidget({super.key, super.ref});
+  late final _version = ref(1);
+
+  @override
+  Widget Function() setup() {
+    onUpdated(() {
+      print('Test updated');
+    });
+
+    return () => Text('TestWidget rebuild: ${_version.value}');
+  }
+
+  void handleRebuild() => _version.value++;
 }
