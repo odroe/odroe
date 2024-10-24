@@ -40,6 +40,7 @@ abstract class SetupWidget extends Widget {
   @override
   @nonVirtual
   SetupElement createElement() {
+    StatefulElement;
     return SetupElementImpl(this);
   }
 }
@@ -120,6 +121,15 @@ final class SetupElementImpl extends Element implements SetupElement {
         return debugDoingBuild = true;
       }());
 
+      if (renderObjectAttachingChild != null) {
+        pauseTracking();
+        try {
+          lifecycleHooks(Lifecycle.beforeUpdate);
+        } finally {
+          resetTracking();
+        }
+      }
+
       built = build();
       debugWidgetBuilderValue(widget, built);
     } catch (exception, stack) {
@@ -143,9 +153,21 @@ final class SetupElementImpl extends Element implements SetupElement {
     }
 
     try {
+      final prevRenderAttachingChild = renderObjectAttachingChild;
       renderObjectAttachingChild =
           updateChild(renderObjectAttachingChild, built, slot);
       assert(renderObjectAttachingChild != null);
+
+      if (prevRenderAttachingChild != null) {
+        final reset = setCurrentElement(this);
+        pauseTracking();
+        try {
+          lifecycleHooks(Lifecycle.updated);
+        } finally {
+          reset();
+          resetTracking();
+        }
+      }
     } catch (exception, stack) {
       final details = reportException(
         ErrorDescription('building $this'),

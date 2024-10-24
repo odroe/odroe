@@ -2,7 +2,7 @@ name: setup
 description: >-
   Setup - A Progressive reactivity framework.
   An approachable, performant, and versatile framework for building Flutter user interfaces.
-version: 0.0.2
+version: 0.0.3
 repository: https://github.com/odroe/odroe/tree/main/pub/setup
 homepage: https://odroe.dev
 resolution: workspace
