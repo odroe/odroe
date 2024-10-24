@@ -115,9 +115,8 @@ void setWidgetRef(SetupElement parent, Symbol key, dynamic element) {
 }
 
 void triggerWidgetRef(SetupElement parent, Symbol key) {
-  _widgetRefs[parent]
-      ?.where((ref) => ref.key == key)
-      .singleOrNull
-      ?.dep
-      .trigger();
+  final ref = _widgetRefs[parent]?.where((ref) => ref.key == key).singleOrNull;
+  if (ref != null) {
+    ref.dep.trigger();
+  }
 }

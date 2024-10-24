@@ -260,25 +260,9 @@ final class SetupElementImpl extends Element implements SetupElement {
 
   @override
   void update(covariant SetupWidget newWidget) {
-    final reset = setCurrentElement(this);
-    pauseTracking();
-
-    try {
-      lifecycleHooks(Lifecycle.beforeUpdate);
-      super.update(newWidget);
-
-      if (parent != null &&
-          widget._widgetReferenceKey != null &&
-          widget._widgetReferenceKey == newWidget._widgetReferenceKey &&
-          Widget.canUpdate(widget, newWidget)) {
-        triggerWidgetRef(parent!, newWidget._widgetReferenceKey!);
-      }
-
-      lifecycleHooks(Lifecycle.updated);
-    } finally {
-      reset();
-      resetTracking();
-    }
+    super.update(newWidget);
+    assert(newWidget == widget);
+    rebuild(force: true);
   }
 
   @override

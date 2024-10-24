@@ -10,21 +10,14 @@ class App extends SetupWidget {
 
   @override
   Widget Function() setup() {
-    final testWidget = useWidgetRef<TestWidget>(#test);
-    void handleRebuildTest() {
-      testWidget.widget?.handleRebuild();
-    }
-
-    onUpdated(() {
-      print('App updated');
-    });
+    final count = ref(0);
 
     return () {
       return MaterialApp(
         home: Scaffold(
-          body: Center(child: TestWidget(ref: #test)),
+          body: Center(child: TestWidget(count.value)),
           floatingActionButton: FloatingActionButton(
-            onPressed: handleRebuildTest,
+            onPressed: () => count.value++,
             child: Text('Rebuild'),
           ),
         ),
@@ -34,17 +27,16 @@ class App extends SetupWidget {
 }
 
 class TestWidget extends SetupWidget {
-  TestWidget({super.key, super.ref});
-  late final _version = ref(1);
+  const TestWidget(this.count, {super.key, super.ref});
+
+  final int count;
 
   @override
   Widget Function() setup() {
-    onUpdated(() {
-      print('Test updated');
-    });
+    final ref = useWidgetRef<TestWidget>();
 
-    return () => Text('TestWidget rebuild: ${_version.value}');
+    return () {
+      return Text('Count: ${ref.widget?.count}');
+    };
   }
-
-  void handleRebuild() => _version.value++;
 }
