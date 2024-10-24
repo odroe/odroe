@@ -40,7 +40,6 @@ abstract class SetupWidget extends Widget {
   @override
   @nonVirtual
   SetupElement createElement() {
-    StatefulElement;
     return SetupElementImpl(this);
   }
 }
