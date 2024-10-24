@@ -12,6 +12,8 @@ class App extends SetupWidget {
   Widget Function() setup() {
     final count = ref(0);
 
+    ListView;
+
     return () {
       return MaterialApp(
         home: Scaffold(
