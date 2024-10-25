@@ -10,20 +10,29 @@ class App extends SetupWidget {
 
   @override
   Widget Function() setup() {
+    final testWidgetRef = useWidgetRef<TestWidget>();
     final count = ref(0);
 
-    ListView;
+    increment() async {
+      count.value++; // Update count value, current count value is 1
+
+      // Widget has not been updated
+      print(testWidgetRef.value?.count); // 0
+
+      await nextTick();
+      // Widget has been updated at this time
+      print(testWidgetRef.value?.count); // 1
+    }
 
     return () {
       return MaterialApp(
         home: Scaffold(
-          body: KeepAlive(
-            keepAlive: true,
-            child: obs(count, TestWidget.new),
+          body: Center(
+            child: obs(count, (value) => TestWidget(value, ref: testWidgetRef)),
           ),
           floatingActionButton: FloatingActionButton(
-            onPressed: () => count.value++,
-            child: Text('Rebuild'),
+            onPressed: increment,
+            child: Text('+1'),
           ),
         ),
       );
@@ -40,12 +49,8 @@ class TestWidget extends SetupWidget {
   Widget Function() setup() {
     final ref = useWidgetRef<TestWidget>();
 
-    onActivated(() {
-      print('onActivated');
-    });
-
     return () {
-      return Text('Count: ${ref.widget?.count}');
+      return Text('Count: ${ref.value?.count}');
     };
   }
 }

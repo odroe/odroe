@@ -30,10 +30,9 @@ abstract base class SetupElement extends Element {
 
 abstract class SetupWidget extends Widget {
   @literal
-  const SetupWidget({super.key, @mustBeConst final Symbol? ref})
-      : _widgetReferenceKey = ref;
+  const SetupWidget({super.key, final WidgetRef? ref}) : _widgetRef = ref;
 
-  final Symbol? _widgetReferenceKey;
+  final WidgetRef? _widgetRef;
 
   Widget Function() setup();
 
@@ -232,8 +231,11 @@ final class SetupElementImpl extends Element implements SetupElement {
       assert(renderObjectAttachingChild != null);
       lifecycleHooks(Lifecycle.mounted);
 
-      if (widget._widgetReferenceKey != null && this.parent != null) {
-        setWidgetRef(this.parent!, widget._widgetReferenceKey!, this);
+      final elementRef =
+          (widget._widgetRef as WidgetReferenceImpl?)?.elementRef;
+
+      if (elementRef != null && elementRef.value == null) {
+        elementRef.value = this;
       }
     } finally {
       reset();
@@ -262,6 +264,11 @@ final class SetupElementImpl extends Element implements SetupElement {
     super.update(newWidget);
     assert(newWidget == widget);
     rebuild(force: true);
+
+    final elementRef = (widget._widgetRef as WidgetReferenceImpl?)?.elementRef;
+    if (elementRef != null) {
+      triggerRef(elementRef);
+    }
   }
 
   @override
