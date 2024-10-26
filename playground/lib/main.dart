@@ -17,11 +17,11 @@ class App extends SetupWidget {
       count.value++; // Update count value, current count value is 1
 
       // Widget has not been updated
-      print(testWidgetRef.value?.count); // 0
+      // print(testWidgetRef.value?.count); // 0
 
       await nextTick();
       // Widget has been updated at this time
-      print(testWidgetRef.value?.count); // 1
+      // print(testWidgetRef.value?.count); // 1
     }
 
     return () {
@@ -48,6 +48,12 @@ class TestWidget extends SetupWidget {
   @override
   Widget Function() setup() {
     final ref = useWidgetRef<TestWidget>();
+
+    onUpdated(() {
+      print('Updated');
+    });
+
+    effect(() => print(ref.value?.count));
 
     return () {
       return Text('Count: ${ref.value?.count}');
