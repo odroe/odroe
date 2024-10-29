@@ -16,5 +16,5 @@ export 'src/setup_widget.dart' show SetupWidget, SetupElement;
 
 export 'src/widgets/observer.dart' show Observer, RefObserverUtils, obs;
 
-export 'src/helpers/use_context.dart';
+export 'src/helpers/use_context.dart' show useContext;
 export 'src/helpers/use_widget_ref.dart' show WidgetRef, useWidgetRef;

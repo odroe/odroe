@@ -17,23 +17,84 @@ import 'lifecycle.dart';
 
 void _loop() {}
 
+/// An [Element] that represents the runtime contract of a [SetupWidget].
+///
+/// Elements are the instantiation of widgets in the element tree. Element subclasses
+/// implement [setup] to define their widget build behavior.
+///
+/// When a widget is inflated into an element tree, the framework calls the widget's
+/// [createElement] method to create an element.
+///
+/// Provides access to [lifecycleHooks], [scope], and [effect] for managing the element's
+/// lifecycle and state.
+///
+/// This class should not be subclassed directly. Instead, extend [SetupWidget] to
+/// create a reusable widget component.
 abstract base class SetupElement extends Element {
+  /// Creates a new [SetupElement] with the given [widget].
   SetupElement(SetupWidget super.widget);
 
+  /// Lifecycle hooks for managing the element's lifecycle events
+  /// like mount, unmount, update etc.
   LifecycleHooks get lifecycleHooks;
+
+  /// The scope associated with this element, used for dependency
+  /// tracking and cleanup.
   Scope get scope;
+
+  /// The effect system for this element, which handles reactivity
+  /// and dependency tracking.
   Effect<void> get effect;
 
   @override
   SetupWidget get widget;
 }
 
+/// A base widget class that supports reactive setup and lifecycle hooks.
+///
+/// [SetupWidget] provides a declarative way to create reactive components
+/// that automatically track dependencies and update when those dependencies change.
+///
+/// Subclass [SetupWidget] to create a reusable widget component with:
+/// * Reactive state management via [setup] method
+/// * Lifecycle hooks for mount/unmount/update events
+/// * Dependency injection via widget refs
+/// * Automatic cleanup and dependency tracking
+///
+/// The setup widget lifecycle:
+/// 1. Widget is created and [createElement] is called
+/// 2. [setup] is invoked to initialize component logic and state
+/// 3. Component is mounted and begins tracking dependencies
+/// 4. Dependencies update triggers reactive re-rendering
+/// 5. Widget unmounts and cleanup runs automatically
+///
+/// Example:
+/// ```dart
+/// class MyWidget extends SetupWidget {
+///   @override
+///   Widget Function() setup() {
+///     // Initialize reactive state and effects here
+///     return () => Text('Hello');
+///   }
+/// }
+/// ```
 abstract class SetupWidget extends Widget {
+  /// Creates a [SetupWidget] with an optional [key] and [ref].
+  ///
+  /// The [ref] parameter allows passing a [WidgetRef] for dependency injection
+  /// and state management.
   @literal
   const SetupWidget({super.key, final WidgetRef? ref}) : _widgetRef = ref;
 
+  /// Internal reference to the widget's [WidgetRef] instance.
   final WidgetRef? _widgetRef;
 
+  /// The main setup function that defines the widget's build logic.
+  ///
+  /// This method is called during widget initialization to set up reactive state
+  /// and return a build function that creates the widget's visual representation.
+  ///
+  /// Returns a function that builds and returns the widget's [Widget] tree.
   Widget Function() setup();
 
   @override
