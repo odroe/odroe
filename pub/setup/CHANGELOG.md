@@ -1,3 +1,9 @@
+## v0.0.4
+
+- **bug**: Fixed multiple rebuilds caused by `useWidgetRef`.
+- **bug**: Fixed `useWidgetRef` not working with `effect`.
+- **docs**: Added public API documentation comments.
+
 ## v0.0.3
 
 - **refactor**: Redesign `useWidgetRef` API
