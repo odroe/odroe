@@ -37,7 +37,7 @@ Your support helps maintain and improve these packages for the community.
 
 We welcome contributions to any of the packages in this repository. Please read our contributing guidelines (link to CONTRIBUTING.md if you have one) before submitting any pull requests.
 
-[![Contributors](https://contrib.rocks/image?repo=medz/prisma-dart)](https://github.com/odroe/prisma-dart/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=odroe/odroe)](https://github.com/odroe/odroe/graphs/contributors)
 
 ## Support
 
