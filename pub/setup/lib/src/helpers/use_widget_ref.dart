@@ -34,5 +34,10 @@ WidgetRef<T> useWidgetRef<T extends SetupWidget>() {
     _ => ref<SetupElementImpl?>(null),
   };
 
-  return WidgetReferenceImpl(elementRef);
+  final widgetRef = WidgetReferenceImpl<T>(elementRef);
+  if (currentElement != null && currentElement?.widget is T) {
+    currentElement!.widgetRefs.add(widgetRef);
+  }
+
+  return widgetRef;
 }

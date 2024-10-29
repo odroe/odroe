@@ -39,7 +39,12 @@ abstract class SetupWidget extends Widget {
   @override
   @nonVirtual
   SetupElement createElement() {
-    return SetupElementImpl(this);
+    final element = SetupElementImpl(this);
+    if (_widgetRef != null) {
+      element.widgetRefs.add(_widgetRef as WidgetReferenceImpl);
+    }
+
+    return element;
   }
 }
 
@@ -88,6 +93,7 @@ final class SetupElementImpl extends Element implements SetupElement {
   late final Widget Function() build;
   late final SetupElementImpl? parent;
   late Map<Object, Object?>? provides = parent?.provides;
+  late final widgetRefs = <WidgetReferenceImpl>{};
 
   void initializeSetup() {
     effect.flags |= oref_impl.Flags.allowRecurse | oref_impl.Flags.running;
@@ -224,19 +230,18 @@ final class SetupElementImpl extends Element implements SetupElement {
     pauseTracking();
 
     try {
+      batch(() {
+        for (final ref in widgetRefs) {
+          ref.elementRef.value = this;
+        }
+      });
+
       lifecycleHooks(Lifecycle.beforeMount);
       super.mount(parent, newSlot);
       assert(renderObjectAttachingChild == null);
       rebuild();
       assert(renderObjectAttachingChild != null);
       lifecycleHooks(Lifecycle.mounted);
-
-      final elementRef =
-          (widget._widgetRef as WidgetReferenceImpl?)?.elementRef;
-
-      if (elementRef != null && elementRef.value == null) {
-        elementRef.value = this;
-      }
     } finally {
       reset();
       resetTracking();
@@ -263,12 +268,19 @@ final class SetupElementImpl extends Element implements SetupElement {
   void update(covariant SetupWidget newWidget) {
     super.update(newWidget);
     assert(newWidget == widget);
-    rebuild(force: true);
 
-    final elementRef = (widget._widgetRef as WidgetReferenceImpl?)?.elementRef;
-    if (elementRef != null) {
-      triggerRef(elementRef);
+    try {
+      effect.pause();
+      batch(() {
+        for (final ref in widgetRefs) {
+          triggerRef(ref.elementRef);
+        }
+      });
+    } finally {
+      effect.resume();
     }
+
+    rebuild(force: true);
   }
 
   @override
