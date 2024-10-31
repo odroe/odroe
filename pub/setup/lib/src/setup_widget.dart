@@ -129,6 +129,7 @@ final class SetupElementImpl extends Element implements SetupElement {
 
   SetupElementImpl(SetupWidget super.widget) {
     parent = currentElement;
+    provides = parent?.provides;
     effect = oref_impl.Effect(_loop, scheduler: scheduler);
     initializeSetup();
   }
