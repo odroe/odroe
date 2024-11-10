@@ -1,24 +1,18 @@
-name: _
-publish_to: none
+name: odroe
+description: "A new Flutter package project."
+version: 0.0.1
 
 environment:
-  sdk: ^3.5.3
+  sdk: ^3.6.0-334.3.beta
+  flutter: ">=1.17.0"
 
-workspace:
-  - playground
-  - pub/_octr
-  - pub/oinject
-  - pub/oncecall
-  - pub/oref
-  - pub/oref_flutter
-  - pub/setup
-  - odroe
-  - odroe/example
+dependencies:
+  flutter:
+    sdk: flutter
+  macros: ^0.1.3-main.0
+  meta: ^1.15.0
 
 dev_dependencies:
-  benchmark_harness: ^2.2.2
   flutter_test:
     sdk: flutter
-  oref:
-    path: pub/oref
-  test: ^1.25.8
+  flutter_lints: ^5.0.0
