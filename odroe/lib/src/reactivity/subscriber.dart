@@ -13,7 +13,7 @@ Subscriber? get activeSub => _activeSub;
 ///
 /// [sub] The subscriber to set as active
 /// Returns a function that restores the previous active subscriber when called
-void Function() setActiveSub(Subscriber sub) {
+void Function() setActiveSub(Subscriber? sub) {
   final prev = activeSub;
   _activeSub = sub;
   return () => _activeSub = prev;

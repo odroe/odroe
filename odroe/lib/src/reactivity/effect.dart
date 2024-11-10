@@ -1,7 +1,12 @@
-import 'package:odroe/src/reactivity/corss_link.dart';
+import 'package:meta/meta.dart';
 
+import 'batch.dart';
+import 'corss_link.dart';
 import 'debugger.dart';
+import 'dependency.dart';
+import 'flags.dart';
 import 'subscriber.dart';
+import 'warn.dart';
 
 bool shouldTrack = true;
 final _trackStack = <bool>[];
@@ -34,7 +39,6 @@ abstract interface class EffectOptions implements DebuggerOptions {
   @override
   void Function(DebuggerEvent event)? onTrigger;
 
-  abstract bool allowRecurse;
   void Function()? scheduler;
   void Function()? onStop;
 }
@@ -48,7 +52,12 @@ final class EffectRunner<T> {
   // T call() => effect.run();
 }
 
+final _pausedQueueEffects = Expando<bool>();
+
 final class Effect<T> implements Subscriber, EffectOptions {
+  Effect._(this.fn);
+  final T Function() fn;
+
   @override
   CrossLink? depsHead;
 
@@ -56,13 +65,10 @@ final class Effect<T> implements Subscriber, EffectOptions {
   CrossLink? depsTail;
 
   @override
-  int flags;
+  int flags = Flags.active | Flags.tracking;
 
   @override
   Subscriber? next;
-
-  @override
-  bool allowRecurse;
 
   @override
   void Function()? onStop;
@@ -76,8 +82,91 @@ final class Effect<T> implements Subscriber, EffectOptions {
   @override
   void Function()? scheduler;
 
+  @internal
+  void Function()? cleanup;
+
+  void pause() {
+    flags |= Flags.paused;
+  }
+
+  void resume() {
+    if (flags & Flags.paused != 0) return;
+    flags &= ~Flags.paused;
+
+    if (_pausedQueueEffects[this] == true) {
+      _pausedQueueEffects[this] = null;
+      trigger();
+    }
+  }
+
   @override
   void notify() {
-    // TODO: implement notify
+    if ((flags & Flags.running != 0 && flags & Flags.allowRecurse == 0) ||
+        flags & Flags.notified == 0) {
+      return;
+    }
+
+    addBatchSub(this);
+  }
+
+  T run() {
+    if (flags & Flags.active == 0) {
+      return fn();
+    }
+
+    flags |= Flags.running;
+    cleanupEffect(this);
+    prepareDeps(this);
+    enableTracking();
+
+    final resetActiveSub = setActiveSub(this);
+    try {
+      return fn();
+    } finally {
+      if (activeSub != this) {
+        warn(
+          'Active effect was not restored correctly -'
+          ' this is likely a Vue internal bug.',
+        );
+      }
+
+      cleanupDeps(this);
+      resetActiveSub();
+      resetTracking();
+
+      flags &= ~Flags.running;
+    }
+  }
+
+  void stop() {
+    if (flags & Flags.active == 0) return;
+    for (var link = depsHead; link != null; link = link.nextDep) {
+      removeSub(link);
+    }
+
+    depsHead = depsTail = null;
+    cleanupEffect(this);
+    onStop?.call();
+    flags &= ~Flags.active;
+  }
+
+  void runIfDirty() {
+    if (!dirty) return;
+    run();
+  }
+
+  bool get dirty => isDirty(this);
+}
+
+void cleanupEffect<T>(Effect<T> effect) {
+  final cleanup = effect.cleanup;
+  effect.cleanup = null;
+  if (cleanup != null) {
+    final reset = setActiveSub(null);
+    try {
+      cleanup();
+    } finally {
+      reset();
+    }
   }
 }

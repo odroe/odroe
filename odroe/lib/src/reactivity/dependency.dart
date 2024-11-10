@@ -13,6 +13,9 @@ class Dependency {
   late int version = 0;
   late CrossLink? activeLink;
   late CrossLink? subs;
+  late int subsCounter = 0;
+  late final map = <Object, Dependency>{};
+  late Object? key;
 
   CrossLink? track() {
     if (activeSub == null || !shouldTrack || activeSub == computed) {
@@ -84,4 +87,33 @@ void addSub(CrossLink link) {
 
     link.dep.subs = link;
   }
+}
+
+void prepareDeps(Subscriber sub) {
+  for (var link = sub.depsHead; link != null; link.nextDep) {
+    link.version = -1;
+    link.prevActiveSub = link.dep.activeLink;
+    link.dep.activeLink = link;
+  }
+}
+
+void cleanupDeps(Subscriber sub) {
+  CrossLink? head, tail = sub.depsTail, link = tail;
+  while (link != null) {
+    final prev = link.prevDep;
+    if (link.version == -1) {
+      if (link == tail) tail = prev;
+      removeSub(link);
+      removeDep(link);
+    } else {
+      head = link;
+    }
+
+    link.dep.activeLink = link.prevActiveSub;
+    link.prevActiveSub = null;
+    link = prev;
+  }
+
+  sub.depsHead = head;
+  sub.depsTail = tail;
 }

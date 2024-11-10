@@ -1,5 +1,5 @@
-import 'package:odroe/src/reactivity/corss_link.dart';
-
+import 'corss_link.dart';
+import 'debugger.dart';
 import 'ref.dart';
 import 'subscriber.dart';
 
@@ -25,4 +25,12 @@ final class ComputedImpl<T> implements Computed<T>, Subscriber {
   void notify() {
     // TODO: implement notify
   }
+
+  @override
+  void Function(DebuggerEvent event)? onTrack;
+
+  @override
+  void Function(DebuggerEvent event)? onTrigger;
 }
+
+void refreshComputed(ComputedImpl computed) {}
