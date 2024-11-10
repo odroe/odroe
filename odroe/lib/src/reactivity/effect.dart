@@ -150,12 +150,17 @@ final class Effect<T> implements Subscriber, EffectOptions {
     flags &= ~Flags.active;
   }
 
-  void runIfDirty() {
-    if (!dirty) return;
-    run();
-  }
-
   bool get dirty => isDirty(this);
+
+  void trigger() {
+    if (flags & Flags.paused != 0) {
+      _pausedQueueEffects[this] = true;
+    } else if (scheduler != null) {
+      scheduler!();
+    } else if (dirty) {
+      run();
+    }
+  }
 }
 
 void cleanupEffect<T>(Effect<T> effect) {
