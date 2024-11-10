@@ -27,7 +27,7 @@ void resetTracking() {
   }
 }
 
-abstract interface class ReactiveEffectOptions implements DebuggerOptions {
+abstract interface class EffectOptions implements DebuggerOptions {
   @override
   void Function(DebuggerEvent event)? onTrack;
 
@@ -39,16 +39,16 @@ abstract interface class ReactiveEffectOptions implements DebuggerOptions {
   void Function()? onStop;
 }
 
-final class ReactiveEffectRunner<T> {
-  const ReactiveEffectRunner._(this._innerEffect);
-  final ReactiveEffect<T> _innerEffect;
+final class EffectRunner<T> {
+  const EffectRunner._(this._innerEffect);
+  final Effect<T> _innerEffect;
 
-  ReactiveEffect<T> get effect => _innerEffect;
+  Effect<T> get effect => _innerEffect;
 
-  T call() => effect.run();
+  // T call() => effect.run();
 }
 
-final class ReactiveEffect<T> implements Subscriber, ReactiveEffectOptions {
+final class Effect<T> implements Subscriber, EffectOptions {
   @override
   CrossLink? depsHead;
 
