@@ -1,15 +1,8 @@
+import '../types.dart';
 import 'dependency.dart';
 
-abstract interface class Ref<T> {
-  T get value;
-}
-
-abstract interface class WritableRef<T> extends Ref<T> {
-  set value(T _);
-}
-
-final class ShallowWritableRef<T> extends WritableRef<T> {
-  ShallowWritableRef._(this.raw);
+final class WritableRefImpl<T> implements WritableRef<T> {
+  WritableRefImpl(this.raw);
 
   T raw;
   late final dep = Dependency();

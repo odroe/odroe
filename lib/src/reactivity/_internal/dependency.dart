@@ -1,14 +1,14 @@
-import 'computed.dart';
+import '../public/tracking.dart';
+import 'computed_ref_impl.dart';
 import 'corss_link.dart';
-import 'effect.dart';
-import 'flags.dart';
 import 'global_version.dart';
 import 'subscriber.dart';
+import 'utils.dart';
 
 class Dependency {
   Dependency([this.computed]);
 
-  final ComputedImpl? computed;
+  final ComputedRefImpl? computed;
 
   late int version = 0;
   late CrossLink? activeLink;
@@ -63,57 +63,4 @@ class Dependency {
   }
 
   void notify() {}
-}
-
-void addSub(CrossLink link) {
-  link.dep.version++;
-
-  if (link.sub.flags & Flags.tracking != 0) {
-    final computed = link.dep.computed;
-    if (computed != null && link.dep.subs == null) {
-      computed.flags |= Flags.tracking | Flags.dirty;
-      for (var link = computed.depsHead; link != null; link = link.nextDep) {
-        addSub(link);
-      }
-    }
-
-    final currentTail = link.dep.subs;
-    if (currentTail != link) {
-      link.prevSub = currentTail;
-      if (currentTail != null) {
-        currentTail.nextSub = link;
-      }
-    }
-
-    link.dep.subs = link;
-  }
-}
-
-void prepareDeps(Subscriber sub) {
-  for (var link = sub.depsHead; link != null; link.nextDep) {
-    link.version = -1;
-    link.prevActiveSub = link.dep.activeLink;
-    link.dep.activeLink = link;
-  }
-}
-
-void cleanupDeps(Subscriber sub) {
-  CrossLink? head, tail = sub.depsTail, link = tail;
-  while (link != null) {
-    final prev = link.prevDep;
-    if (link.version == -1) {
-      if (link == tail) tail = prev;
-      removeSub(link);
-      removeDep(link);
-    } else {
-      head = link;
-    }
-
-    link.dep.activeLink = link.prevActiveSub;
-    link.prevActiveSub = null;
-    link = prev;
-  }
-
-  sub.depsHead = head;
-  sub.depsTail = tail;
 }

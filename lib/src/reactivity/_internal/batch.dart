@@ -1,5 +1,5 @@
-import 'computed.dart';
-import 'effect.dart';
+import 'computed_ref_impl.dart';
+import 'effect_impl.dart';
 import 'flags.dart';
 import 'subscriber.dart';
 
@@ -10,7 +10,7 @@ Subscriber? _pendingComputed;
 void startBatch() => _depth++;
 void addBatchSub(Subscriber sub) {
   sub.flags |= Flags.notified;
-  if (sub is ComputedImpl) {
+  if (sub is ComputedRefImpl) {
     sub.next = _pendingComputed;
     _pendingComputed = sub;
     return;
@@ -44,7 +44,7 @@ void flushBatch() {
       element.flags &= ~Flags.notified;
       if (element.flags & Flags.active != 0) {
         try {
-          (element as Effect).trigger();
+          (element as EffectImpl).trigger();
         } catch (e) {
           err ??= e;
         }

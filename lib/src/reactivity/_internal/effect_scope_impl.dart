@@ -1,13 +1,13 @@
-import 'effect.dart';
+import '../types.dart';
 import 'warn.dart';
 
 /// The currently active effect scope
-EffectScope? _activeEffectScope;
+EffectScopeImpl? _activeEffectScope;
 
 /// An effect scope that can contain and manage effects and child scopes
-class EffectScope {
+final class EffectScopeImpl implements EffectScope {
   /// Creates a new EffectScope with the given detached state
-  EffectScope._(this.detached);
+  EffectScopeImpl(this.detached);
 
   late bool _active = true;
   late bool _paused = false;
@@ -22,11 +22,11 @@ class EffectScope {
 
   /// The child scopes of this scope
 
-  late final scopes = <EffectScope>[];
+  late final scopes = <EffectScopeImpl>[];
 
   /// The parent scope of this scope
 
-  EffectScope? parent;
+  EffectScopeImpl? parent;
 
   /// The index of this scope in its parent's scopes list
 
@@ -85,18 +85,6 @@ class EffectScope {
     }
   }
 
-  /// Activates this scope as the current active scope
-
-  void on() {
-    _activeEffectScope = this;
-  }
-
-  /// Deactivates this scope and restores the parent scope
-
-  void off() {
-    _activeEffectScope = parent;
-  }
-
   /// Stops this scope and all its effects, cleanups and child scopes
   void stop([bool fromParent = false]) {
     if (!active) return;
@@ -115,7 +103,8 @@ class EffectScope {
 
     if (!detached && parent != null && fromParent) {
       final last = switch (parent!.scopes) {
-        List<EffectScope>(isNotEmpty: true, :final removeLast) => removeLast(),
+        List<EffectScopeImpl>(isNotEmpty: true, :final removeLast) =>
+          removeLast(),
         _ => null,
       };
       if (last != null && last != this) {
@@ -131,7 +120,7 @@ class EffectScope {
 
 /// Creates a new effect scope
 EffectScope effectScope([bool detached = false]) {
-  final scope = EffectScope._(detached)..parent = _activeEffectScope;
+  final scope = EffectScopeImpl(detached)..parent = _activeEffectScope;
   if (detached && _activeEffectScope != null) {
     _activeEffectScope!.scopes.add(scope);
     scope.index = _activeEffectScope!.scopes.length - 1;
