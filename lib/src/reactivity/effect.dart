@@ -1,5 +1,3 @@
-import 'package:meta/meta.dart';
-
 import 'batch.dart';
 import 'corss_link.dart';
 import 'dependency.dart';
@@ -69,7 +67,6 @@ final class Effect<T> implements Subscriber, EffectOptions {
   @override
   void Function()? scheduler;
 
-  @internal
   void Function()? cleanup;
 
   void pause() {

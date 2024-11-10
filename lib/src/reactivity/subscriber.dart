@@ -1,5 +1,3 @@
-import 'package:meta/meta.dart';
-
 import 'corss_link.dart';
 
 /// The currently active subscriber
@@ -21,22 +19,22 @@ void Function() setActiveSub(Subscriber? sub) {
 /// A subscriber interface that can receive notifications and maintain dependencies
 abstract interface class Subscriber {
   /// Internal flags for subscriber state
-  @internal
+
   abstract int flags;
 
   /// Reference to the next subscriber in a linked list
-  @internal
+
   Subscriber? next;
 
   /// Head of the dependencies linked list
-  @internal
+
   CrossLink? depsHead;
 
   /// Tail of the dependencies linked list
-  @internal
+
   CrossLink? depsTail;
 
   /// Notifies this subscriber of changes
-  @internal
+
   void notify();
 }

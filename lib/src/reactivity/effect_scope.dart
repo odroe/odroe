@@ -1,5 +1,3 @@
-import 'package:meta/meta.dart';
-
 import 'effect.dart';
 import 'warn.dart';
 
@@ -15,23 +13,23 @@ class EffectScope {
   late bool _paused = false;
 
   /// The effects contained in this scope
-  @internal
+
   late final effects = <Effect>[];
 
   /// The cleanup functions to run when this scope is stopped
-  @internal
+
   late final cleanups = <void Function()>[];
 
   /// The child scopes of this scope
-  @internal
+
   late final scopes = <EffectScope>[];
 
   /// The parent scope of this scope
-  @internal
+
   EffectScope? parent;
 
   /// The index of this scope in its parent's scopes list
-  @internal
+
   int? index;
 
   /// Whether this scope is detached from its parent's lifecycle
@@ -88,13 +86,13 @@ class EffectScope {
   }
 
   /// Activates this scope as the current active scope
-  @internal
+
   void on() {
     _activeEffectScope = this;
   }
 
   /// Deactivates this scope and restores the parent scope
-  @internal
+
   void off() {
     _activeEffectScope = parent;
   }
