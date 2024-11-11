@@ -51,6 +51,7 @@ final class ComputedRefImpl<T> implements ComputedRef<T>, Subscriber {
     return raw!;
   }
 
+  @override
   set value(T value) {
     setter?.call(value);
     if (setter == null) {

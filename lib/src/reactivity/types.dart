@@ -5,13 +5,15 @@ abstract interface class Ref<T> {
 }
 
 /// A reference that can be both read and written to.
-abstract interface class WritableRef<T> extends Ref<T> {
+abstract interface class WritableRef<T> implements Ref<T> {
   /// Sets the value of this reference.
   set value(T _);
 }
 
 /// A reference whose value is computed from one or more other references.
-abstract interface class ComputedRef<T> implements Ref<T> {}
+abstract interface class ComputedRef<T> implements WritableRef<T> {}
+
+abstract interface class ReadonlyRef<T, S extends Ref<T>> implements Ref<T> {}
 
 abstract interface class Effect<T> {
   void Function()? scheduler;

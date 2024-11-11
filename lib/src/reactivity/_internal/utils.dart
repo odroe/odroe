@@ -6,57 +6,18 @@ import 'flags.dart';
 import 'global_version.dart';
 import 'subscriber.dart';
 
-void addSub(CrossLink link) {
-  link.dep.version++;
-
-  if (link.sub.flags & Flags.tracking != 0) {
-    final computed = link.dep.computed;
-    if (computed != null && link.dep.subs == null) {
-      computed.flags |= Flags.tracking | Flags.dirty;
-      for (var link = computed.depsHead; link != null; link = link.nextDep) {
-        addSub(link);
-      }
-    }
-
-    final currentTail = link.dep.subs;
-    if (currentTail != link) {
-      link.prevSub = currentTail;
-      if (currentTail != null) {
-        currentTail.nextSub = link;
-      }
-    }
-
-    link.dep.subs = link;
-  }
-}
-
-void prepareDeps(Subscriber sub) {
-  for (var link = sub.depsHead; link != null; link.nextDep) {
-    link.version = -1;
-    link.prevActiveSub = link.dep.activeLink;
-    link.dep.activeLink = link;
-  }
-}
-
-void cleanupDeps(Subscriber sub) {
-  CrossLink? head, tail = sub.depsTail, link = tail;
-  while (link != null) {
-    final prev = link.prevDep;
-    if (link.version == -1) {
-      if (link == tail) tail = prev;
-      removeSub(link);
-      removeDep(link);
-    } else {
-      head = link;
-    }
-
-    link.dep.activeLink = link.prevActiveSub;
-    link.prevActiveSub = null;
-    link = prev;
+// Cross Link 操作
+void removeDep(CrossLink link) {
+  final CrossLink(:prevDep, :nextDep) = link;
+  if (prevDep != null) {
+    prevDep.nextDep = nextDep;
+    link.prevDep = null;
   }
 
-  sub.depsHead = head;
-  sub.depsTail = tail;
+  if (nextDep != null) {
+    nextDep.prevDep = prevDep;
+    link.nextDep = null;
+  }
 }
 
 void removeSub(CrossLink link, [bool soft = false]) {
@@ -88,35 +49,81 @@ void removeSub(CrossLink link, [bool soft = false]) {
   }
 }
 
-void removeDep(CrossLink link) {
-  final CrossLink(:prevDep, :nextDep) = link;
-  if (prevDep != null) {
-    prevDep.nextDep = nextDep;
-    link.prevDep = null;
-  }
+void addSub(CrossLink link) {
+  link.dep.version++;
 
-  if (nextDep != null) {
-    nextDep.prevDep = prevDep;
-    link.nextDep = null;
+  if (link.sub.flags & Flags.tracking != 0) {
+    final computed = link.dep.computed;
+    if (computed != null && link.dep.subs == null) {
+      computed.flags |= Flags.tracking | Flags.dirty;
+      for (var link = computed.depsHead; link != null; link = link.nextDep) {
+        addSub(link);
+      }
+    }
+
+    final currentTail = link.dep.subs;
+    if (currentTail != link) {
+      link.prevSub = currentTail;
+      if (currentTail != null) {
+        currentTail.nextSub = link;
+      }
+    }
+
+    link.dep.subs = link;
   }
 }
 
+// 依赖操作
+void prepareDeps(Subscriber sub) {
+  for (var link = sub.depsHead; link != null; link.nextDep) {
+    link.version = -1;
+    link.prevActiveSub = link.dep.activeLink;
+    link.dep.activeLink = link;
+  }
+}
+
+void cleanupDeps(Subscriber sub) {
+  CrossLink? head, tail = sub.depsTail, link = tail;
+  while (link != null) {
+    final prev = link.prevDep;
+    if (link.version == -1) {
+      if (link == tail) tail = prev;
+      removeSub(link);
+      removeDep(link);
+    } else {
+      head = link;
+    }
+
+    link.dep.activeLink = link.prevActiveSub;
+    link.prevActiveSub = null;
+    link = prev;
+  }
+
+  sub.depsHead = head;
+  sub.depsTail = tail;
+}
+
+// Effect 操作
+void cleanupEffect<T>(EffectImpl<T> effect) {
+  final cleanup = effect.cleanup;
+  effect.cleanup = null;
+  if (cleanup != null) {
+    final reset = setActiveSub(null);
+    try {
+      cleanup();
+    } finally {
+      reset();
+    }
+  }
+}
+
+// Computed 操作
 bool refreshComputedWith(CrossLink link) {
   if (link.dep.computed != null) {
     refreshComputed(link.dep.computed!);
   }
 
   return link.dep.version != link.version;
-}
-
-bool isDirty(Subscriber sub) {
-  for (var link = sub.depsHead; link != null; link = link.nextDep) {
-    if (link.dep.version != link.version || refreshComputedWith(link)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 void refreshComputed(ComputedRefImpl computed) {
@@ -159,15 +166,13 @@ void refreshComputed(ComputedRefImpl computed) {
   }
 }
 
-void cleanupEffect<T>(EffectImpl<T> effect) {
-  final cleanup = effect.cleanup;
-  effect.cleanup = null;
-  if (cleanup != null) {
-    final reset = setActiveSub(null);
-    try {
-      cleanup();
-    } finally {
-      reset();
+// 通用方法
+bool isDirty(Subscriber sub) {
+  for (var link = sub.depsHead; link != null; link = link.nextDep) {
+    if (link.dep.version != link.version || refreshComputedWith(link)) {
+      return true;
     }
   }
+
+  return false;
 }
