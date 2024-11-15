@@ -1,4 +1,4 @@
-import '../types.dart';
+import 'types.dart';
 
 final class EffectRunnerImpl<T> implements EffectRunner<T> {
   const EffectRunnerImpl(this.effect);

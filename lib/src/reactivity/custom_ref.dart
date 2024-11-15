@@ -1,4 +1,4 @@
-import '../types.dart';
+import 'types.dart';
 
 final class CustomRef<T> implements WritableRef<T> {
   const CustomRef(this.getter, this.setter);

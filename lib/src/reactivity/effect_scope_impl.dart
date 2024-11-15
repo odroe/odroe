@@ -1,5 +1,5 @@
-import '../types.dart';
-import 'warn.dart';
+import '../warn.dart';
+import 'types.dart';
 
 /// The currently active effect scope
 EffectScopeImpl? _activeEffectScope;

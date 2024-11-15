@@ -1,4 +1,4 @@
-import '../public/tracking.dart';
+import 'tracking.dart';
 import 'computed_ref_impl.dart';
 import 'corss_link.dart';
 import 'effect_impl.dart';
@@ -6,7 +6,6 @@ import 'flags.dart';
 import 'global_version.dart';
 import 'subscriber.dart';
 
-// Cross Link 操作
 void removeDep(CrossLink link) {
   final CrossLink(:prevDep, :nextDep) = link;
   if (prevDep != null) {
@@ -73,7 +72,6 @@ void addSub(CrossLink link) {
   }
 }
 
-// 依赖操作
 void prepareDeps(Subscriber sub) {
   for (var link = sub.depsHead; link != null; link.nextDep) {
     link.version = -1;
@@ -103,7 +101,6 @@ void cleanupDeps(Subscriber sub) {
   sub.depsTail = tail;
 }
 
-// Effect 操作
 void cleanupEffect<T>(EffectImpl<T> effect) {
   final cleanup = effect.cleanup;
   effect.cleanup = null;
@@ -117,7 +114,6 @@ void cleanupEffect<T>(EffectImpl<T> effect) {
   }
 }
 
-// Computed 操作
 bool refreshComputedWith(CrossLink link) {
   if (link.dep.computed != null) {
     refreshComputed(link.dep.computed!);
@@ -166,7 +162,6 @@ void refreshComputed(ComputedRefImpl computed) {
   }
 }
 
-// 通用方法
 bool isDirty(Subscriber sub) {
   for (var link = sub.depsHead; link != null; link = link.nextDep) {
     if (link.dep.version != link.version || refreshComputedWith(link)) {

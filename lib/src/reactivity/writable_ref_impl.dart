@@ -1,5 +1,5 @@
-import '../types.dart';
 import 'dependency.dart';
+import 'types.dart';
 
 final class WritableRefImpl<T> implements WritableRef<T> {
   WritableRefImpl(this.raw);

@@ -1,4 +1,4 @@
-import '../types.dart';
+import 'types.dart';
 
 ReadonlyRef<T, S> readonly<T, S extends Ref<T>>(S ref) => _ReadonlyRefImpl(ref);
 

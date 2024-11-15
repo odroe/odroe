@@ -1,8 +1,8 @@
-import '../public/tracking.dart';
 import 'computed_ref_impl.dart';
 import 'corss_link.dart';
 import 'global_version.dart';
 import 'subscriber.dart';
+import 'tracking.dart';
 import 'utils.dart';
 
 class Dependency {

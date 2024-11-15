@@ -1,11 +1,11 @@
-import '../public/tracking.dart';
-import '../types.dart';
+import '../warn.dart';
 import 'batch.dart';
 import 'corss_link.dart';
 import 'flags.dart';
 import 'subscriber.dart';
+import 'tracking.dart';
+import 'types.dart';
 import 'utils.dart';
-import 'warn.dart';
 
 final _pausedQueueEffects = Expando<bool>();
 
