@@ -10,7 +10,7 @@ import 'utils.dart';
 final _pausedQueueEffects = Expando<bool>();
 
 final class EffectImpl<T> implements Subscriber, Effect<T> {
-  EffectImpl(this.fn);
+  EffectImpl(this.fn, {this.onStop});
 
   final T Function() fn;
   void Function()? cleanup;
@@ -38,10 +38,7 @@ final class EffectImpl<T> implements Subscriber, Effect<T> {
   }
 
   @override
-  void Function()? onStop;
-
-  @override
-  void Function()? scheduler;
+  final void Function()? onStop;
 
   @override
   bool get dirty => isDirty(this);
@@ -108,8 +105,6 @@ final class EffectImpl<T> implements Subscriber, Effect<T> {
   void trigger() {
     if (flags & Flags.paused != 0) {
       _pausedQueueEffects[this] = true;
-    } else if (scheduler != null) {
-      scheduler!();
     } else if (dirty) {
       run();
     }

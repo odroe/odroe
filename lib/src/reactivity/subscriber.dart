@@ -19,22 +19,17 @@ void Function() setActiveSub(Subscriber? sub) {
 /// A subscriber interface that can receive notifications and maintain dependencies
 abstract interface class Subscriber {
   /// Internal flags for subscriber state
-
   abstract int flags;
 
   /// Reference to the next subscriber in a linked list
-
   Subscriber? next;
 
   /// Head of the dependencies linked list
-
   CrossLink? depsHead;
 
   /// Tail of the dependencies linked list
-
   CrossLink? depsTail;
 
   /// Notifies this subscriber of changes
-
   void notify();
 }

@@ -25,23 +25,25 @@ final class EffectScopeImpl implements EffectScope {
   late final scopes = <EffectScopeImpl>[];
 
   /// The parent scope of this scope
-
   EffectScopeImpl? parent;
 
   /// The index of this scope in its parent's scopes list
-
   int? index;
 
   /// Whether this scope is detached from its parent's lifecycle
+  @override
   final bool detached;
 
   /// Whether this scope is currently active
+  @override
   bool get active => _active;
 
   /// Whether this scope is currently paused
+  @override
   bool get paused => _paused;
 
   /// Pauses this scope and all its child scopes and effects
+  @override
   void pause() {
     if (!active) return;
     _paused = true;
@@ -56,6 +58,7 @@ final class EffectScopeImpl implements EffectScope {
   }
 
   /// Resumes this scope and all its child scopes and effects
+  @override
   void resume() {
     if (!active || !paused) return;
     _paused = false;
@@ -70,6 +73,7 @@ final class EffectScopeImpl implements EffectScope {
   }
 
   /// Runs a function within this scope
+  @override
   T? run<T>(T Function() fn) {
     if (!active) {
       warn('cannot run an inactive effect scope.');
@@ -86,6 +90,7 @@ final class EffectScopeImpl implements EffectScope {
   }
 
   /// Stops this scope and all its effects, cleanups and child scopes
+  @override
   void stop([bool fromParent = false]) {
     if (!active) return;
 
@@ -115,6 +120,16 @@ final class EffectScopeImpl implements EffectScope {
 
     parent = null;
     _active = false;
+  }
+
+  @override
+  void off() {
+    _activeEffectScope = parent;
+  }
+
+  @override
+  void on() {
+    _activeEffectScope = this;
   }
 }
 
