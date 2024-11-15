@@ -69,7 +69,7 @@ final class OdroeElementImpl extends ComponentElement implements OdroeElement {
 
     final reset = setActiveSub(effect);
     try {
-      return render();
+      return built = render();
     } finally {
       shouldRebuild = false;
       reset();
