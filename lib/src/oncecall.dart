@@ -9,13 +9,17 @@ T oncecall<T>(T Function() fn) {
   }
 
   final cache = _weekResult[currentElement!] ??= [];
-  if (cache[currentCallIndex] is T) {
-    return cache[currentCallIndex];
+  T? result = cache.elementAtOrNull(currentCallIndex);
+
+  if (result is T) {
+    return result;
   } else if (cache.length > currentCallIndex) {
     cache.length = currentCallIndex + 1;
   }
 
-  final result = cache[currentCallIndex] = fn();
+  result = fn();
+  cache.insert(currentCallIndex, result);
+
   currentCallIndex++;
 
   return result;

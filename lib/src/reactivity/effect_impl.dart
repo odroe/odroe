@@ -14,6 +14,7 @@ final class EffectImpl<T> implements Subscriber, Effect<T> {
 
   final T Function() fn;
   void Function()? cleanup;
+  void Function()? scheduler;
 
   @override
   CrossLink? depsHead;
@@ -29,12 +30,10 @@ final class EffectImpl<T> implements Subscriber, Effect<T> {
 
   @override
   void notify() {
-    if ((flags & Flags.running != 0 && flags & Flags.allowRecurse == 0) ||
-        flags & Flags.notified == 0) {
+    if (flags & Flags.running != 0 && flags & Flags.allowRecurse == 0) {
       return;
     }
-
-    addBatchSub(this);
+    if (flags & Flags.notified == 0) addBatchSub(this);
   }
 
   @override
@@ -105,6 +104,8 @@ final class EffectImpl<T> implements Subscriber, Effect<T> {
   void trigger() {
     if (flags & Flags.paused != 0) {
       _pausedQueueEffects[this] = true;
+    } else if (scheduler != null) {
+      scheduler!();
     } else if (dirty) {
       run();
     }

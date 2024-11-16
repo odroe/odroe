@@ -29,6 +29,7 @@ abstract interface class Effect<T> {
 abstract interface class EffectRunner<T> {
   Effect<T> get effect;
   T call();
+  T get value;
 }
 
 abstract interface class EffectScope {

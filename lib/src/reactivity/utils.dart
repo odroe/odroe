@@ -50,6 +50,7 @@ void removeSub(CrossLink link, [bool soft = false]) {
 
 void addSub(CrossLink link) {
   link.dep.version++;
+  link.dep.subsCounter++;
 
   if (link.sub.flags & Flags.tracking != 0) {
     final computed = link.dep.computed;

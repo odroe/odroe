@@ -1,25 +1,31 @@
-// import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:odroe/odroe.dart';
 
-// void main() {
-//   runApp(const ExampleApp());
-// }
+void main() {
+  runApp(const ExampleApp());
+}
 
-// class ExampleApp extends OdroeWidget {
-//   const ExampleApp({super.key});
+class ExampleApp extends OdroeWidget {
+  const ExampleApp({super.key});
 
-//   @override
-//   Widget build() {
-//     final count = ref(0);
-//     final context = useContext();
+  @override
+  WidgetRender setup() {
+    final count = ref(0);
 
-//     print(count.hashCode);
+    effect(() {
+      print(count.value);
+    });
 
-//     // print(MediaQuery.sizeOf(context));
-
-//     return MaterialApp(
-//       home: const Scaffold(
-//         body: Center(child: Text('Home')),
-//       ),
-//     );
-//   }
-// }
+    return h(
+      () => MaterialApp(
+        home: Scaffold(
+          body: Center(child: Text('Count: ${count.value}')),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () => count.value++,
+            child: const Icon(Icons.plus_one),
+          ),
+        ),
+      ),
+    );
+  }
+}

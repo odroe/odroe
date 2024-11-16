@@ -1,3 +1,4 @@
+import 'batch.dart';
 import 'computed_ref_impl.dart';
 import 'corss_link.dart';
 import 'global_version.dart';
@@ -11,11 +12,11 @@ class Dependency {
   final ComputedRefImpl? computed;
 
   late int version = 0;
-  late CrossLink? activeLink;
-  late CrossLink? subs;
+  CrossLink? activeLink;
+  CrossLink? subs;
   late int subsCounter = 0;
   late final map = <Object, Dependency>{};
-  late Object? key;
+  Object? key;
 
   CrossLink? track() {
     if (activeSub == null || !shouldTrack || activeSub == computed) {
@@ -62,5 +63,17 @@ class Dependency {
     notify();
   }
 
-  void notify() {}
+  void notify() {
+    startBatch();
+    try {
+      for (var link = subs; link != null; link = link.prevSub) {
+        link.sub.notify();
+        if (link.sub is ComputedRefImpl) {
+          (link.sub as ComputedRefImpl).dep.notify();
+        }
+      }
+    } finally {
+      flushBatch();
+    }
+  }
 }

@@ -7,6 +7,7 @@ import 'reactivity/effect_scope_impl.dart';
 import 'reactivity/subscriber.dart';
 import 'reactivity/types.dart';
 import 'render.dart';
+import 'scheduler.dart';
 
 abstract class OdroeWidget extends Widget {
   const OdroeWidget({super.key});
@@ -23,12 +24,14 @@ abstract class OdroeWidget extends Widget {
 abstract final class OdroeElement implements Element {}
 
 OdroeElementImpl? currentElement;
+int _evalElementId = 0;
 
 final class OdroeElementImpl extends ComponentElement implements OdroeElement {
-  OdroeElementImpl(OdroeWidget super.widget) {
+  OdroeElementImpl(OdroeWidget super.widget) : id = _evalElementId++ {
     final prevElement = currentElement;
     final prevCallIndex = currentCallIndex;
     final resetActiveSub = setActiveSub(effect);
+
     currentElement = this;
     scope.on();
 
@@ -46,16 +49,21 @@ final class OdroeElementImpl extends ComponentElement implements OdroeElement {
   late final EffectImpl effect = () {
     scope.on();
     try {
-      // TODO scheduler
-      return EffectImpl(markNeedsBuild);
+      // return EffectImpl(() => queueJob(job));
+      return EffectImpl(() {});
     } finally {
       scope.off();
     }
   }();
 
+  final int id;
+  late final job = SchedulerJob(id, () {
+    // print(111);
+    if (effect.dirty || dirty) markNeedsBuild();
+  });
+
   late WidgetRender render;
   late Widget built;
-  bool shouldRebuild = true;
 
   @override
   OdroeWidget get widget {
@@ -65,14 +73,11 @@ final class OdroeElementImpl extends ComponentElement implements OdroeElement {
 
   @override
   Widget build() {
-    if (!shouldRebuild) return built;
-
-    final reset = setActiveSub(effect);
+    // final reset = setActiveSub(effect);
     try {
-      return built = render();
+      return render();
     } finally {
-      shouldRebuild = false;
-      reset();
+      // reset();
     }
   }
 }

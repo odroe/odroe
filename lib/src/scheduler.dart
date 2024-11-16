@@ -6,9 +6,9 @@ abstract final class SchedulerJobFlags {
 }
 
 final class SchedulerJob {
-  SchedulerJob(this.fn, {this.id});
+  SchedulerJob(this.id, this.fn);
 
-  final num? id;
+  final num id;
   final void Function() fn;
   int flags = 0;
 }
@@ -35,10 +35,9 @@ int findInsertionIndex(num id) {
   while (start < end) {
     final middle = (start + end) >>> 1;
     final middleJob = _queueJobs[middle];
-    final middleJobId = getJobId(middleJob);
 
-    if (middleJobId < id ||
-        (middleJobId == id && middleJob.flags & SchedulerJobFlags.pre != 0)) {
+    if (middleJob.id < id ||
+        (middleJob.id == id && middleJob.flags & SchedulerJobFlags.pre != 0)) {
       start = middle + 1;
     } else {
       end = middle;
@@ -48,29 +47,28 @@ int findInsertionIndex(num id) {
   return start;
 }
 
-num getJobId(SchedulerJob job) {
-  if (job.id != null) {
-    return job.id!;
-  } else if (job.flags & SchedulerJobFlags.pre != 0) {
-    return -1;
-  }
-
-  return double.infinity;
-}
-
 void queueJob(SchedulerJob job) {
   if (job.flags & SchedulerJobFlags.queued != 0) return;
 
-  final jobId = getJobId(job);
   final lastJob = _queueJobs.lastOrNull;
   if (lastJob == null ||
-      (job.flags & SchedulerJobFlags.pre == 0 && jobId > getJobId(lastJob))) {
+      (job.flags & SchedulerJobFlags.pre == 0 && job.id > lastJob.id)) {
     _queueJobs.add(job);
   } else {
-    _queueJobs.insert(findInsertionIndex(jobId), job);
+    _queueJobs.insert(findInsertionIndex(job.id), job);
   }
 
   job.flags |= SchedulerJobFlags.queued;
+  queueFlush();
+}
+
+void queuePostJob(SchedulerJob job) {
+  if (_activePostJobs != null) {
+    return _activePostJobs!.add(job);
+  } else if (job.flags & SchedulerJobFlags.queued == 0) {
+    _pendingPostJobs.add(job);
+  }
+
   queueFlush();
 }
 
