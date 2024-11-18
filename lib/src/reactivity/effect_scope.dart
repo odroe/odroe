@@ -1,0 +1,3 @@
+EffectScope? activeEffectScupe;
+
+class EffectScope {}
