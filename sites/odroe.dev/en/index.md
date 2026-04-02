@@ -1,5 +1,19 @@
 ---
 title: Build practical open source tools with Odroe.
+description: Odroe is the public brand and project entry behind practical open source tools, experiments, and developer-facing work from Seven Du.
+head:
+  - - meta
+    - property: og:title
+      content: Odroe | Build practical open source tools with Odroe.
+  - - meta
+    - property: og:description
+      content: Odroe is the public brand and project entry behind practical open source tools, experiments, and developer-facing work from Seven Du.
+  - - meta
+    - name: twitter:title
+      content: Odroe | Build practical open source tools with Odroe.
+  - - meta
+    - name: twitter:description
+      content: Odroe is the public brand and project entry behind practical open source tools, experiments, and developer-facing work from Seven Du.
 layout: home
 hero:
   name: Build practical open source tools with Odroe.
