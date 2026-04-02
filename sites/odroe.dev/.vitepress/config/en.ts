@@ -3,14 +3,14 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   lang: "en-US",
   description:
-    "For reactive programming and dependency injection in Dart and Flutter applications, as well as various utilities and tools.",
+    "Spry-first Dart infrastructure for file-routed servers, cross-runtime deployment, and practical AI-assisted DX.",
   head: [
     [
       "meta",
       {
         property: "og:title",
         content:
-          "Odroe | For reactive programming and dependency injection in Dart and Flutter applications, as well as various utilities and tools.",
+          "Odroe | Spry-first Dart infrastructure across runtimes.",
       },
     ],
   ],

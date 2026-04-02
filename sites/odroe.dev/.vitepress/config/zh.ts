@@ -3,14 +3,14 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   lang: "zh-Hans",
   description:
-    "为 Dart 和 Flutter 应用程序中的反应式编程和依赖注入以及各种实用程序和工具。",
+    "以 Spry 为先的 Dart 基础设施，聚焦文件路由服务端、多运行时交付与务实的 AI 辅助开发体验。",
   head: [
     [
       "meta",
       {
         property: "og:title",
         content:
-          "Odroe | 为 Dart 和 Flutter 应用程序中的反应式编程和依赖注入以及各种实用程序和工具。",
+          "Odroe | 面向多运行时交付的 Spry 优先 Dart 基础设施。",
       },
     ],
   ],

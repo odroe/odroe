@@ -3,45 +3,38 @@ title: Packages
 description: Prepared for developers, quickly pick your favorite Package.
 layout: home
 hero:
-  name: Packages
-  tagline: Carefully crafted, each package makes you enjoy coding ❤️
+  name: Start with Spry
+  tagline: Build the file-routed server first, then add Oref and supporting packages when you need reactive foundations or focused app tooling.
   actions:
     - theme: brand
-      text: ♥ Support @medz
-      link: https://github.com/sponsors/medz
+      text: Start with Spry
+      link: https://spry.medz.dev/getting-started
     - theme: alt
       text: Explore on pub.dev
       link: https://pub.dev/publishers/odroe.dev
 features:
-  - title: Prisma Dart
-    details: The next generation ORM for Dart/Flutter, automatically generates type-safe database clients for you.
-    link: https://prisma.pub
-    linkText: Visit Prisma Dart's website
   - title: Spry
-    details: A lightweight composable Web framework.
+    details: File-routing Dart server framework for teams that want one codebase across Dart VM, Node.js, Bun, Deno, Cloudflare Workers, Vercel, and Netlify.
     link: https://spry.fun
-    linkText: Visit Spry's official website
+    linkText: Visit Spry
+  - title: Oref
+    details: Low-invasive reactivity for Dart and Flutter when you need state, effects, and derived data without a large runtime abstraction layer.
+    link: /packages/oref
+    linkText: Learn more
   - title: Oinject
-    details: A simple yet powerful dependency injection package. Transparent data, simple state management, smooth replacement for Provider and InheritedWidget.
+    details: A focused dependency injection package for wiring services and shared state without heavy ceremony.
     link: /packages/oinject
     linkText: Learn more
   - title: Oncecall
-    details: A memoization tool for Flutter Widget.build method.
+    details: Memoization utilities for Flutter build flows when you need stable initialization around widget context.
     link: /packages/oncecall
     linkText: Learn more
-  - title: >-
-      <div class="flex flex-row items-center justify-between">
-        <span>Oref</span>
-        <span class="text-xs text-green-500">
-          <span class="text-red-400">♥</span>
-          Vue.js
-        </span>
-      </div>
-    details: A lightweight, high-performance reactive state and programming library that provides a concise and powerful method to manage application state and side effects.
-    link: /packages/oref
-    linkText: Learn more
   - title: Oref Flutter
-    details: A bridge to use Oref with Flutter, enjoy reactive state in Flutter.
+    details: Flutter bindings for Oref so reactive state can stay close to widgets without replacing your entire app model.
     link: /docs/oref/get-started
     linkText: Getting Started
+  - title: Prisma Dart
+    details: Type-safe database tooling for Dart projects that still need an ORM in the broader Odroe package lineup.
+    link: https://prisma.pub
+    linkText: Visit Prisma Dart
 ---
