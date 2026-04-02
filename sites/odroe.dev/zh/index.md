@@ -1,5 +1,19 @@
 ---
 title: 通过 Odroe 构建实用的开源工具。
+description: Odroe 是 Seven Du 面向外部的品牌与项目入口，用来展示正在推进的开发者工具、开源项目和公开更新。
+head:
+  - - meta
+    - property: og:title
+      content: Odroe | 通过 Odroe 构建实用的开源工具。
+  - - meta
+    - property: og:description
+      content: Odroe 是 Seven Du 面向外部的品牌与项目入口，用来展示正在推进的开发者工具、开源项目和公开更新。
+  - - meta
+    - name: twitter:title
+      content: Odroe | 通过 Odroe 构建实用的开源工具。
+  - - meta
+    - name: twitter:description
+      content: Odroe 是 Seven Du 面向外部的品牌与项目入口，用来展示正在推进的开发者工具、开源项目和公开更新。
 layout: home
 hero:
   name: 通过 Odroe 构建实用的开源工具。

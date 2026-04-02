@@ -25,7 +25,33 @@ export default defineConfig({
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "Odroe" }],
     ["meta", { property: "og:url", content: "https://odroe.dev/" }],
-    ["meta", { property: "og:image", content: "https://odroe.dev/logo.png" }],
+    [
+      "meta",
+      { property: "og:image", content: "https://odroe.dev/social-preview.png" },
+    ],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    [
+      "meta",
+      {
+        property: "og:image:alt",
+        content: "Odroe project entry for practical open source tools by Seven Du.",
+      },
+    ],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:site", content: "@OdroeDev" }],
+    ["meta", { name: "twitter:creator", content: "@OdroeDev" }],
+    [
+      "meta",
+      { name: "twitter:image", content: "https://odroe.dev/social-preview.png" },
+    ],
+    [
+      "meta",
+      {
+        name: "twitter:image:alt",
+        content: "Odroe project entry for practical open source tools by Seven Du.",
+      },
+    ],
   ],
 
   themeConfig: {
