@@ -3,14 +3,14 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   lang: "zh-Hans",
   description:
-    "Odroe 现阶段只保留官网入口。历史 packages 与实验项目已转为归档视角，不再作为持续维护对象。",
+    "Odroe 是 Seven Du 面向外部的品牌与项目入口，用来承接开源工具、实验项目和开发者产品方向。",
   head: [
     [
       "meta",
       {
         property: "og:title",
         content:
-          "Odroe | 仅保留官网入口",
+          "Odroe | 开源品牌与项目入口",
       },
     ],
   ],

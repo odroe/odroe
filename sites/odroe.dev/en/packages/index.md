@@ -1,22 +1,22 @@
 ---
-title: Archive
-description: Historical package pages are retained only as archival context. They are not actively maintained.
+title: Projects
+description: Explore Odroe projects, libraries, and public entry points that help you understand what to try and follow next.
 layout: home
 hero:
-  name: Archived package pages
-  tagline: Odroe no longer maintains this package collection as an active product surface. The website remains, but historical packages and experiments are outside the current maintenance scope.
+  name: Projects and libraries
+  tagline: Start from the projects and packages that best explain what Odroe is building, experimenting with, and sharing in public.
   actions:
     - theme: brand
-      text: Visit GitHub
-      link: https://github.com/odroe
+      text: View Spry
+      link: https://github.com/medz/spry
     - theme: alt
-      text: Follow on X
-      link: https://x.com/OdroeDev
+      text: View Oref
+      link: https://github.com/medz/oref
 features:
-  - title: No active maintenance
-    details: These package pages remain only so older links do not break abruptly. They should not be read as active roadmap, support, or compatibility commitments.
-  - title: Website remains the only active surface
-    details: Current CCO maintenance for Odroe is limited to the website and organization entry assets, not the historical package ecosystem.
-  - title: Legacy material may be removed later
-    details: Outdated package and experiment pages are candidates for deletion or archival once the remaining public entry points are cleaned up.
+  - title: Spry
+    details: File-routed Dart server tooling and framework work that currently gives Odroe the clearest flagship project story.
+  - title: Oref
+    details: Reactive foundations and supporting building blocks that connect to the broader developer tooling direction.
+  - title: Brand and public entry
+    details: This page should help visitors understand where the main repositories live, what is worth following, and how projects relate to the Odroe brand.
 ---

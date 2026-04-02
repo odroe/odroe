@@ -3,14 +3,14 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   lang: "en-US",
   description:
-    "Odroe is now maintained as a website-only public entry. Historical packages and experiments are archived and no longer actively maintained.",
+    "Odroe is the public brand and project entry behind practical open source tools, experiments, and developer-facing work from Seven Du.",
   head: [
     [
       "meta",
       {
         property: "og:title",
         content:
-          "Odroe | Website-only public entry",
+          "Odroe | Open source brand and project entry",
       },
     ],
   ],
