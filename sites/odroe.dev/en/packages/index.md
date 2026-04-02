@@ -1,40 +1,22 @@
 ---
-title: Packages
-description: Prepared for developers, quickly pick your favorite Package.
+title: Archive
+description: Historical package pages are retained only as archival context. They are not actively maintained.
 layout: home
 hero:
-  name: Start with Spry
-  tagline: Build the file-routed server first, then add Oref and supporting packages when you need reactive foundations or focused app tooling.
+  name: Archived package pages
+  tagline: Odroe no longer maintains this package collection as an active product surface. The website remains, but historical packages and experiments are outside the current maintenance scope.
   actions:
     - theme: brand
-      text: Start with Spry
-      link: https://spry.medz.dev/getting-started
+      text: Visit GitHub
+      link: https://github.com/odroe
     - theme: alt
-      text: Explore on pub.dev
-      link: https://pub.dev/publishers/odroe.dev
+      text: Follow on X
+      link: https://x.com/OdroeDev
 features:
-  - title: Spry
-    details: File-routing Dart server framework for teams that want one codebase across Dart VM, Node.js, Bun, Deno, Cloudflare Workers, Vercel, and Netlify.
-    link: https://spry.fun
-    linkText: Visit Spry
-  - title: Oref
-    details: Low-invasive reactivity for Dart and Flutter when you need state, effects, and derived data without a large runtime abstraction layer.
-    link: /packages/oref
-    linkText: Learn more
-  - title: Oinject
-    details: A focused dependency injection package for wiring services and shared state without heavy ceremony.
-    link: /packages/oinject
-    linkText: Learn more
-  - title: Oncecall
-    details: Memoization utilities for Flutter build flows when you need stable initialization around widget context.
-    link: /packages/oncecall
-    linkText: Learn more
-  - title: Oref Flutter
-    details: Flutter bindings for Oref so reactive state can stay close to widgets without replacing your entire app model.
-    link: /docs/oref/get-started
-    linkText: Getting Started
-  - title: Prisma Dart
-    details: Type-safe database tooling for Dart projects that still need an ORM in the broader Odroe package lineup.
-    link: https://prisma.pub
-    linkText: Visit Prisma Dart
+  - title: No active maintenance
+    details: These package pages remain only so older links do not break abruptly. They should not be read as active roadmap, support, or compatibility commitments.
+  - title: Website remains the only active surface
+    details: Current CCO maintenance for Odroe is limited to the website and organization entry assets, not the historical package ecosystem.
+  - title: Legacy material may be removed later
+    details: Outdated package and experiment pages are candidates for deletion or archival once the remaining public entry points are cleaned up.
 ---
