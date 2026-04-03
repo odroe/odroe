@@ -41,4 +41,5 @@ features:
 ## 跟进公开更新
 
 - 关注 [@OdroeDev](https://x.com/OdroeDev) 获取短更新与公开进展。
+- 阅读 [/zh/notes](/zh/notes/) 了解这些项目为什么会被放到当前主线，以及后续内容会如何展开。
 - 通过 [odroe GitHub](https://github.com/odroe) 查看品牌资产与公开入口，再按 Spry、Alien Signals、Oref 这三条线理解当前的项目组合。
