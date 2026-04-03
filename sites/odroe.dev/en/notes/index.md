@@ -1,14 +1,14 @@
 ---
 title: Notes
-description: Long-form project notes from Odroe, starting with the current public line around Spry, Alien Signals, and Oref.
+description: Long-form project notes from Odroe that explain how the current public project line fits together, starting with Spry, Alien Signals, and Oref.
 layout: home
 hero:
   name: Read the longer project thread
-  tagline: Use these notes to understand why the current Odroe project line starts with Spry, extends through Alien Signals, and stays connected to Oref. Medium remains a mirrored channel, but the canonical public entry lives here on odroe.dev.
+  tagline: Use these notes to understand how the current Odroe project line fits together, why Spry leads the entry, and how Alien Signals, Oref, and older reference docs relate to one another. Medium remains a mirrored channel, but the canonical public entry lives here on odroe.dev.
   actions:
     - theme: brand
-      text: Read the first note
-      link: /notes/spry-is-the-center-of-my-current-dart-oss-work
+      text: Read the portfolio note
+      link: /notes/how-the-current-odroe-projects-fit-together
     - theme: alt
       text: Follow on Medium
       link: https://shiwei.medium.com/
@@ -25,7 +25,8 @@ features:
 
 | Note | Why it matters | Start here |
 | --- | --- | --- |
-| [Spry Is the Center of My Current Dart OSS Work](/notes/spry-is-the-center-of-my-current-dart-oss-work) | Establishes the current public center of gravity, explains where Alien Signals and Oref fit, and gives a clearer long-form entry than a repo list alone. | [Read the note](/notes/spry-is-the-center-of-my-current-dart-oss-work) |
+| [How the Current Odroe Projects Fit Together](/notes/how-the-current-odroe-projects-fit-together) | Explains which projects represent the current public line, why older package docs still exist, and how to choose the right starting point. | [Read the note](/notes/how-the-current-odroe-projects-fit-together) |
+| [Spry Is the Center of My Current Dart OSS Work](/notes/spry-is-the-center-of-my-current-dart-oss-work) | Establishes the current center of gravity and explains why Spry leads the public project entry. | [Read the note](/notes/spry-is-the-center-of-my-current-dart-oss-work) |
 
 ## Follow the longer thread
 

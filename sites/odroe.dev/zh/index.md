@@ -29,8 +29,8 @@ hero:
       text: 关注 X
       link: https://x.com/OdroeDev
   what-is-new:
-    title: 当前长文：为什么 Spry 是我当前 Dart 开源工作的中心。
-    link: /zh/notes/spry-is-the-center-of-my-current-dart-oss-work
+    title: 当前长文：当前 Odroe 项目组合是如何串起来的。
+    link: /zh/notes/how-the-current-odroe-projects-fit-together
 features:
   - icon: >-
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">

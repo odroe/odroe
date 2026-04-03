@@ -29,8 +29,8 @@ hero:
       text: Follow on X
       link: https://x.com/OdroeDev
   what-is-new:
-    title: "Current note: why Spry sits at the center of the current Dart OSS line."
-    link: /notes/spry-is-the-center-of-my-current-dart-oss-work
+    title: "Current note: how the current Odroe projects fit together."
+    link: /notes/how-the-current-odroe-projects-fit-together
 features:
   - icon: >-
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
