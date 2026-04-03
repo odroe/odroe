@@ -1,20 +1,20 @@
 ---
 title: Oncecall
-description: A memoization tool for Flutter Widget.build method.
+description: Oncecall remains on odroe.dev as reference documentation for Flutter Widget.build memoization patterns.
 head:
   - - meta
     - property: og:title
-      content: Odroe | Oncecall is a memoization tool for Flutter Widget.build method
+      content: Odroe | Oncecall reference docs for Flutter Widget.build memoization
 layout: home
 hero:
-  name: Oncecall
-  tagline: A memoization tool for Flutter Widget.build method.
+  name: Oncecall reference docs
+  tagline: Oncecall stays available here as reference documentation for Flutter Widget.build memoization, while Odroe's current public project entry has moved to the broader projects page.
   actions:
     - theme: brand
-      text: Read Documentation →
+      text: Read reference docs →
       link: /docs/oncecall.md
     - theme: alt
-      text: Back to Projects
+      text: Browse current projects
       link: /packages/
     - theme: alt
       text: View on pub.dev
@@ -24,18 +24,24 @@ features:
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
         <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
       </svg>
-    title: Unified
-    details: Allows you to initialize data in the build method without worrying about losing it after rebuilding.
+    title: Reference package
+    details: This page keeps Oncecall discoverable for teams that still need the package docs, examples, and package metadata.
   - icon: >-
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
       </svg>
     title: Memoization
-    details: Automatically remembers calculated values according to your call order. Reuses them when the Widget is rebuilt.
+    details: Automatically remembers calculated values according to call order and reuses them when the widget rebuilds.
   - icon: >-
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
       </svg>
-    title: Magic
-    details: When your Widget is destroyed, the memorized content disappears with it. No polluted data is retained.
+    title: Lifecycle scoped
+    details: When your widget is destroyed, the memorized content disappears with it, so no polluted data is retained.
 ---
+
+## Reference status
+
+- Oncecall remains on odroe.dev as supporting documentation, not as one of the current flagship project entries.
+- If you want the projects Odroe is actively pushing in public, start from [/packages](/packages/) instead.
+- If you already use Oncecall, the docs and package link above remain the fastest way to continue.
