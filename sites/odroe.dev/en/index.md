@@ -62,5 +62,5 @@ features:
 
 - Visit [/packages](/packages/) to start from Spry, Alien Signals, and Oref before exploring older reference docs.
 - Follow [@OdroeDev](https://x.com/OdroeDev) for short updates and public progress.
-- Read longer project notes and release context on [Medium](https://shiwei.medium.com/).
+- Read longer project notes on [/notes](/notes/), then use [Medium](https://shiwei.medium.com/) for mirrored long-form updates.
 - Browse [GitHub](https://github.com/odroe) for organization assets, then use [Spry](https://github.com/medz/spry), [Alien Signals](https://github.com/medz/alien-signals-dart), and [Oref](https://github.com/medz/oref) as the clearest current project entry points.

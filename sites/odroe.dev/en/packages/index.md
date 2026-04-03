@@ -41,4 +41,5 @@ features:
 ## Follow the public thread
 
 - Watch [@OdroeDev](https://x.com/OdroeDev) for short updates and public progress.
+- Read [/notes](/notes/) for long-form context on why these projects fit together and where the work is heading next.
 - Use [odroe on GitHub](https://github.com/odroe) for brand assets and public entry points, then branch into Spry, Alien Signals, and Oref based on the part of the stack you want to explore first.

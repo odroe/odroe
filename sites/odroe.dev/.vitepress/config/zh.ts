@@ -19,6 +19,7 @@ export default defineConfig({
     nav: [
       { text: "首页", link: "/zh/" },
       { text: "项目", link: "/zh/packages/" },
+      { text: "长文", link: "/zh/notes/" },
       { text: "GitHub", link: "https://github.com/odroe" },
       { text: "Medium", link: "https://shiwei.medium.com/" },
     ],

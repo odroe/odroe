@@ -19,6 +19,7 @@ export default defineConfig({
     nav: [
       { text: "Home", link: "/" },
       { text: "Projects", link: "/packages/" },
+      { text: "Notes", link: "/notes/" },
       { text: "GitHub", link: "https://github.com/odroe" },
       { text: "Medium", link: "https://shiwei.medium.com/" },
     ],
