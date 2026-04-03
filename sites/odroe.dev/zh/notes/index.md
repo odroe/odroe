@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: 阅读首篇长文
-      link: /notes/spry-is-the-center-of-my-current-dart-oss-work
+      link: /zh/notes/spry-is-the-center-of-my-current-dart-oss-work
     - theme: alt
       text: 查看 Medium
       link: https://shiwei.medium.com/
@@ -25,7 +25,7 @@ features:
 
 | 标题 | 作用 | 从这里开始 |
 | --- | --- | --- |
-| [Spry Is the Center of My Current Dart OSS Work](/notes/spry-is-the-center-of-my-current-dart-oss-work) | 解释为什么当前公开主线以 Spry 为中心，以及 Alien Signals 与 Oref 如何组成同一条项目线。 | [阅读长文](/notes/spry-is-the-center-of-my-current-dart-oss-work) |
+| [Spry 是我当前 Dart 开源工作的中心](/zh/notes/spry-is-the-center-of-my-current-dart-oss-work) | 解释为什么当前公开主线以 Spry 为中心，以及 Alien Signals 与 Oref 如何组成同一条项目线。 | [阅读长文](/zh/notes/spry-is-the-center-of-my-current-dart-oss-work) |
 
 ## 如何继续跟进
 

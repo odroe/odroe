@@ -7,6 +7,8 @@ This note explains the current center of gravity behind my Dart open-source work
 
 Use it as the long-form companion to the current project entry on [odroe.dev](/) and [/packages](/packages/).
 
+Prefer Chinese? Read the [Chinese version](/zh/notes/spry-is-the-center-of-my-current-dart-oss-work).
+
 ## Why this line needed to become explicit
 
 Over the last few years, I shipped many open-source experiments across Dart and Flutter.
