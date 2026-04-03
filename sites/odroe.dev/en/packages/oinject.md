@@ -14,8 +14,8 @@ hero:
       text: Read the Docs →
       link: /docs/oinject.md
     - theme: alt
-      text: View on GitHub
-      link: https://github.com/odroe/odroe/tree/main/pub/oinject
+      text: Back to Projects
+      link: /packages/
     - theme: alt
       text: View on pub.dev
       link: https://pub.dev/packages/oinject

@@ -15,7 +15,7 @@ hero:
       link: /docs/oref/get-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/odroe/odroe/tree/main/pub/oref
+      link: https://github.com/medz/oref
     - theme: alt
       text: View on pub.dev
       link: https://pub.dev/packages/oref

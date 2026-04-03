@@ -15,7 +15,7 @@ hero:
       link: /zh/docs/oref/get-started.md
     - theme: alt
       text: 在 GitHub 查看
-      link: https://github.com/odroe/odroe/tree/main/pub/oref
+      link: https://github.com/medz/oref
     - theme: alt
       text: 在 pub.dev 查看
       link: https://pub.dev/packages/oref

@@ -1,22 +1,42 @@
 ---
 title: Projects
-description: Explore Odroe projects, libraries, and public entry points that help you understand what to try and follow next.
+description: Start from Spry and Oref, then use the reference package docs still hosted on this site to understand supporting experiments and utilities.
 layout: home
 hero:
-  name: Projects and libraries
-  tagline: Start from the projects and packages that best explain what Odroe is building, experimenting with, and sharing in public.
+  name: Start from the projects that matter now
+  tagline: Spry and Oref currently give the clearest picture of what Odroe is building in public. This page also keeps older package docs discoverable without pretending every historical package is equally active.
   actions:
     - theme: brand
-      text: View Spry
+      text: View Spry on GitHub
       link: https://github.com/medz/spry
     - theme: alt
-      text: View Oref
-      link: https://github.com/medz/oref
+      text: Read Oref docs
+      link: /docs/oref/introduction
 features:
   - title: Spry
-    details: File-routed Dart server tooling and framework work that currently gives Odroe the clearest flagship project story.
+    details: File-routed Dart server tooling and framework work with the clearest current flagship story, release cadence, and docs surface.
   - title: Oref
-    details: Reactive foundations and supporting building blocks that connect to the broader developer tooling direction.
-  - title: Brand and public entry
-    details: This page should help visitors understand where the main repositories live, what is worth following, and how projects relate to the Odroe brand.
+    details: Lightweight reactive foundations that explain the lower-level building blocks behind the broader tooling direction.
+  - title: Reference package docs
+    details: Oinject and Once Call remain available here as supporting references, but they are not presented as equal-priority flagship projects.
 ---
+
+## Current focus
+
+| Project | Why it matters now | Start here |
+| --- | --- | --- |
+| [Spry](https://github.com/medz/spry) | The clearest current product story for Odroe: file-routed Dart server tooling with active release and documentation surfaces. | [GitHub](https://github.com/medz/spry) · [Docs](https://spry.medz.dev/) |
+| [Oref](/packages/oref) | Reactive foundations and building blocks that continue to support the broader tooling direction. | [Project page](/packages/oref) · [Docs](/docs/oref/introduction) · [GitHub](https://github.com/medz/oref) |
+
+## Reference packages still hosted here
+
+| Package | What it covers | Start here |
+| --- | --- | --- |
+| [Oinject](/packages/oinject) | Dependency injection utilities that remain documented here as reference material. | [Project page](/packages/oinject) · [Docs](/docs/oinject.md) · [pub.dev](https://pub.dev/packages/oinject) |
+| [Once Call](/packages/oncecall) | Memoization helpers for Flutter `Widget.build` flows. | [Project page](/packages/oncecall) · [Docs](/docs/oncecall.md) · [pub.dev](https://pub.dev/packages/oncecall) |
+
+## Follow the public thread
+
+- Watch [@OdroeDev](https://x.com/OdroeDev) for short updates and public progress.
+- Use [odroe on GitHub](https://github.com/odroe) for brand assets and public entry points.
+- Read longer release notes and project context on [Medium](https://shiwei.medium.com/).
