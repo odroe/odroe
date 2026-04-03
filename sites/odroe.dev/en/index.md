@@ -29,8 +29,8 @@ hero:
       text: Follow on X
       link: https://x.com/OdroeDev
   what-is-new:
-    title: "Current focus: clear project entry, practical tooling, and public-facing open source updates."
-    link: https://github.com/medz/spry
+    title: "Current focus: Spry, Alien Signals, and Oref as the clearest public project line."
+    link: /packages/
 features:
   - icon: >-
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
@@ -60,7 +60,7 @@ features:
 
 ## Start Here
 
-- Visit [/packages](/packages/) to see the projects and libraries currently worth attention.
+- Visit [/packages](/packages/) to start from Spry, Alien Signals, and Oref before exploring older reference docs.
 - Follow [@OdroeDev](https://x.com/OdroeDev) for short updates and public progress.
 - Read longer project notes and release context on [Medium](https://shiwei.medium.com/).
-- Browse [GitHub](https://github.com/odroe) for organization assets and [medz/spry](https://github.com/medz/spry) for the flagship framework direction.
+- Browse [GitHub](https://github.com/odroe) for organization assets, then use [Spry](https://github.com/medz/spry), [Alien Signals](https://github.com/medz/alien-signals-dart), and [Oref](https://github.com/medz/oref) as the clearest current project entry points.

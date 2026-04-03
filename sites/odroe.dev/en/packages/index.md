@@ -1,20 +1,22 @@
 ---
 title: Projects
-description: Start from Spry and Oref, then use the reference package docs still hosted on this site to understand supporting experiments and utilities.
+description: Start from Spry, Alien Signals, and Oref, then use the reference package docs still hosted on this site to understand supporting experiments and utilities.
 layout: home
 hero:
   name: Start from the projects that matter now
-  tagline: Spry and Oref currently give the clearest picture of what Odroe is building in public. This page also keeps older package docs discoverable without pretending every historical package is equally active.
+  tagline: Spry, Alien Signals, and Oref currently give the clearest picture of what Odroe is building in public. This page also keeps older package docs discoverable without pretending every historical package is equally active.
   actions:
     - theme: brand
       text: View Spry on GitHub
       link: https://github.com/medz/spry
     - theme: alt
-      text: Read Oref docs
-      link: /docs/oref/introduction
+      text: Explore Alien Signals
+      link: /packages/alien-signals
 features:
   - title: Spry
     details: File-routed Dart server tooling and framework work with the clearest current flagship story, release cadence, and docs surface.
+  - title: Alien Signals
+    details: Signals-first reactive primitives for Dart and Flutter that provide a strong second project line and a clear bridge into the broader reactive tooling story.
   - title: Oref
     details: Lightweight reactive foundations that explain the lower-level building blocks behind the broader tooling direction.
   - title: Reference package docs
@@ -26,6 +28,7 @@ features:
 | Project | Why it matters now | Start here |
 | --- | --- | --- |
 | [Spry](https://github.com/medz/spry) | The clearest current product story for Odroe: file-routed Dart server tooling with active release and documentation surfaces. | [GitHub](https://github.com/medz/spry) · [Docs](https://spry.medz.dev/) |
+| [Alien Signals](/packages/alien-signals) | A signals-first reactive core for Dart and Flutter that is active, easy to explain in public, and directly reinforces the broader reactive tooling direction. | [Project page](/packages/alien-signals) · [GitHub](https://github.com/medz/alien-signals-dart) · [pub.dev](https://pub.dev/packages/alien_signals) |
 | [Oref](/packages/oref) | Reactive foundations and building blocks that continue to support the broader tooling direction. | [Project page](/packages/oref) · [Docs](/docs/oref/introduction) · [GitHub](https://github.com/medz/oref) |
 
 ## Reference packages still hosted here
@@ -38,4 +41,4 @@ features:
 ## Follow the public thread
 
 - Watch [@OdroeDev](https://x.com/OdroeDev) for short updates and public progress.
-- Use [odroe on GitHub](https://github.com/odroe) for brand assets and public entry points.
+- Use [odroe on GitHub](https://github.com/odroe) for brand assets and public entry points, then branch into Spry, Alien Signals, and Oref based on the part of the stack you want to explore first.

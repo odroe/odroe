@@ -29,8 +29,8 @@ hero:
       text: 关注 X
       link: https://x.com/OdroeDev
   what-is-new:
-    title: 当前重点：让公开入口、项目线索与对外更新重新变得清晰。
-    link: https://github.com/medz/spry
+    title: 当前重点：把 Spry、Alien Signals 与 Oref 拉成更清晰的公开项目主线。
+    link: /zh/packages/
 features:
   - icon: >-
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
@@ -60,7 +60,7 @@ features:
 
 ## 从这里开始
 
-- 访问 [/zh/packages](/zh/packages/) 查看当前最值得关注的项目与库。
+- 访问 [/zh/packages](/zh/packages/) ，先从 Spry、Alien Signals 与 Oref 开始，再继续查看保留中的参考文档。
 - 关注 [@OdroeDev](https://x.com/OdroeDev) 获取公开更新和项目动态。
 - 在 [Medium](https://shiwei.medium.com/) 阅读更完整的项目长文与发布背景。
-- 查看 [odroe GitHub](https://github.com/odroe) 了解品牌资产，并从 [medz/spry](https://github.com/medz/spry) 理解当前最清晰的项目方向。
+- 查看 [odroe GitHub](https://github.com/odroe) 了解品牌资产，并从 [Spry](https://github.com/medz/spry)、[Alien Signals](https://github.com/medz/alien-signals-dart) 与 [Oref](https://github.com/medz/oref) 理解当前最清晰的项目方向。
