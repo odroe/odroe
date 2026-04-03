@@ -14,8 +14,8 @@ hero:
       text: 阅读文档 →
       link: /zh/docs/oinject.md
     - theme: alt
-      text: 在 GitHub 查看
-      link: https://github.com/odroe/odroe/tree/main/pub/oinject
+      text: 返回项目入口
+      link: /zh/packages/
     - theme: alt
       text: 在 pub.dev 查看
       link: https://pub.dev/packages/oinject

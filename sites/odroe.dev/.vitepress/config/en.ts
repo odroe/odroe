@@ -16,7 +16,12 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    nav: [],
+    nav: [
+      { text: "Home", link: "/" },
+      { text: "Projects", link: "/packages/" },
+      { text: "GitHub", link: "https://github.com/odroe" },
+      { text: "Medium", link: "https://shiwei.medium.com/" },
+    ],
     sidebar: [],
   },
 });

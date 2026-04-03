@@ -14,8 +14,8 @@ hero:
       text: Read Documentation →
       link: /docs/oncecall.md
     - theme: alt
-      text: View on GitHub
-      link: https://github.com/odroe/odroe/tree/main/pub/oncecall
+      text: Back to Projects
+      link: /packages/
     - theme: alt
       text: View on pub.dev
       link: https://pub.dev/packages/oncecall
