@@ -32,11 +32,10 @@ features:
 
 | Package | 说明 | 从哪里开始 |
 | --- | --- | --- |
-| [Oinject](/zh/packages/oinject) | 依赖注入相关工具，当前更适合作为保留文档与参考资料。 | [项目页](/zh/packages/oinject) · [文档](/zh/docs/oinject.md) · [pub.dev](https://pub.dev/packages/oinject) |
-| [Once Call](/zh/packages/oncecall) | 面向 Flutter `Widget.build` 场景的 memoization 工具。 | [项目页](/zh/packages/oncecall) · [文档](/zh/docs/oncecall.md) · [pub.dev](https://pub.dev/packages/oncecall) |
+| [Oinject](/zh/packages/oinject) | 依赖注入相关工具，当前更适合作为保留文档与参考资料。 | [项目页](/zh/packages/oinject) · [文档](/zh/docs/oinject) · [pub.dev](https://pub.dev/packages/oinject) |
+| [Once Call](/zh/packages/oncecall) | 面向 Flutter `Widget.build` 场景的 memoization 工具。 | [项目页](/zh/packages/oncecall) · [文档](/zh/docs/oncecall) · [pub.dev](https://pub.dev/packages/oncecall) |
 
 ## 跟进公开更新
 
 - 关注 [@OdroeDev](https://x.com/OdroeDev) 获取短更新与公开进展。
 - 通过 [odroe GitHub](https://github.com/odroe) 查看品牌资产与公开入口。
-- 在 [Medium](https://shiwei.medium.com/) 阅读更完整的发布背景与项目长文。

@@ -32,11 +32,10 @@ features:
 
 | Package | What it covers | Start here |
 | --- | --- | --- |
-| [Oinject](/packages/oinject) | Dependency injection utilities that remain documented here as reference material. | [Project page](/packages/oinject) · [Docs](/docs/oinject.md) · [pub.dev](https://pub.dev/packages/oinject) |
-| [Once Call](/packages/oncecall) | Memoization helpers for Flutter `Widget.build` flows. | [Project page](/packages/oncecall) · [Docs](/docs/oncecall.md) · [pub.dev](https://pub.dev/packages/oncecall) |
+| [Oinject](/packages/oinject) | Dependency injection utilities that remain documented here as reference material. | [Project page](/packages/oinject) · [Docs](/docs/oinject) · [pub.dev](https://pub.dev/packages/oinject) |
+| [Once Call](/packages/oncecall) | Memoization helpers for Flutter `Widget.build` flows. | [Project page](/packages/oncecall) · [Docs](/docs/oncecall) · [pub.dev](https://pub.dev/packages/oncecall) |
 
 ## Follow the public thread
 
 - Watch [@OdroeDev](https://x.com/OdroeDev) for short updates and public progress.
 - Use [odroe on GitHub](https://github.com/odroe) for brand assets and public entry points.
-- Read longer release notes and project context on [Medium](https://shiwei.medium.com/).
