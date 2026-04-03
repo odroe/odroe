@@ -1,14 +1,14 @@
 ---
 title: 长文
-description: Odroe 的长文入口，从当前围绕 Spry、Alien Signals 与 Oref 的项目主线开始。
+description: Odroe 的长文入口，先解释当前项目组合是如何串起来的，再展开 Spry、Alien Signals 与 Oref 的具体主线。
 layout: home
 hero:
   name: 阅读更长的项目上下文
-  tagline: 这里承接比首页和项目页更完整的项目背景、架构取舍与公开经营线索。Medium 仍会继续同步长文，但当前对外真源先落在 odroe.dev。
+  tagline: 这里承接比首页和项目页更完整的项目背景、架构取舍与公开经营线索，先帮助读者理解当前项目组合是怎么组织的，再展开单个项目的更深背景。Medium 仍会继续同步长文，但当前对外真源先落在 odroe.dev。
   actions:
     - theme: brand
-      text: 阅读首篇长文
-      link: /zh/notes/spry-is-the-center-of-my-current-dart-oss-work
+      text: 阅读组合长文
+      link: /zh/notes/how-the-current-odroe-projects-fit-together
     - theme: alt
       text: 查看 Medium
       link: https://shiwei.medium.com/
@@ -25,6 +25,7 @@ features:
 
 | 标题 | 作用 | 从这里开始 |
 | --- | --- | --- |
+| [当前 Odroe 项目组合是如何串起来的](/zh/notes/how-the-current-odroe-projects-fit-together) | 解释当前主线项目、参考文档与各自入口分别处于什么位置，以及应该从哪里开始。 | [阅读长文](/zh/notes/how-the-current-odroe-projects-fit-together) |
 | [Spry 是我当前 Dart 开源工作的中心](/zh/notes/spry-is-the-center-of-my-current-dart-oss-work) | 解释为什么当前公开主线以 Spry 为中心，以及 Alien Signals 与 Oref 如何组成同一条项目线。 | [阅读长文](/zh/notes/spry-is-the-center-of-my-current-dart-oss-work) |
 
 ## 如何继续跟进
