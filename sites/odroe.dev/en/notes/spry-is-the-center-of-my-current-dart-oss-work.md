@@ -3,13 +3,13 @@ title: Spry Is the Center of My Current Dart OSS Work
 description: How Spry, Alien Signals, and Oref fit together in the current public Odroe project line.
 ---
 
-This note explains the current center of gravity behind my Dart open source work.
+This note explains the current center of gravity behind my Dart open-source work.
 
 Use it as the long-form companion to the current project entry on [odroe.dev](/) and [/packages](/packages/).
 
 ## Why this line needed to become explicit
 
-Over the last few years, I shipped many open source experiments across Dart and Flutter.
+Over the last few years, I shipped many open-source experiments across Dart and Flutter.
 
 That created a real problem: too many things were visible at once, but not enough of them formed a clear current direction.
 
