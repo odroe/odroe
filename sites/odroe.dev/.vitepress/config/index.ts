@@ -62,7 +62,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: "github", link: "https://github.com/odroe/odroe" },
+      { icon: "github", link: "https://github.com/odroe" },
       { icon: "x", link: "https://x.com/OdroeDev" },
       { icon: "discord", link: "https://odroe.dev/chat" },
     ],

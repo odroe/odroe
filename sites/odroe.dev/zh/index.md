@@ -62,4 +62,5 @@ features:
 
 - 访问 [/zh/packages](/zh/packages/) 查看当前最值得关注的项目与库。
 - 关注 [@OdroeDev](https://x.com/OdroeDev) 获取公开更新和项目动态。
+- 在 [Medium](https://shiwei.medium.com/) 阅读更完整的项目长文与发布背景。
 - 查看 [odroe GitHub](https://github.com/odroe) 了解品牌资产，并从 [medz/spry](https://github.com/medz/spry) 理解当前最清晰的项目方向。

@@ -62,4 +62,5 @@ features:
 
 - Visit [/packages](/packages/) to see the projects and libraries currently worth attention.
 - Follow [@OdroeDev](https://x.com/OdroeDev) for short updates and public progress.
+- Read longer project notes and release context on [Medium](https://shiwei.medium.com/).
 - Browse [GitHub](https://github.com/odroe) for organization assets and [medz/spry](https://github.com/medz/spry) for the flagship framework direction.
