@@ -57,7 +57,7 @@ description: 解释 Spry、Alien Signals 与 Oref 如何组成当前公开的 Od
 
 `alien-signals-dart` 是响应式核心。
 
-它为 Dart 提供了一个小而快的响应式系统，核心原语是 `signal()`、`computed()` 与 `effect()`。我把它看作基础设施：表面积小、组合性强、追求性能，同时尽量减少不必要的仪式感。
+它为 Dart 提供了一个轻量且高性能的响应式系统，核心原语是 `signal()`、`computed()` 与 `effect()`。我把它看作基础设施：表面积小、组合性强、追求性能，同时尽量减少不必要的仪式感。
 
 `oref` 则是这种思路在 Flutter 里的开发体验表达。
 
@@ -82,7 +82,7 @@ description: 解释 Spry、Alien Signals 与 Oref 如何组成当前公开的 Od
 3. 围绕文档、调试和项目脚手架，构建第一方的 AI 辅助工作流；
 4. 继续让生成结果和框架行为保持可检查，而不是变成黑盒魔法。
 
-我已经在推进和 AI 辅助开发体验有关的工作，包括第一方文档、调试 skill、可选的 MCP server 路径，以及面向 coding agents 的第一方 plugin 方向。
+我已经在推进和 AI 辅助开发体验有关的工作，包括第一方文档、调试 `skill`、可选的 MCP `server` 路径，以及面向 coding agents 的第一方 `plugin` 方向。
 
 这些不是支线任务。
 
