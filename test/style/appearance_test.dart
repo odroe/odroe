@@ -6,16 +6,13 @@ void main() {
     'declares visual fragments with concrete values and term references',
     () {
       const actionFill = Term<Color>(Identifier('color.action.fill'));
-      const controlRadius = Term<Unit>(Identifier('radius.control'));
+      const controlRadius = Term<Dimension>(Identifier('radius.control'));
 
       final appearance = Appearance(
         surface: Surface(fill: .term(actionFill), radius: .term(controlRadius)),
         content: const Content(color: .literal(Color(0xffffffff))),
-        metrics: const Metrics(
-          padding: Insets.symmetric(
-            x: .literal(Unit.px(16)),
-            y: .literal(Unit.px(8)),
-          ),
+        metrics: Metrics(
+          padding: Insets.symmetric(x: .literal(16.px), y: .literal(8.px)),
         ),
       );
 
@@ -29,7 +26,7 @@ void main() {
       );
       expect(
         appearance.surface?.radius,
-        isA<TermProperty<Unit>>().having(
+        isA<TermProperty<Dimension>>().having(
           (property) => property.term,
           'term',
           same(controlRadius),
@@ -45,10 +42,10 @@ void main() {
       );
       expect(
         appearance.metrics?.padding?.left,
-        isA<LiteralProperty<Unit>>().having(
+        isA<LiteralProperty<Dimension>>().having(
           (property) => property.value,
           'value',
-          const Unit.px(16),
+          const Dimension.px(16),
         ),
       );
     },
@@ -57,7 +54,7 @@ void main() {
   test('merges appearances by facet and property', () {
     const Property<Color> baseFill = .literal(Color(0xff006adc));
     const Property<Color> nextFill = .literal(Color(0xff004488));
-    const Property<Unit> radius = .literal(Unit.px(8));
+    const Property<Dimension> radius = .literal(Dimension.px(8));
     const Property<Color> contentColor = .literal(Color(0xffffffff));
 
     const base = Appearance(
@@ -76,45 +73,47 @@ void main() {
   test('merges metrics padding by side', () {
     const base = Metrics(
       padding: Insets.symmetric(
-        x: .literal(Unit.px(16)),
-        y: .literal(Unit.px(8)),
+        x: .literal(Dimension.px(16)),
+        y: .literal(Dimension.px(8)),
       ),
-      gap: .literal(Unit.px(4)),
+      gap: .literal(Dimension.px(4)),
     );
-    const later = Metrics(padding: Insets.only(left: .literal(Unit.px(20))));
+    const later = Metrics(
+      padding: Insets.only(left: .literal(Dimension.px(20))),
+    );
 
     final merged = base.merge(later);
 
     expect(
       merged.padding?.left,
-      isA<LiteralProperty<Unit>>().having(
+      isA<LiteralProperty<Dimension>>().having(
         (property) => property.value,
         'value',
-        const Unit.px(20),
+        const Dimension.px(20),
       ),
     );
     expect(
       merged.padding?.right,
-      isA<LiteralProperty<Unit>>().having(
+      isA<LiteralProperty<Dimension>>().having(
         (property) => property.value,
         'value',
-        const Unit.px(16),
+        const Dimension.px(16),
       ),
     );
     expect(
       merged.padding?.top,
-      isA<LiteralProperty<Unit>>().having(
+      isA<LiteralProperty<Dimension>>().having(
         (property) => property.value,
         'value',
-        const Unit.px(8),
+        const Dimension.px(8),
       ),
     );
     expect(
       merged.gap,
-      isA<LiteralProperty<Unit>>().having(
+      isA<LiteralProperty<Dimension>>().having(
         (property) => property.value,
         'value',
-        const Unit.px(4),
+        const Dimension.px(4),
       ),
     );
   });

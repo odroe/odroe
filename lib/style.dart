@@ -24,5 +24,7 @@ library;
 
 export 'src/style/appearance.dart';
 export 'src/style/binding.dart';
+export 'src/style/color.dart';
 export 'src/style/diagnostic.dart';
+export 'src/style/dimension.dart';
 export 'src/style/identifier.dart';

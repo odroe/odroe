@@ -1,4 +1,6 @@
 import 'binding.dart';
+import 'color.dart';
+import 'dimension.dart';
 import 'identifier.dart';
 import 'mergeable.dart';
 
@@ -10,7 +12,7 @@ import 'mergeable.dart';
 ///
 /// ```dart
 /// const actionFill = Term<Color>(Identifier('color.action.fill'));
-/// const controlRadius = Term<Unit>(Identifier('radius.control'));
+/// const controlRadius = Term<Dimension>(Identifier('radius.control'));
 ///
 /// final control = Appearance(
 ///   surface: Surface(
@@ -19,8 +21,8 @@ import 'mergeable.dart';
 ///   ),
 ///   metrics: Metrics(
 ///     padding: Insets.symmetric(
-///       x: .literal(Unit.px(16)),
-///       y: .literal(Unit.px(8)),
+///       x: .literal(16.px),
+///       y: .literal(8.px),
 ///     ),
 ///   ),
 /// );
@@ -73,10 +75,10 @@ final class Surface implements Mergeable<Surface> {
   final Property<Color>? stroke;
 
   /// The corner radius or shape radius for the surface.
-  final Property<Unit>? radius;
+  final Property<Dimension>? radius;
 
   /// The platform-neutral elevation role or amount.
-  final Property<Unit>? elevation;
+  final Property<Dimension>? elevation;
 
   /// Returns this surface with non-null properties from [later] applied.
   @override
@@ -144,25 +146,25 @@ final class Metrics implements Mergeable<Metrics> {
   final Insets? padding;
 
   /// Space between repeated children.
-  final Property<Unit>? gap;
+  final Property<Dimension>? gap;
 
   /// The preferred width.
-  final Property<Unit>? width;
+  final Property<Dimension>? width;
 
   /// The preferred height.
-  final Property<Unit>? height;
+  final Property<Dimension>? height;
 
   /// The minimum width.
-  final Property<Unit>? minWidth;
+  final Property<Dimension>? minWidth;
 
   /// The minimum height.
-  final Property<Unit>? minHeight;
+  final Property<Dimension>? minHeight;
 
   /// The maximum width.
-  final Property<Unit>? maxWidth;
+  final Property<Dimension>? maxWidth;
 
   /// The maximum height.
-  final Property<Unit>? maxHeight;
+  final Property<Dimension>? maxHeight;
 
   /// Returns this metrics declaration with non-null properties from [later]
   /// applied.
@@ -235,170 +237,6 @@ final class TermProperty<T> extends Property<T> {
   final Term<T> term;
 }
 
-/// A platform-neutral color value.
-///
-/// The default constructor accepts the same `0xAARRGGBB` packed integer shape
-/// used by `dart:ui.Color`, without depending on Flutter's `dart:ui` library.
-/// Channels are stored as floating-point components so declarations can keep
-/// their authored values and convert back to an ARGB integer when needed.
-///
-/// ```dart
-/// const blue = Color(0xff42a5f5);
-/// const sameBlue = Color.fromARGB(0xff, 0x42, 0xa5, 0xf5);
-/// ```
-final class Color {
-  /// Creates an sRGB color from the lower 32 bits of [value].
-  ///
-  /// The bits are interpreted as `0xAARRGGBB`: alpha in bits 24-31, red in
-  /// bits 16-23, green in bits 8-15, and blue in bits 0-7.
-  const Color(int value)
-    : this._fromARGB(
-        (value >> 24) & 0xff,
-        (value >> 16) & 0xff,
-        (value >> 8) & 0xff,
-        value & 0xff,
-      );
-
-  /// Creates a color from floating-point channel values.
-  ///
-  /// The conventional range for each channel is `0.0` to `1.0`. Values outside
-  /// that range are preserved in the declaration and clamped only when
-  /// converted with [toARGB32].
-  const Color.from({
-    required double alpha,
-    required double red,
-    required double green,
-    required double blue,
-  }) : a = alpha,
-       r = red,
-       g = green,
-       b = blue;
-
-  /// Creates an sRGB color from integer alpha, red, green, and blue channels.
-  ///
-  /// Only the lower 8 bits of each channel are used, matching
-  /// `dart:ui.Color.fromARGB`.
-  const Color.fromARGB(int a, int r, int g, int b) : this._fromARGB(a, r, g, b);
-
-  /// Creates a color from red, green, blue, and opacity channels.
-  ///
-  /// Only the lower 8 bits of the red, green, and blue channels are used.
-  /// The conventional range for [opacity] is `0.0` to `1.0`.
-  const Color.fromRGBO(int r, int g, int b, double opacity)
-    : a = opacity,
-      r = (r & 0xff) / 255,
-      g = (g & 0xff) / 255,
-      b = (b & 0xff) / 255;
-
-  const Color._fromARGB(int alpha, int red, int green, int blue)
-    : this._fromRGBO(red, green, blue, (alpha & 0xff) / 255);
-
-  const Color._fromRGBO(int red, int green, int blue, double opacity)
-    : a = opacity,
-      r = (red & 0xff) / 255,
-      g = (green & 0xff) / 255,
-      b = (blue & 0xff) / 255;
-
-  /// The alpha channel as a floating-point component.
-  final double a;
-
-  /// The red channel as a floating-point component.
-  final double r;
-
-  /// The green channel as a floating-point component.
-  final double g;
-
-  /// The blue channel as a floating-point component.
-  final double b;
-
-  /// Returns a copy with the provided channels replaced.
-  Color withValues({double? alpha, double? red, double? green, double? blue}) {
-    return Color.from(
-      alpha: alpha ?? a,
-      red: red ?? r,
-      green: green ?? g,
-      blue: blue ?? b,
-    );
-  }
-
-  /// Returns this color as a packed `0xAARRGGBB` integer.
-  ///
-  /// Channel values are rounded to the nearest 8-bit integer and clamped to the
-  /// range `0..255`.
-  int toARGB32() {
-    return _floatToInt8(a) << 24 |
-        _floatToInt8(r) << 16 |
-        _floatToInt8(g) << 8 |
-        _floatToInt8(b);
-  }
-
-  static int _floatToInt8(double value) {
-    final scaled = (value * 255.0).round();
-
-    if (scaled < 0) {
-      return 0;
-    }
-    if (scaled > 255) {
-      return 255;
-    }
-    return scaled;
-  }
-
-  @override
-  bool operator ==(Object other) {
-    return other is Color &&
-        other.a == a &&
-        other.r == r &&
-        other.g == g &&
-        other.b == b;
-  }
-
-  @override
-  int get hashCode => Object.hash(a, r, g, b);
-
-  @override
-  String toString() {
-    return 'Color('
-        'alpha: ${a.toStringAsFixed(4)}, '
-        'red: ${r.toStringAsFixed(4)}, '
-        'green: ${g.toStringAsFixed(4)}, '
-        'blue: ${b.toStringAsFixed(4)}'
-        ')';
-  }
-}
-
-/// The unit used by a [Unit] value.
-enum UnitKind {
-  /// A logical pixel-like unit.
-  ///
-  /// Platform adapters decide how this maps to their own coordinate systems.
-  px,
-}
-
-/// A platform-neutral scalar size.
-///
-/// Units are declaration values, not layout constraints. They can describe
-/// spacing, radius, gaps, and other visual metrics without naming a rendering
-/// toolkit.
-final class Unit {
-  /// Creates a logical pixel-like size.
-  const Unit.px(this.value) : kind = UnitKind.px;
-
-  /// The numeric amount.
-  final double value;
-
-  /// The unit used by [value].
-  final UnitKind kind;
-
-  @override
-  bool operator ==(Object other) {
-    return other is Unit && other.value == value && other.kind == kind;
-  }
-
-  @override
-  int get hashCode => Object.hash(value, kind);
-}
-
 /// Four-sided spacing used by [Metrics.padding].
 ///
 /// Each side is optional so padding can participate in appearance merging.
@@ -408,30 +246,30 @@ final class Insets implements Mergeable<Insets> {
   const Insets.only({this.top, this.right, this.bottom, this.left});
 
   /// Creates equal insets on every side.
-  const Insets.all(Property<Unit> value)
+  const Insets.all(Property<Dimension> value)
     : top = value,
       right = value,
       bottom = value,
       left = value;
 
   /// Creates horizontal and vertical insets.
-  const Insets.symmetric({Property<Unit>? x, Property<Unit>? y})
+  const Insets.symmetric({Property<Dimension>? x, Property<Dimension>? y})
     : top = y,
       right = x,
       bottom = y,
       left = x;
 
   /// The top inset.
-  final Property<Unit>? top;
+  final Property<Dimension>? top;
 
   /// The right inset.
-  final Property<Unit>? right;
+  final Property<Dimension>? right;
 
   /// The bottom inset.
-  final Property<Unit>? bottom;
+  final Property<Dimension>? bottom;
 
   /// The left inset.
-  final Property<Unit>? left;
+  final Property<Dimension>? left;
 
   /// Returns this inset set with non-null sides from [later] applied.
   @override
