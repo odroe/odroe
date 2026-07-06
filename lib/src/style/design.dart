@@ -91,6 +91,7 @@ final class Design<V extends Vocabulary> {
   /// * duplicate assignments inside each binding;
   /// * vocabulary terms missing from a binding;
   /// * binding assignments that do not belong to the vocabulary;
+  /// * binding assignments whose values do not match the vocabulary term type;
   /// * style appearance term references that do not belong to the vocabulary;
   /// * style parts, axes, and states that are not declared by the style contract.
   ///
@@ -104,7 +105,8 @@ final class Design<V extends Vocabulary> {
   /// }
   /// ```
   List<Diagnostic> validate() {
-    final vocabularyIds = {for (final term in terms) term.id.value};
+    final vocabularyById = _termsById(terms);
+    final vocabularyIds = vocabularyById.keys.toSet();
     final diagnostics = <Diagnostic>[
       ..._validateIdentifiers(kind: 'term', ids: terms.map((term) => term.id)),
       ..._validateIdentifiers(kind: 'binding', ids: bindings.map((b) => b.id)),
@@ -113,7 +115,7 @@ final class Design<V extends Vocabulary> {
 
     for (final binding in bindings) {
       diagnostics.addAll(binding.validate());
-      diagnostics.addAll(_validateBindingVocabulary(binding, vocabularyIds));
+      diagnostics.addAll(_validateBindingVocabulary(binding, vocabularyById));
     }
 
     for (final style in styles) {
@@ -130,28 +132,45 @@ final class Design<V extends Vocabulary> {
 
   List<Diagnostic> _validateBindingVocabulary(
     Binding binding,
-    Set<String> vocabularyIds,
+    Map<String, Term> vocabularyById,
   ) {
     final diagnostics = <Diagnostic>[];
-    final assigned = {
-      for (final assignment in binding.assignments) assignment.term.id.value,
-    };
+    final assigned = <String>{};
 
     for (final assignment in binding.assignments) {
       final termId = assignment.term.id.value;
-      if (vocabularyIds.contains(termId)) {
+      final vocabularyTerm = vocabularyById[termId];
+      if (vocabularyTerm == null) {
+        diagnostics.add(
+          Diagnostic(
+            code: DiagnosticCodes.designUnknownBindingValue,
+            target: DiagnosticTarget(kind: 'assignment', name: termId),
+            message:
+                'Binding `${binding.id.value}` assigns term `$termId`, but '
+                'this term is not declared by the design vocabulary.',
+          ),
+        );
+
         continue;
       }
 
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCodes.designUnknownBindingValue,
-          target: DiagnosticTarget(kind: 'assignment', name: termId),
-          message:
-              'Binding `${binding.id.value}` assigns term `$termId`, but this '
-              'term is not declared by the design vocabulary.',
-        ),
-      );
+      if (!vocabularyTerm.accepts(assignment.value)) {
+        diagnostics.add(
+          Diagnostic(
+            code: DiagnosticCodes.designInvalidBindingValueType,
+            target: DiagnosticTarget(kind: 'assignment', name: termId),
+            message:
+                'Binding `${binding.id.value}` assigns a '
+                '${assignment.value.runtimeType} value to term `$termId`, but '
+                'the design vocabulary declares that term as '
+                '${vocabularyTerm.valueType}.',
+          ),
+        );
+
+        continue;
+      }
+
+      assigned.add(termId);
     }
 
     for (final term in terms) {
@@ -307,6 +326,16 @@ final class Design<V extends Vocabulary> {
         return const [];
     }
   }
+}
+
+Map<String, Term> _termsById(Iterable<Term> terms) {
+  final termsById = <String, Term>{};
+
+  for (final term in terms) {
+    termsById.putIfAbsent(term.id.value, () => term);
+  }
+
+  return termsById;
 }
 
 Iterable<Term> _appearanceTerms(Appearance appearance) sync* {

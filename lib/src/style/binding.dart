@@ -31,6 +31,22 @@ final class Term<T> {
   /// resolution.
   final Identifier id;
 
+  /// The runtime type represented by this term.
+  ///
+  /// Validators use this when a declaration has been widened to `Term` or
+  /// `Assignment<Object?>` and needs to compare authored values against the
+  /// typed vocabulary term.
+  Type get valueType => T;
+
+  /// Whether [value] can be assigned to this term.
+  ///
+  /// This mirrors the static contract enforced by [call]. It lets design-level
+  /// validation catch values that were introduced through a different `Term`
+  /// with the same identifier but an incompatible type argument.
+  bool accepts(Object? value) {
+    return value is T;
+  }
+
   /// Creates an [Assignment] that gives this term a concrete value.
   ///
   /// Calling a term is only declaration syntax. It does not validate [value],

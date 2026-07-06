@@ -171,6 +171,35 @@ void main() {
     );
   });
 
+  test('reports binding assignments with incompatible value types', () {
+    const t = _AppTerms();
+    const wrongFill = Term<Dimension>(Identifier('color.action.fill'));
+
+    final diagnostics = Design(
+      vocabulary: t,
+      bindings: [
+        Binding(Identifier('light'), [
+          wrongFill(8.px),
+          t.color.action.content(const Color(0xffffffff)),
+          t.radius.control(8.px),
+        ]),
+      ],
+    ).validate();
+
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.designInvalidBindingValueType,
+        targetKind: 'assignment',
+        targetName: 'color.action.fill',
+      ),
+    );
+    expect(
+      diagnostics,
+      containsDiagnostic(code: DiagnosticCodes.designMissingBindingValue),
+    );
+  });
+
   test('reports style term references outside the vocabulary', () {
     const t = _AppTerms();
     const brandFill = Term<Color>(Identifier('color.brand.fill'));
