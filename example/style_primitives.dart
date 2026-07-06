@@ -27,6 +27,26 @@ const surfaceRole = Axis<SurfaceRole>(
 
 const terms = AppTerms();
 
+final noShadow = Shadow([]);
+
+final raisedShadow = Shadow([
+  const ShadowLayer(
+    color: Color(0x1f000000),
+    offsetX: Dimension.px(0),
+    offsetY: Dimension.px(2),
+    blur: Dimension.px(8),
+  ),
+]);
+
+final overlayShadow = Shadow([
+  const ShadowLayer(
+    color: Color(0x29000000),
+    offsetX: Dimension.px(0),
+    offsetY: Dimension.px(8),
+    blur: Dimension.px(24),
+  ),
+]);
+
 final light = Binding(Identifier('light'), [
   terms.color.surface.canvas(const Color(0xffffffff)),
   terms.color.surface.raised(const Color(0xfff8f8f8)),
@@ -65,15 +85,18 @@ final light = Binding(Identifier('light'), [
   terms.radius.control(8.px),
   terms.radius.surface(12.px),
   terms.radius.field(6.px),
+  terms.stroke.width(1.px),
+  terms.stroke.focusWidth(2.px),
+  terms.stroke.style(StrokeStyle.solid),
   terms.size.icon(18.px),
   terms.size.iconSm(16.px),
   terms.size.controlHeight(40.px),
   terms.size.controlSmHeight(32.px),
   terms.size.fieldHeight(40.px),
   terms.size.cardMinWidth(280.px),
-  terms.elevation.none(0.px),
-  terms.elevation.raised(2.px),
-  terms.elevation.overlay(8.px),
+  terms.shadow.none(noShadow),
+  terms.shadow.raised(raisedShadow),
+  terms.shadow.overlay(overlayShadow),
   terms.opacity.disabled(0.48),
   terms.type.buttonLabel(const Identifier('text.buttonLabel')),
   terms.type.buttonLabelSm(const Identifier('text.buttonLabelSm')),
@@ -125,15 +148,18 @@ final dark = Binding(Identifier('dark'), [
   terms.radius.control(8.px),
   terms.radius.surface(12.px),
   terms.radius.field(6.px),
+  terms.stroke.width(1.px),
+  terms.stroke.focusWidth(2.px),
+  terms.stroke.style(StrokeStyle.solid),
   terms.size.icon(18.px),
   terms.size.iconSm(16.px),
   terms.size.controlHeight(40.px),
   terms.size.controlSmHeight(32.px),
   terms.size.fieldHeight(40.px),
   terms.size.cardMinWidth(280.px),
-  terms.elevation.none(0.px),
-  terms.elevation.raised(2.px),
-  terms.elevation.overlay(8.px),
+  terms.shadow.none(noShadow),
+  terms.shadow.raised(raisedShadow),
+  terms.shadow.overlay(overlayShadow),
   terms.opacity.disabled(0.52),
   terms.type.buttonLabel(const Identifier('text.buttonLabel')),
   terms.type.buttonLabelSm(const Identifier('text.buttonLabelSm')),
@@ -217,7 +243,15 @@ final button = Style<ButtonPart>(
     ], Appearance(surface: Surface(fill: .term(terms.color.danger.fillHover)))),
     .when(
       state.focusVisible,
-      Appearance(surface: Surface(stroke: .term(terms.color.focus.ring))),
+      Appearance(
+        surface: Surface(
+          stroke: Stroke(
+            color: .term(terms.color.focus.ring),
+            width: .term(terms.stroke.focusWidth),
+            style: .term(terms.stroke.style),
+          ),
+        ),
+      ),
     ),
     .when(
       state.disabled,
@@ -236,9 +270,13 @@ final card = Style<CardPart>(
   root: Appearance(
     surface: Surface(
       fill: .term(terms.color.surface.raised),
-      stroke: .term(terms.color.surface.stroke),
+      stroke: Stroke(
+        color: .term(terms.color.surface.stroke),
+        width: .term(terms.stroke.width),
+        style: .term(terms.stroke.style),
+      ),
       radius: .term(terms.radius.surface),
-      elevation: .term(terms.elevation.raised),
+      shadow: .term(terms.shadow.raised),
     ),
     content: Content(color: .term(terms.color.content.primary)),
     metrics: Metrics(
@@ -266,7 +304,7 @@ final card = Style<CardPart>(
       Appearance(
         surface: Surface(
           fill: .term(terms.color.surface.canvas),
-          elevation: .term(terms.elevation.none),
+          shadow: .term(terms.shadow.none),
         ),
       ),
     ),
@@ -275,20 +313,24 @@ final card = Style<CardPart>(
       Appearance(
         surface: Surface(
           fill: .term(terms.color.surface.overlay),
-          stroke: .term(terms.color.surface.strokeStrong),
-          elevation: .term(terms.elevation.overlay),
+          stroke: Stroke(color: .term(terms.color.surface.strokeStrong)),
+          shadow: .term(terms.shadow.overlay),
         ),
       ),
     ),
     .when(
       state.hovered,
       Appearance(
-        surface: Surface(stroke: .term(terms.color.surface.strokeStrong)),
+        surface: Surface(
+          stroke: Stroke(color: .term(terms.color.surface.strokeStrong)),
+        ),
       ),
     ),
     .when(
       state.focusVisible,
-      Appearance(surface: Surface(stroke: .term(terms.color.focus.ring))),
+      Appearance(
+        surface: Surface(stroke: Stroke(color: .term(terms.color.focus.ring))),
+      ),
     ),
   ],
 );
@@ -308,7 +350,11 @@ final textField = Style<TextFieldPart>(
   root: Appearance(
     surface: Surface(
       fill: .term(terms.color.field.fill),
-      stroke: .term(terms.color.field.border),
+      stroke: Stroke(
+        color: .term(terms.color.field.border),
+        width: .term(terms.stroke.width),
+        style: .term(terms.stroke.style),
+      ),
       radius: .term(terms.radius.field),
     ),
     content: Content(color: .term(terms.color.content.primary)),
@@ -358,17 +404,23 @@ final textField = Style<TextFieldPart>(
     .when(
       state.focused,
       Appearance(
-        surface: Surface(stroke: .term(terms.color.field.borderFocus)),
+        surface: Surface(
+          stroke: Stroke(color: .term(terms.color.field.borderFocus)),
+        ),
       ),
     ),
     .when(
       state.focusVisible,
-      Appearance(surface: Surface(stroke: .term(terms.color.focus.ring))),
+      Appearance(
+        surface: Surface(stroke: Stroke(color: .term(terms.color.focus.ring))),
+      ),
     ),
     .when(
       state.error,
       Appearance(
-        surface: Surface(stroke: .term(terms.color.field.borderError)),
+        surface: Surface(
+          stroke: Stroke(color: .term(terms.color.field.borderError)),
+        ),
         content: Content(color: .term(terms.color.danger.stroke)),
       ),
     ),
@@ -447,9 +499,11 @@ final class AppTerms implements Vocabulary {
 
   RadiusTerms get radius => const RadiusTerms();
 
+  StrokeTerms get stroke => const StrokeTerms();
+
   SizeTerms get size => const SizeTerms();
 
-  ElevationTerms get elevation => const ElevationTerms();
+  ShadowTerms get shadow => const ShadowTerms();
 
   OpacityTerms get opacity => const OpacityTerms();
 
@@ -462,8 +516,9 @@ final class AppTerms implements Vocabulary {
     ...color.terms,
     ...space.terms,
     ...radius.terms,
+    ...stroke.terms,
     ...size.terms,
-    ...elevation.terms,
+    ...shadow.terms,
     ...opacity.terms,
     ...type.terms,
     ...icon.terms,
@@ -681,14 +736,27 @@ final class SizeTerms implements Vocabulary {
   ];
 }
 
-final class ElevationTerms implements Vocabulary {
-  const ElevationTerms();
+final class StrokeTerms implements Vocabulary {
+  const StrokeTerms();
 
-  Term<Dimension> get none => const Term(Identifier('elevation.none'));
+  Term<Dimension> get width => const Term(Identifier('stroke.width'));
 
-  Term<Dimension> get raised => const Term(Identifier('elevation.raised'));
+  Term<Dimension> get focusWidth => const Term(Identifier('stroke.focusWidth'));
 
-  Term<Dimension> get overlay => const Term(Identifier('elevation.overlay'));
+  Term<StrokeStyle> get style => const Term(Identifier('stroke.style'));
+
+  @override
+  Iterable<Term> get terms => [width, focusWidth, style];
+}
+
+final class ShadowTerms implements Vocabulary {
+  const ShadowTerms();
+
+  Term<Shadow> get none => const Term(Identifier('shadow.none'));
+
+  Term<Shadow> get raised => const Term(Identifier('shadow.raised'));
+
+  Term<Shadow> get overlay => const Term(Identifier('shadow.overlay'));
 
   @override
   Iterable<Term> get terms => [none, raised, overlay];
@@ -767,7 +835,13 @@ void main() {
   );
 
   print('button.fill=${formatColor(resolved.appearance.surface?.fill)}');
-  print('button.stroke=${formatColor(resolved.appearance.surface?.stroke)}');
+  print(
+    'button.stroke=${formatColor(resolved.appearance.surface?.stroke?.color)}',
+  );
+  print(
+    'button.strokeWidth='
+    '${formatDimension(resolved.appearance.surface?.stroke?.width)}',
+  );
   print('button.content=${formatColor(resolved.appearance.content?.color)}');
   print('button.icon=${resolved.appearance.content?.icon?.value}');
   print('button.label=${resolved.appearance.content?.text?.value}');

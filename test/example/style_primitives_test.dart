@@ -29,7 +29,12 @@ void main() {
 
     expect(resolution.diagnostics, isEmpty);
     expect(resolution.appearance.surface?.fill, const Color(0xffff7b72));
-    expect(resolution.appearance.surface?.stroke, const Color(0xff1f6feb));
+    expect(
+      resolution.appearance.surface?.stroke?.color,
+      const Color(0xff1f6feb),
+    );
+    expect(resolution.appearance.surface?.stroke?.width, 2.px);
+    expect(resolution.appearance.surface?.stroke?.style, StrokeStyle.solid);
     expect(resolution.appearance.surface?.radius, 8.px);
     expect(resolution.appearance.content?.color, const Color(0xff0d1117));
     expect(
@@ -57,10 +62,15 @@ void main() {
     expect(lightRaised.diagnostics, isEmpty);
     expect(darkOverlay.diagnostics, isEmpty);
     expect(lightRaised.appearance.surface?.fill, const Color(0xfff8f8f8));
-    expect(lightRaised.appearance.surface?.elevation, 2.px);
+    expect(lightRaised.appearance.surface?.shadow, example.raisedShadow);
     expect(darkOverlay.appearance.surface?.fill, const Color(0xff21262d));
-    expect(darkOverlay.appearance.surface?.stroke, const Color(0xff8b949e));
-    expect(darkOverlay.appearance.surface?.elevation, 8.px);
+    expect(
+      darkOverlay.appearance.surface?.stroke?.color,
+      const Color(0xff8b949e),
+    );
+    expect(darkOverlay.appearance.surface?.stroke?.width, 1.px);
+    expect(darkOverlay.appearance.surface?.stroke?.style, StrokeStyle.solid);
+    expect(darkOverlay.appearance.surface?.shadow, example.overlayShadow);
     expect(
       darkOverlay.appearance.content?.text,
       const Identifier('text.cardTitle'),
@@ -91,7 +101,12 @@ void main() {
       placeholder.appearance.content?.text,
       const Identifier('text.fieldInput'),
     );
-    expect(focusedError.appearance.surface?.stroke, const Color(0xffcf222e));
+    expect(
+      focusedError.appearance.surface?.stroke?.color,
+      const Color(0xffcf222e),
+    );
+    expect(focusedError.appearance.surface?.stroke?.width, 1.px);
+    expect(focusedError.appearance.surface?.stroke?.style, StrokeStyle.solid);
     expect(
       focusedError.appearance.content?.icon,
       const Identifier('icon.fieldError'),

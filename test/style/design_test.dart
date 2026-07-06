@@ -204,6 +204,11 @@ void main() {
     const t = _AppTerms();
     const brandFill = Term<Color>(Identifier('color.brand.fill'));
     const brandRadius = Term<Dimension>(Identifier('radius.brand'));
+    const brandStrokeWidth = Term<Dimension>(Identifier('stroke.brand_width'));
+    const brandStrokeStyle = Term<StrokeStyle>(
+      Identifier('stroke.brand_style'),
+    );
+    const brandShadow = Term<Shadow>(Identifier('shadow.brand'));
 
     final diagnostics = Design(
       vocabulary: t,
@@ -211,7 +216,14 @@ void main() {
         Style<ButtonPart>(
           id: Identifier('button'),
           root: Appearance(
-            surface: Surface(fill: .term(brandFill)),
+            surface: Surface(
+              fill: .term(brandFill),
+              stroke: Stroke(
+                width: .term(brandStrokeWidth),
+                style: .term(brandStrokeStyle),
+              ),
+              shadow: .term(brandShadow),
+            ),
             content: Content(color: .term(t.color.action.content)),
           ),
           parts: {
@@ -245,6 +257,30 @@ void main() {
         code: DiagnosticCodes.styleUnknownTerm,
         targetKind: 'term',
         targetName: 'radius.brand',
+      ),
+    );
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.styleUnknownTerm,
+        targetKind: 'term',
+        targetName: 'stroke.brand_width',
+      ),
+    );
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.styleUnknownTerm,
+        targetKind: 'term',
+        targetName: 'stroke.brand_style',
+      ),
+    );
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.styleUnknownTerm,
+        targetKind: 'term',
+        targetName: 'shadow.brand',
       ),
     );
     expect(

@@ -62,34 +62,143 @@ final class Appearance implements Mergeable<Appearance> {
 /// The visual treatment of a surface.
 ///
 /// Surface properties describe the container plane: its fill, outline, radius,
-/// and elevation. They deliberately avoid CSS boxes, Flutter decorations, and
+/// and shadow. They deliberately avoid CSS boxes, Flutter decorations, and
 /// Material components.
 final class Surface implements Mergeable<Surface> {
   /// Creates a partial surface declaration.
-  const Surface({this.fill, this.stroke, this.radius, this.elevation});
+  const Surface({this.fill, this.stroke, this.radius, this.shadow});
 
   /// The surface fill color.
   final Property<Color>? fill;
 
-  /// The stroke or border color for the surface.
-  final Property<Color>? stroke;
+  /// The stroke or border treatment for the surface.
+  final Stroke? stroke;
 
   /// The corner radius or shape radius for the surface.
   final Property<Dimension>? radius;
 
-  /// The platform-neutral elevation role or amount.
-  final Property<Dimension>? elevation;
+  /// The shadow cast by the surface.
+  final Property<Shadow>? shadow;
 
   /// Returns this surface with non-null properties from [later] applied.
   @override
   Surface merge(Surface later) {
     return Surface(
       fill: later.fill ?? fill,
-      stroke: later.stroke ?? stroke,
+      stroke: stroke.mergedWith(later.stroke),
       radius: later.radius ?? radius,
-      elevation: later.elevation ?? elevation,
+      shadow: later.shadow ?? shadow,
     );
   }
+}
+
+/// The outline treatment of a surface.
+///
+/// Stroke keeps border-like properties together so a later appearance can
+/// override only the color without losing the previously declared width or
+/// style. CSS adapters can project this to border properties, while Flutter
+/// adapters can project it to `BorderSide`.
+final class Stroke implements Mergeable<Stroke> {
+  /// Creates a partial stroke declaration.
+  const Stroke({this.color, this.width, this.style});
+
+  /// The stroke color.
+  final Property<Color>? color;
+
+  /// The stroke width.
+  final Property<Dimension>? width;
+
+  /// The stroke style.
+  final Property<StrokeStyle>? style;
+
+  /// Returns this stroke with non-null properties from [later] applied.
+  @override
+  Stroke merge(Stroke later) {
+    return Stroke(
+      color: later.color ?? color,
+      width: later.width ?? width,
+      style: later.style ?? style,
+    );
+  }
+}
+
+/// The visual stroke style.
+///
+/// The core model keeps this deliberately small. Platform adapters can reject
+/// unsupported values or map them to the closest target-specific stroke style.
+enum StrokeStyle {
+  /// A continuous stroke.
+  solid,
+
+  /// A dashed stroke.
+  dashed,
+
+  /// A dotted stroke.
+  dotted,
+
+  /// No visible stroke.
+  none,
+}
+
+/// A platform-neutral surface shadow.
+///
+/// A shadow is explicit paint data, not a Material elevation value. Adapter
+/// packages can map it to CSS `box-shadow`, Flutter `BoxShadow`, or ignore it
+/// when the target does not support shadows.
+final class Shadow {
+  /// Creates a shadow from zero or more [layers].
+  Shadow(Iterable<ShadowLayer> layers) : layers = List.unmodifiable(layers);
+
+  /// The shadow layers, ordered as authored.
+  final List<ShadowLayer> layers;
+
+  @override
+  bool operator ==(Object other) {
+    return other is Shadow && _listEquals(other.layers, layers);
+  }
+
+  @override
+  int get hashCode => Object.hashAll(layers);
+}
+
+/// One layer in a [Shadow].
+final class ShadowLayer {
+  /// Creates one shadow layer.
+  const ShadowLayer({
+    required this.color,
+    required this.offsetX,
+    required this.offsetY,
+    required this.blur,
+    this.spread = const Dimension.px(0),
+  });
+
+  /// The shadow color.
+  final Color color;
+
+  /// The horizontal shadow offset.
+  final Dimension offsetX;
+
+  /// The vertical shadow offset.
+  final Dimension offsetY;
+
+  /// The blur radius.
+  final Dimension blur;
+
+  /// The spread radius.
+  final Dimension spread;
+
+  @override
+  bool operator ==(Object other) {
+    return other is ShadowLayer &&
+        other.color == color &&
+        other.offsetX == offsetX &&
+        other.offsetY == offsetY &&
+        other.blur == blur &&
+        other.spread == spread;
+  }
+
+  @override
+  int get hashCode => Object.hash(color, offsetX, offsetY, blur, spread);
 }
 
 /// The visual treatment of content inside a surface.
@@ -281,4 +390,21 @@ final class Insets implements Mergeable<Insets> {
       left: later.left ?? left,
     );
   }
+}
+
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+
+  for (var index = 0; index < a.length; index += 1) {
+    if (a[index] != b[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }

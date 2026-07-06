@@ -31,6 +31,49 @@ void main() {
     expect(resolution.appearance.surface?.radius, 8.px);
   });
 
+  test('resolves structured stroke and shadow properties', () {
+    const strokeColor = Term<Color>(Identifier('stroke.color'));
+    const strokeWidth = Term<Dimension>(Identifier('stroke.width'));
+    const shadow = Term<Shadow>(Identifier('shadow.raised'));
+    final raisedShadow = Shadow([
+      const ShadowLayer(
+        color: Color(0x22000000),
+        offsetX: Dimension.px(0),
+        offsetY: Dimension.px(2),
+        blur: Dimension.px(8),
+      ),
+    ]);
+    final binding = Binding(Identifier('light'), [
+      strokeColor(const Color(0xffd0d7de)),
+      strokeWidth(1.px),
+      shadow(raisedShadow),
+    ]);
+    final style = Style<void>(
+      id: Identifier('card'),
+      root: const Appearance(
+        surface: Surface(
+          stroke: Stroke(
+            color: .term(strokeColor),
+            width: .term(strokeWidth),
+            style: .literal(StrokeStyle.solid),
+          ),
+          shadow: .term(shadow),
+        ),
+      ),
+    );
+
+    final resolution = style.resolve(binding: binding);
+
+    expect(resolution.diagnostics, isEmpty);
+    expect(
+      resolution.appearance.surface?.stroke?.color,
+      const Color(0xffd0d7de),
+    );
+    expect(resolution.appearance.surface?.stroke?.width, 1.px);
+    expect(resolution.appearance.surface?.stroke?.style, StrokeStyle.solid);
+    expect(resolution.appearance.surface?.shadow, raisedShadow);
+  });
+
   test('merges root part matching cases and instance override in order', () {
     const fill = Term<Color>(Identifier('color.action.fill'));
     const hoverFill = Term<Color>(Identifier('color.action.fillHover'));
