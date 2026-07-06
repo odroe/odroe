@@ -21,19 +21,20 @@ void main() {
       Style<void>(id: Identifier('button'), root: const Appearance()),
     ];
 
-    final design = Design(terms: t, bindings: bindings, styles: styles);
+    final design = Design(vocabulary: t, bindings: bindings, styles: styles);
     bindings.clear();
     styles.clear();
 
-    expect(design.terms, same(t));
-    expect(design.vocabulary, [
+    expect(design.vocabulary, same(t));
+    expect(design.vocabulary.color.action.fill.id.value, 'color.action.fill');
+    expect(design.terms, [
       t.color.action.fill,
       t.color.action.content,
       t.radius.control,
     ]);
     expect(design.bindings, hasLength(1));
     expect(design.styles, hasLength(1));
-    expect(() => design.vocabulary.clear(), throwsUnsupportedError);
+    expect(() => design.terms.clear(), throwsUnsupportedError);
     expect(() => design.bindings.clear(), throwsUnsupportedError);
   });
 
@@ -43,7 +44,7 @@ void main() {
     const caseFill = Term<Color>(Identifier('Color.Action.Fill'));
 
     final diagnostics = Design(
-      terms: const _TermListVocabulary(<Term>[fill, sameFill, caseFill]),
+      vocabulary: const _TermListVocabulary(<Term>[fill, sameFill, caseFill]),
       bindings: [
         Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
         Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
@@ -68,7 +69,7 @@ void main() {
     const t = _AppTerms();
 
     final diagnostics = Design(
-      terms: t,
+      vocabulary: t,
       bindings: [
         Binding(Identifier('light'), [
           t.color.action.fill(const Color(0xff006adc)),
@@ -86,7 +87,7 @@ void main() {
     const fill = Term<Color>(Identifier('color.action.fill'));
 
     final diagnostics = Design(
-      terms: const _TermListVocabulary(<Term>[fill]),
+      vocabulary: const _TermListVocabulary(<Term>[fill]),
       bindings: [
         Binding(Identifier('light'), [
           fill(const Color(0xff006adc)),
@@ -117,7 +118,7 @@ void main() {
     );
 
     final diagnostics = Design(
-      terms: const _TermListVocabulary(),
+      vocabulary: const _TermListVocabulary(),
       styles: [
         Style<ButtonPart>(
           id: Identifier('button'),
@@ -153,7 +154,7 @@ void main() {
     );
 
     final diagnostics = Design(
-      terms: const _TermListVocabulary(),
+      vocabulary: const _TermListVocabulary(),
       styles: [
         Style<void>(
           id: Identifier('button'),
@@ -191,7 +192,7 @@ void main() {
     const hovered = State(Identifier('state.hovered'));
 
     final diagnostics = Design(
-      terms: const _TermListVocabulary(),
+      vocabulary: const _TermListVocabulary(),
       styles: [
         Style<ButtonPart>(
           id: Identifier('button'),
@@ -212,7 +213,7 @@ void main() {
 
   test('runs custom policy objects', () {
     final diagnostics = Design(
-      terms: const _TermListVocabulary(),
+      vocabulary: const _TermListVocabulary(),
       policies: const [_AlwaysReportPolicy()],
     ).validate();
 

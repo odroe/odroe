@@ -10,7 +10,7 @@ import 'style.dart';
 /// A platform-neutral manifest for one style system.
 ///
 /// A design gathers the declarations that need to agree with each other: the
-/// typed terms object a system authors against, the bindings that give those
+/// typed vocabulary object a system authors against, the bindings that give its
 /// terms values, the styles that consume appearances and contracts, and the
 /// custom policies a project wants to enforce.
 ///
@@ -18,7 +18,7 @@ import 'style.dart';
 /// const t = AppTerms();
 ///
 /// final design = Design(
-///   terms: t,
+///   vocabulary: t,
 ///   bindings: [
 ///     Binding(Identifier('light'), [
 ///       t.color.action.fill(const Color(0xff006adc)),
@@ -40,34 +40,33 @@ import 'style.dart';
 /// Validation stays in the core model. It reports missing declarations and
 /// policy findings, but it does not project the design to CSS, Flutter, Material,
 /// Jaspr, or any other platform.
-final class Design {
+final class Design<V extends Vocabulary> {
   /// Creates a style design manifest.
   ///
   /// All collections are copied into immutable lists. Mutating a source list
   /// after construction will not change the design being validated.
   Design({
-    required Vocabulary terms,
+    required this.vocabulary,
     Iterable<Binding> bindings = const [],
     Iterable<Style> styles = const [],
     Iterable<Policy> policies = const [],
-  }) : terms = terms,
-       vocabulary = List.unmodifiable(terms.terms),
+  }) : terms = List.unmodifiable(vocabulary.terms),
        bindings = List.unmodifiable(bindings),
        styles = List.unmodifiable(styles),
        policies = List.unmodifiable(policies);
 
-  /// The typed terms object used when authoring bindings and appearances.
+  /// The typed vocabulary object used when authoring bindings and appearances.
   ///
   /// This is the same `t` object a package can expose to authors. It may be
   /// written by hand or generated later, but it remains a normal Dart object.
-  final Vocabulary terms;
+  final V vocabulary;
 
   /// The flattened terms that bindings are expected to assign.
   ///
-  /// [Design] derives this list from [terms] at construction time. It exists so
-  /// validators and policies can inspect the complete vocabulary without knowing
-  /// the shape of a project's typed term tree.
-  final List<Term> vocabulary;
+  /// [Design] derives this list from [vocabulary] at construction time. It
+  /// exists so validators and policies can inspect the complete vocabulary
+  /// without knowing the shape of a project's typed term tree.
+  final List<Term> terms;
 
   /// The named value sets available to resolve vocabulary terms.
   final List<Binding> bindings;
@@ -103,10 +102,7 @@ final class Design {
   /// ```
   List<Diagnostic> validate() {
     final diagnostics = <Diagnostic>[
-      ..._validateIdentifiers(
-        kind: 'term',
-        ids: vocabulary.map((term) => term.id),
-      ),
+      ..._validateIdentifiers(kind: 'term', ids: terms.map((term) => term.id)),
       ..._validateIdentifiers(kind: 'binding', ids: bindings.map((b) => b.id)),
       ..._validateIdentifiers(kind: 'style', ids: styles.map((s) => s.id)),
     ];
@@ -134,7 +130,7 @@ final class Design {
       for (final assignment in binding.assignments) assignment.term.id.value,
     };
 
-    for (final term in vocabulary) {
+    for (final term in terms) {
       if (assigned.contains(term.id.value)) {
         continue;
       }
@@ -277,11 +273,11 @@ abstract interface class Policy {
   void evaluate(PolicyContext context);
 }
 
-/// A typed term tree that can expose all of its vocabulary terms.
+/// A typed vocabulary tree that can expose its terms.
 ///
-/// The public design API accepts `terms: t` so authoring code can keep using a
-/// domain-specific object such as `t.color.action.fill`. This protocol is the
-/// bridge that lets validation also enumerate those terms:
+/// The public design API accepts `vocabulary: t` so authoring code can keep
+/// using a domain-specific object such as `t.color.action.fill`. This protocol is
+/// the bridge that lets validation also enumerate those terms:
 ///
 /// ```dart
 /// final class AppTerms implements Vocabulary {
