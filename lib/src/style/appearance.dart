@@ -1,5 +1,6 @@
 import 'binding.dart';
 import 'identifier.dart';
+import 'mergeable.dart';
 
 /// A partial visual declaration that can be reused and merged.
 ///
@@ -27,7 +28,7 @@ import 'identifier.dart';
 ///
 /// Appearances are intentionally visual-only. Gestures, navigation, semantic
 /// actions, routing, and application behavior belong outside this model.
-final class Appearance {
+final class Appearance implements Mergeable<Appearance> {
   /// Creates an appearance from optional visual facets.
   const Appearance({this.surface, this.content, this.metrics});
 
@@ -46,26 +47,12 @@ final class Appearance {
   /// that facet is merged with the existing facet. Inside each facet, non-null
   /// properties from [later] replace earlier values and null properties leave
   /// earlier values unchanged.
+  @override
   Appearance merge(Appearance later) {
     return Appearance(
-      surface: switch ((surface, later.surface)) {
-        (final current?, final next?) => current.merge(next),
-        (final current?, null) => current,
-        (null, final next?) => next,
-        _ => null,
-      },
-      content: switch ((content, later.content)) {
-        (final current?, final next?) => current.merge(next),
-        (final current?, null) => current,
-        (null, final next?) => next,
-        _ => null,
-      },
-      metrics: switch ((metrics, later.metrics)) {
-        (final current?, final next?) => current.merge(next),
-        (final current?, null) => current,
-        (null, final next?) => next,
-        _ => null,
-      },
+      surface: surface.mergedWith(later.surface),
+      content: content.mergedWith(later.content),
+      metrics: metrics.mergedWith(later.metrics),
     );
   }
 }
@@ -75,7 +62,7 @@ final class Appearance {
 /// Surface properties describe the container plane: its fill, outline, radius,
 /// and elevation. They deliberately avoid CSS boxes, Flutter decorations, and
 /// Material components.
-final class Surface {
+final class Surface implements Mergeable<Surface> {
   /// Creates a partial surface declaration.
   const Surface({this.fill, this.stroke, this.radius, this.elevation});
 
@@ -92,6 +79,7 @@ final class Surface {
   final Property<Unit>? elevation;
 
   /// Returns this surface with non-null properties from [later] applied.
+  @override
   Surface merge(Surface later) {
     return Surface(
       fill: later.fill ?? fill,
@@ -107,7 +95,7 @@ final class Surface {
 /// Content properties describe visible children such as labels and icons. They
 /// do not describe the child widgets, DOM nodes, accessibility labels, or
 /// semantic actions that may eventually use these values.
-final class Content {
+final class Content implements Mergeable<Content> {
   /// Creates a partial content declaration.
   const Content({this.color, this.text, this.icon, this.opacity});
 
@@ -124,6 +112,7 @@ final class Content {
   final Property<double>? opacity;
 
   /// Returns this content with non-null properties from [later] applied.
+  @override
   Content merge(Content later) {
     return Content(
       color: later.color ?? color,
@@ -138,7 +127,7 @@ final class Content {
 ///
 /// Metrics describe the space a visual object asks for. They are not layout
 /// algorithms and do not decide flex, grid, constraints, or widget structure.
-final class Metrics {
+final class Metrics implements Mergeable<Metrics> {
   /// Creates a partial metrics declaration.
   const Metrics({
     this.padding,
@@ -177,14 +166,10 @@ final class Metrics {
 
   /// Returns this metrics declaration with non-null properties from [later]
   /// applied.
+  @override
   Metrics merge(Metrics later) {
     return Metrics(
-      padding: switch ((padding, later.padding)) {
-        (final current?, final next?) => current.merge(next),
-        (final current?, null) => current,
-        (null, final next?) => next,
-        _ => null,
-      },
+      padding: padding.mergedWith(later.padding),
       gap: later.gap ?? gap,
       width: later.width ?? width,
       height: later.height ?? height,
@@ -308,7 +293,7 @@ final class Unit {
 ///
 /// Each side is optional so padding can participate in appearance merging.
 /// Later insets override only the sides they set.
-final class Insets {
+final class Insets implements Mergeable<Insets> {
   /// Creates insets with explicit sides.
   const Insets.only({this.top, this.right, this.bottom, this.left});
 
@@ -339,6 +324,7 @@ final class Insets {
   final Property<Unit>? left;
 
   /// Returns this inset set with non-null sides from [later] applied.
+  @override
   Insets merge(Insets later) {
     return Insets.only(
       top: later.top ?? top,
