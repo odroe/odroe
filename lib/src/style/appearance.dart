@@ -13,13 +13,13 @@ import 'identifier.dart';
 ///
 /// final control = Appearance(
 ///   surface: Surface(
-///     fill: AppearanceValue.term(actionFill),
-///     radius: AppearanceValue.term(controlRadius),
+///     fill: .term(actionFill),
+///     radius: .term(controlRadius),
 ///   ),
 ///   metrics: Metrics(
 ///     padding: Insets.symmetric(
-///       x: AppearanceValue.literal(Unit.px(16)),
-///       y: AppearanceValue.literal(Unit.px(8)),
+///       x: .literal(Unit.px(16)),
+///       y: .literal(Unit.px(8)),
 ///     ),
 ///   ),
 /// );
@@ -80,16 +80,16 @@ final class Surface {
   const Surface({this.fill, this.stroke, this.radius, this.elevation});
 
   /// The surface fill color.
-  final AppearanceValue<ColorValue>? fill;
+  final Property<ColorValue>? fill;
 
   /// The stroke or border color for the surface.
-  final AppearanceValue<ColorValue>? stroke;
+  final Property<ColorValue>? stroke;
 
   /// The corner radius or shape radius for the surface.
-  final AppearanceValue<Unit>? radius;
+  final Property<Unit>? radius;
 
   /// The platform-neutral elevation role or amount.
-  final AppearanceValue<Unit>? elevation;
+  final Property<Unit>? elevation;
 
   /// Returns this surface with non-null properties from [later] applied.
   Surface merge(Surface later) {
@@ -112,16 +112,16 @@ final class Content {
   const Content({this.color, this.text, this.icon, this.opacity});
 
   /// The foreground color for text or icons.
-  final AppearanceValue<ColorValue>? color;
+  final Property<ColorValue>? color;
 
   /// The semantic text role to use for labels.
-  final AppearanceValue<Identifier>? text;
+  final Property<Identifier>? text;
 
   /// The semantic icon role to use for icons.
-  final AppearanceValue<Identifier>? icon;
+  final Property<Identifier>? icon;
 
   /// The opacity applied to content.
-  final AppearanceValue<double>? opacity;
+  final Property<double>? opacity;
 
   /// Returns this content with non-null properties from [later] applied.
   Content merge(Content later) {
@@ -155,25 +155,25 @@ final class Metrics {
   final Insets? padding;
 
   /// Space between repeated children.
-  final AppearanceValue<Unit>? gap;
+  final Property<Unit>? gap;
 
   /// The preferred width.
-  final AppearanceValue<Unit>? width;
+  final Property<Unit>? width;
 
   /// The preferred height.
-  final AppearanceValue<Unit>? height;
+  final Property<Unit>? height;
 
   /// The minimum width.
-  final AppearanceValue<Unit>? minWidth;
+  final Property<Unit>? minWidth;
 
   /// The minimum height.
-  final AppearanceValue<Unit>? minHeight;
+  final Property<Unit>? minHeight;
 
   /// The maximum width.
-  final AppearanceValue<Unit>? maxWidth;
+  final Property<Unit>? maxWidth;
 
   /// The maximum height.
-  final AppearanceValue<Unit>? maxHeight;
+  final Property<Unit>? maxHeight;
 
   /// Returns this metrics declaration with non-null properties from [later]
   /// applied.
@@ -196,36 +196,58 @@ final class Metrics {
   }
 }
 
-/// A literal appearance value or a reference to a vocabulary term.
+/// A declared value for an appearance property.
 ///
-/// Appearance declarations can use concrete values directly, or defer the value
-/// to a [Binding] by referencing a [Term]. Resolution is intentionally not part
-/// of this type; a later resolver will choose a binding and replace term
-/// references with concrete values.
+/// A property is the assignable leaf in an [Appearance]. It either stores a
+/// concrete literal value, or it points at a vocabulary [Term] that will be
+/// resolved through a [Binding] later.
+///
+/// Use a literal when the declaration owns the exact value:
 ///
 /// ```dart
-/// const fill = AppearanceValue.literal(ColorValue.hex(0xff006adc));
-/// const fillTerm = Term<ColorValue>(Identifier('color.action.fill'));
-/// const referencedFill = AppearanceValue.term(fillTerm);
+/// const surface = Surface(fill: .literal(ColorValue.hex(0xff006adc)));
 /// ```
-final class AppearanceValue<T> {
-  /// Creates a concrete appearance value.
-  const AppearanceValue.literal(T value) : literal = value, term = null;
+///
+/// Use a term when the declaration should follow a shared binding:
+///
+/// ```dart
+/// const fillTerm = Term<ColorValue>(Identifier('color.action.fill'));
+///
+/// const surface = Surface(fill: .term(fillTerm));
+/// ```
+sealed class Property<T> {
+  /// Creates a property variant.
+  const Property();
 
-  /// Creates an appearance value that will be read from a binding later.
-  const AppearanceValue.term(Term<T> this.term) : literal = null;
+  /// Creates a property that stores a concrete [value].
+  const factory Property.literal(T value) = LiteralProperty<T>;
 
-  /// The concrete value, when this is a literal value.
-  final T? literal;
+  /// Creates a property that resolves through [term].
+  const factory Property.term(Term<T> term) = TermProperty<T>;
+}
 
-  /// The referenced term, when this value is binding-backed.
-  final Term<T>? term;
+/// A [Property] that stores a concrete value in the declaration itself.
+///
+/// Prefer this variant for values that are intentionally local to an
+/// appearance, such as one-off spacing or an override color.
+final class LiteralProperty<T> extends Property<T> {
+  /// Creates a property from a concrete [value].
+  const LiteralProperty(this.value);
 
-  /// Whether this value stores a literal value.
-  bool get isLiteral => term == null;
+  /// The concrete value carried by this property.
+  final T value;
+}
 
-  /// Whether this value references a [Term].
-  bool get isTerm => term != null;
+/// A [Property] that refers to a vocabulary term.
+///
+/// Prefer this variant when multiple appearances should share the same design
+/// decision through a [Binding], such as semantic color or radius terms.
+final class TermProperty<T> extends Property<T> {
+  /// Creates a property that resolves through [term].
+  const TermProperty(this.term);
+
+  /// The referenced term.
+  final Term<T> term;
 }
 
 /// A platform-neutral 32-bit ARGB color.
@@ -291,30 +313,30 @@ final class Insets {
   const Insets.only({this.top, this.right, this.bottom, this.left});
 
   /// Creates equal insets on every side.
-  const Insets.all(AppearanceValue<Unit> value)
+  const Insets.all(Property<Unit> value)
     : top = value,
       right = value,
       bottom = value,
       left = value;
 
   /// Creates horizontal and vertical insets.
-  const Insets.symmetric({AppearanceValue<Unit>? x, AppearanceValue<Unit>? y})
+  const Insets.symmetric({Property<Unit>? x, Property<Unit>? y})
     : top = y,
       right = x,
       bottom = y,
       left = x;
 
   /// The top inset.
-  final AppearanceValue<Unit>? top;
+  final Property<Unit>? top;
 
   /// The right inset.
-  final AppearanceValue<Unit>? right;
+  final Property<Unit>? right;
 
   /// The bottom inset.
-  final AppearanceValue<Unit>? bottom;
+  final Property<Unit>? bottom;
 
   /// The left inset.
-  final AppearanceValue<Unit>? left;
+  final Property<Unit>? left;
 
   /// Returns this inset set with non-null sides from [later] applied.
   Insets merge(Insets later) {
