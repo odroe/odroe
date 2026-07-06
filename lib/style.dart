@@ -29,6 +29,7 @@ export 'src/style/case.dart';
 export 'src/style/color.dart';
 export 'src/style/condition.dart';
 export 'src/style/contract.dart';
+export 'src/style/design.dart';
 export 'src/style/diagnostic.dart';
 export 'src/style/dimension.dart';
 export 'src/style/identifier.dart';

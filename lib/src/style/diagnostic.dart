@@ -48,6 +48,14 @@ abstract final class DiagnosticCodes {
   static const bindingDuplicateAssignmentIgnoringCase =
       'binding.duplicate_assignment_ignoring_case';
 
+  /// A binding does not assign a term declared by the design vocabulary.
+  ///
+  /// Design validation reports this when a [Design] knows the complete vocabulary
+  /// and can compare every [Binding] against it. A binding can still be validated
+  /// on its own without reporting this code, because local binding validation
+  /// does not know which terms are required.
+  static const designMissingBindingValue = 'design.missing_binding_value';
+
   /// An empty [Identifier.value].
   static const identifierEmpty = 'identifier.empty';
 
@@ -73,6 +81,18 @@ abstract final class DiagnosticCodes {
   /// namespace. It is not a lexical error for a single [Identifier].
   static const identifierDuplicateIgnoringCase =
       'identifier.duplicate_ignoring_case';
+
+  /// A style declares a part that is not present in its contract.
+  ///
+  /// Contract validation is owned by the style because parts are only meaningful
+  /// through the style's part type.
+  static const styleUnknownPart = 'style.unknown_part';
+
+  /// A style case uses an axis that is not present in its contract.
+  static const styleUnknownAxis = 'style.unknown_axis';
+
+  /// A style case uses a state that is not present in its contract.
+  static const styleUnknownState = 'style.unknown_state';
 }
 
 /// A non-throwing validation result for style declarations.
