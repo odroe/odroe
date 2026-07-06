@@ -192,6 +192,7 @@ final _button = Style<_ButtonPart>(
             x: .term(_terms.space.controlSmX),
             y: .term(_terms.space.controlSmY),
           ),
+          width: .term(_terms.size.iconSm),
           minHeight: .term(_terms.size.controlSmHeight),
         ),
       ),
@@ -428,7 +429,7 @@ void main() {
       resolution.appearance.content?.text,
       const Identifier('text.buttonLabelSm'),
     );
-    expect(resolution.appearance.metrics?.width, 18.px);
+    expect(resolution.appearance.metrics?.width, 16.px);
     expect(resolution.appearance.metrics?.minHeight, 32.px);
     expect(resolution.appearance.metrics?.padding?.left, 12.px);
     expect(resolution.appearance.metrics?.padding?.top, 6.px);
