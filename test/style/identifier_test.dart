@@ -23,23 +23,23 @@ void main() {
   test('reports invalid identifier formats', () {
     expect(
       const Identifier('').validate(),
-      containsDiagnosticCode(DiagnosticCodes.identifierEmpty),
+      containsDiagnostic(code: DiagnosticCodes.identifierEmpty),
     );
     expect(
       const Identifier('color..action').validate(),
-      containsDiagnosticCode(DiagnosticCodes.identifierEmptySegment),
+      containsDiagnostic(code: DiagnosticCodes.identifierEmptySegment),
     );
     expect(
       const Identifier('Color.Action').validate(),
-      containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
+      containsDiagnostic(code: DiagnosticCodes.identifierInvalidSegment),
     );
     expect(
       const Identifier('color action').validate(),
-      containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
+      containsDiagnostic(code: DiagnosticCodes.identifierInvalidSegment),
     );
     expect(
       const Identifier('color.action-fill').validate(),
-      containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
+      containsDiagnostic(code: DiagnosticCodes.identifierInvalidSegment),
     );
   });
 }

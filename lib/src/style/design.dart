@@ -89,6 +89,7 @@ final class Design<V extends Vocabulary> {
   /// * duplicate term, binding, and style identifiers;
   /// * duplicate assignments inside each binding;
   /// * vocabulary terms missing from a binding;
+  /// * binding assignments that do not belong to the vocabulary;
   /// * style parts, axes, and states that are not declared by the style contract.
   ///
   /// Each [Policy] then receives a [PolicyContext] for project-specific checks:
@@ -109,7 +110,7 @@ final class Design<V extends Vocabulary> {
 
     for (final binding in bindings) {
       diagnostics.addAll(binding.validate());
-      diagnostics.addAll(_validateBindingCompleteness(binding));
+      diagnostics.addAll(_validateBindingVocabulary(binding));
     }
 
     for (final style in styles) {
@@ -124,11 +125,29 @@ final class Design<V extends Vocabulary> {
     return diagnostics;
   }
 
-  List<Diagnostic> _validateBindingCompleteness(Binding binding) {
+  List<Diagnostic> _validateBindingVocabulary(Binding binding) {
     final diagnostics = <Diagnostic>[];
+    final vocabularyIds = {for (final term in terms) term.id.value};
     final assigned = {
       for (final assignment in binding.assignments) assignment.term.id.value,
     };
+
+    for (final assignment in binding.assignments) {
+      final termId = assignment.term.id.value;
+      if (vocabularyIds.contains(termId)) {
+        continue;
+      }
+
+      diagnostics.add(
+        Diagnostic(
+          code: DiagnosticCodes.designUnknownBindingValue,
+          target: DiagnosticTarget(kind: 'assignment', name: termId),
+          message:
+              'Binding `${binding.id.value}` assigns term `$termId`, but this '
+              'term is not declared by the design vocabulary.',
+        ),
+      );
+    }
 
     for (final term in terms) {
       if (assigned.contains(term.id.value)) {

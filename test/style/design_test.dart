@@ -38,30 +38,86 @@ void main() {
     expect(() => design.bindings.clear(), throwsUnsupportedError);
   });
 
-  test('reports duplicate identifiers across manifest namespaces', () {
+  test('reports duplicate vocabulary term identifiers', () {
     const fill = Term<Color>(Identifier('color.action.fill'));
     const sameFill = Term<Color>(Identifier('color.action.fill'));
     const caseFill = Term<Color>(Identifier('Color.Action.Fill'));
 
     final diagnostics = Design(
       vocabulary: const _TermListVocabulary(<Term>[fill, sameFill, caseFill]),
+    ).validate();
+
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.identifierDuplicate,
+        targetKind: 'term',
+        targetName: 'color.action.fill',
+      ),
+    );
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.identifierDuplicateIgnoringCase,
+        targetKind: 'term',
+        targetName: 'Color.Action.Fill',
+      ),
+    );
+  });
+
+  test('reports duplicate binding identifiers', () {
+    final diagnostics = Design(
+      vocabulary: const _TermListVocabulary(),
       bindings: [
-        Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
-        Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
-      ],
-      styles: [
-        Style<void>(id: Identifier('button'), root: const Appearance()),
-        Style<void>(id: Identifier('button'), root: const Appearance()),
+        Binding(Identifier('light'), const []),
+        Binding(Identifier('light'), const []),
+        Binding(Identifier('Light'), const []),
       ],
     ).validate();
 
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.identifierDuplicate),
+      containsDiagnostic(
+        code: DiagnosticCodes.identifierDuplicate,
+        targetKind: 'binding',
+        targetName: 'light',
+      ),
     );
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.identifierDuplicateIgnoringCase),
+      containsDiagnostic(
+        code: DiagnosticCodes.identifierDuplicateIgnoringCase,
+        targetKind: 'binding',
+        targetName: 'Light',
+      ),
+    );
+  });
+
+  test('reports duplicate style identifiers', () {
+    final diagnostics = Design(
+      vocabulary: const _TermListVocabulary(),
+      styles: [
+        Style<void>(id: Identifier('button'), root: const Appearance()),
+        Style<void>(id: Identifier('button'), root: const Appearance()),
+        Style<void>(id: Identifier('Button'), root: const Appearance()),
+      ],
+    ).validate();
+
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.identifierDuplicate,
+        targetKind: 'style',
+        targetName: 'button',
+      ),
+    );
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.identifierDuplicateIgnoringCase,
+        targetKind: 'style',
+        targetName: 'Button',
+      ),
     );
   });
 
@@ -79,7 +135,39 @@ void main() {
 
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.designMissingBindingValue),
+      containsDiagnostic(code: DiagnosticCodes.designMissingBindingValue),
+    );
+  });
+
+  test('reports binding assignments outside the vocabulary', () {
+    const t = _AppTerms();
+    const brandFill = Term<Color>(Identifier('color.brand.fill'));
+
+    final diagnostics = Design(
+      vocabulary: t,
+      bindings: [
+        Binding(Identifier('light'), [
+          t.color.action.fill(const Color(0xff006adc)),
+          t.color.action.content(const Color(0xffffffff)),
+          t.radius.control(8.px),
+          brandFill(const Color(0xff123456)),
+        ]),
+      ],
+    ).validate();
+
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.designUnknownBindingValue,
+        targetKind: 'assignment',
+        targetName: 'color.brand.fill',
+      ),
+    );
+    expect(
+      diagnostics,
+      isNot(
+        containsDiagnostic(code: DiagnosticCodes.designMissingBindingValue),
+      ),
     );
   });
 
@@ -98,7 +186,7 @@ void main() {
 
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.bindingDuplicateAssignment),
+      containsDiagnostic(code: DiagnosticCodes.bindingDuplicateAssignment),
     );
   });
 
@@ -135,15 +223,15 @@ void main() {
 
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.styleUnknownPart),
+      containsDiagnostic(code: DiagnosticCodes.styleUnknownPart),
     );
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.styleUnknownAxis),
+      containsDiagnostic(code: DiagnosticCodes.styleUnknownAxis),
     );
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.styleUnknownState),
+      containsDiagnostic(code: DiagnosticCodes.styleUnknownState),
     );
   });
 
@@ -172,11 +260,11 @@ void main() {
 
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
+      containsDiagnostic(code: DiagnosticCodes.identifierInvalidSegment),
     );
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.identifierEmptySegment),
+      containsDiagnostic(code: DiagnosticCodes.identifierEmptySegment),
     );
   });
 
@@ -207,7 +295,7 @@ void main() {
 
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.identifierDuplicate),
+      containsDiagnostic(code: DiagnosticCodes.identifierDuplicate),
     );
   });
 
@@ -217,7 +305,10 @@ void main() {
       policies: const [_AlwaysReportPolicy()],
     ).validate();
 
-    expect(diagnostics, containsDiagnosticCode(_AlwaysReportPolicy.codeValue));
+    expect(
+      diagnostics,
+      containsDiagnostic(code: _AlwaysReportPolicy.codeValue),
+    );
   });
 }
 

@@ -56,6 +56,14 @@ abstract final class DiagnosticCodes {
   /// does not know which terms are required.
   static const designMissingBindingValue = 'design.missing_binding_value';
 
+  /// A binding assigns a term outside the design vocabulary.
+  ///
+  /// Design validation reports this when a [Binding] contains an assignment for
+  /// a foreign or misspelled [Term]. Keeping this at the design layer lets
+  /// bindings stay reusable while still preventing complete-but-invalid token
+  /// sets from passing manifest validation.
+  static const designUnknownBindingValue = 'design.unknown_binding_value';
+
   /// An empty [Identifier.value].
   static const identifierEmpty = 'identifier.empty';
 

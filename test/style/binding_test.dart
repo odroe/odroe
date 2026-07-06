@@ -53,12 +53,12 @@ void main() {
 
     expect(
       diagnostics,
-      containsDiagnosticCode(DiagnosticCodes.bindingDuplicateAssignment),
+      containsDiagnostic(code: DiagnosticCodes.bindingDuplicateAssignment),
     );
     expect(
       diagnostics,
-      containsDiagnosticCode(
-        DiagnosticCodes.bindingDuplicateAssignmentIgnoringCase,
+      containsDiagnostic(
+        code: DiagnosticCodes.bindingDuplicateAssignmentIgnoringCase,
       ),
     );
   });
