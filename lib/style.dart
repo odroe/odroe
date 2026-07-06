@@ -8,12 +8,12 @@
 /// bindings:
 ///
 /// ```dart
-/// const actionFill = Term<String>(Identifier('color.action.fill'));
-/// const actionContent = Term<String>(Identifier('color.action.content'));
+/// const actionFill = Term<Color>(Identifier('color.action.fill'));
+/// const actionContent = Term<Color>(Identifier('color.action.content'));
 ///
 /// final light = Binding(Identifier('light'), [
-///   actionFill('#006adc'),
-///   actionContent('#ffffff'),
+///   actionFill(Color(0xff006adc)),
+///   actionContent(Color(0xffffffff)),
 /// ]);
 /// ```
 ///
@@ -22,6 +22,9 @@
 /// values that other packages can adapt for Flutter, CSS, or other targets.
 library;
 
+export 'src/style/appearance.dart';
 export 'src/style/binding.dart';
+export 'src/style/color.dart';
 export 'src/style/diagnostic.dart';
+export 'src/style/dimension.dart';
 export 'src/style/identifier.dart';
