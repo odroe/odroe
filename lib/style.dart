@@ -33,4 +33,4 @@ export 'src/style/diagnostic.dart';
 export 'src/style/dimension.dart';
 export 'src/style/identifier.dart';
 export 'src/style/state.dart';
-export 'src/style/style_declaration.dart';
+export 'src/style/style.dart';
