@@ -1,0 +1,9 @@
+name: odroe
+description: Platform-neutral design and application primitives for Dart.
+version: 0.0.0
+homepage: https://odroe.dev
+repository: https://github.com/odroe/odroe
+issue_tracker: https://github.com/odroe/odroe/issues
+
+environment:
+  sdk: ^3.10.0
