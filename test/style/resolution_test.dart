@@ -143,6 +143,55 @@ void main() {
     expect(resolution.appearance.content?.opacity, 0.5);
   });
 
+  test('uses axis default values when no active value is supplied', () {
+    const tone = Axis<ButtonTone>(
+      id: Identifier('button.tone'),
+      defaultValue: ButtonTone.primary,
+    );
+    final binding = Binding(Identifier('light'), const []);
+    final style = Style<void>(
+      id: Identifier('button'),
+      root: const Appearance(content: Content(opacity: .literal(1))),
+      cases: [
+        .when(
+          tone(.primary),
+          const Appearance(content: Content(opacity: .literal(0.75))),
+        ),
+      ],
+    );
+
+    final resolution = style.resolve(binding: binding);
+
+    expect(resolution.diagnostics, isEmpty);
+    expect(resolution.appearance.content?.opacity, 0.75);
+  });
+
+  test('collects diagnostics from every compound condition child', () {
+    final binding = Binding(Identifier('light'), const []);
+    final style = Style<void>(
+      id: Identifier('button'),
+      root: const Appearance(),
+      cases: [
+        .all(const [
+          _UnsupportedCondition(),
+          _UnsupportedCondition(),
+        ], const Appearance()),
+        .any(const [
+          _UnsupportedCondition(),
+          _UnsupportedCondition(),
+        ], const Appearance()),
+      ],
+    );
+
+    final resolution = style.resolve(binding: binding);
+    final unsupportedDiagnostics = resolution.diagnostics.where(
+      (diagnostic) =>
+          diagnostic.code == DiagnosticCodes.resolutionUnsupportedCondition,
+    );
+
+    expect(unsupportedDiagnostics, hasLength(4));
+  });
+
   test('reports unresolved terms in the final merged appearance', () {
     const fill = Term<Color>(Identifier('color.action.fill'));
     final binding = Binding(Identifier('light'), const []);

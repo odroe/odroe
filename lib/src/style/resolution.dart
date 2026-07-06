@@ -301,30 +301,34 @@ final class _ResolutionState {
         }
 
         final active = _axisValues[axis.id.value];
+        final activeAxis = active?.axis ?? declaredAxis ?? axis;
+        final activeValue =
+            active?.value ?? declaredAxis?.defaultValue ?? axis.defaultValue;
         return _ConditionMatch(
-          matches:
-              active != null &&
-              axis.acceptsContract(active.axis) &&
-              active.value == value,
+          matches: axis.acceptsContract(activeAxis) && activeValue == value,
         );
       case AllCondition(:final conditions):
+        var isValid = true;
+        var matched = true;
         for (final condition in conditions) {
           final result = _matches(condition);
-          if (!result.isValid || !result.matches) {
-            return result;
-          }
+          isValid = isValid && result.isValid;
+          matched = matched && result.matches;
         }
-        return const _ConditionMatch(matches: true);
+        return isValid
+            ? _ConditionMatch(matches: matched)
+            : const _ConditionMatch.invalid();
       case AnyCondition(:final conditions):
+        var isValid = true;
         var matched = false;
         for (final condition in conditions) {
           final result = _matches(condition);
-          if (!result.isValid) {
-            return result;
-          }
+          isValid = isValid && result.isValid;
           matched = matched || result.matches;
         }
-        return _ConditionMatch(matches: matched);
+        return isValid
+            ? _ConditionMatch(matches: matched)
+            : const _ConditionMatch.invalid();
       case NotCondition(:final condition):
         final result = _matches(condition);
         return result.isValid
