@@ -33,6 +33,16 @@ final class Axis<T> {
   AxisCondition<T> call(T value) {
     return AxisCondition<T>(this, value);
   }
+
+  @override
+  bool operator ==(Object other) {
+    return other is Axis<Object?> &&
+        other.id == id &&
+        other.defaultValue == defaultValue;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, defaultValue);
 }
 
 /// A condition produced by an [Axis] and one typed axis value.
