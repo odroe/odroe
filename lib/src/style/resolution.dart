@@ -58,19 +58,34 @@ final class ResolvedAppearance {
 /// Resolved surface-facing visual values.
 final class ResolvedSurface {
   /// Creates a resolved surface declaration.
-  const ResolvedSurface({this.fill, this.stroke, this.radius, this.elevation});
+  const ResolvedSurface({this.fill, this.stroke, this.radius, this.shadow});
 
   /// The resolved surface fill color.
   final Color? fill;
 
-  /// The resolved stroke or border color.
-  final Color? stroke;
+  /// The resolved stroke or border treatment.
+  final ResolvedStroke? stroke;
 
   /// The resolved corner or shape radius.
   final Dimension? radius;
 
-  /// The resolved platform-neutral elevation amount or role.
-  final Dimension? elevation;
+  /// The resolved shadow cast by the surface.
+  final Shadow? shadow;
+}
+
+/// Resolved stroke values.
+final class ResolvedStroke {
+  /// Creates a resolved stroke declaration.
+  const ResolvedStroke({this.color, this.width, this.style});
+
+  /// The resolved stroke color.
+  final Color? color;
+
+  /// The resolved stroke width.
+  final Dimension? width;
+
+  /// The resolved stroke style.
+  final StrokeStyle? style;
 }
 
 /// Resolved content-facing visual values.
@@ -370,9 +385,21 @@ final class _ResolutionState {
 
     return ResolvedSurface(
       fill: resolveProperty(surface.fill),
-      stroke: resolveProperty(surface.stroke),
+      stroke: resolveStroke(surface.stroke),
       radius: resolveProperty(surface.radius),
-      elevation: resolveProperty(surface.elevation),
+      shadow: resolveProperty(surface.shadow),
+    );
+  }
+
+  ResolvedStroke? resolveStroke(Stroke? stroke) {
+    if (stroke == null) {
+      return null;
+    }
+
+    return ResolvedStroke(
+      color: resolveProperty(stroke.color),
+      width: resolveProperty(stroke.width),
+      style: resolveProperty(stroke.style),
     );
   }
 

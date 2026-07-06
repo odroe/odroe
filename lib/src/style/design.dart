@@ -370,9 +370,9 @@ Iterable<Term> _appearanceTerms(Appearance appearance) sync* {
   final surface = appearance.surface;
   if (surface != null) {
     yield* _propertyTerms(surface.fill);
-    yield* _propertyTerms(surface.stroke);
+    yield* _strokeTerms(surface.stroke);
     yield* _propertyTerms(surface.radius);
-    yield* _propertyTerms(surface.elevation);
+    yield* _propertyTerms(surface.shadow);
   }
 
   final content = appearance.content;
@@ -394,6 +394,16 @@ Iterable<Term> _appearanceTerms(Appearance appearance) sync* {
     yield* _propertyTerms(metrics.maxWidth);
     yield* _propertyTerms(metrics.maxHeight);
   }
+}
+
+Iterable<Term> _strokeTerms(Stroke? stroke) sync* {
+  if (stroke == null) {
+    return;
+  }
+
+  yield* _propertyTerms(stroke.color);
+  yield* _propertyTerms(stroke.width);
+  yield* _propertyTerms(stroke.style);
 }
 
 Iterable<Term> _insetTerms(Insets? insets) sync* {
