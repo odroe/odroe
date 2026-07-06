@@ -14,11 +14,11 @@ void main() {
 
     expect(
       duplicateDiagnostics,
-      containsDiagnosticCode(DiagnosticCodes.identifierDuplicate),
+      containsDiagnostic(code: DiagnosticCodes.identifierDuplicate),
     );
     expect(
       duplicateDiagnostics,
-      containsDiagnosticCode(DiagnosticCodes.identifierDuplicateIgnoringCase),
+      containsDiagnostic(code: DiagnosticCodes.identifierDuplicateIgnoringCase),
     );
   });
 }

@@ -32,6 +32,10 @@ void main() {
       id: Identifier('button.tone'),
       defaultValue: ButtonTone.primary,
     );
+    const stringTone = Axis<String>(
+      id: Identifier('button.tone'),
+      defaultValue: 'primary',
+    );
     const otherTone = Axis<ButtonTone>(
       id: Identifier('button.intent'),
       defaultValue: ButtonTone.primary,
@@ -45,7 +49,10 @@ void main() {
 
     expect(contract.allowsPart(ButtonPart.icon), isTrue);
     expect(contract.allowsPart(ButtonPart.label), isFalse);
+    expect(contract.axisNamed(tone.id), same(tone));
+    expect(contract.axisNamed(otherTone.id), isNull);
     expect(contract.allowsAxis(sameTone), isTrue);
+    expect(contract.allowsAxis(stringTone), isFalse);
     expect(contract.allowsAxis(otherTone), isFalse);
     expect(
       contract.allowsState(const State(Identifier('state.hovered'))),

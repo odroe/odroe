@@ -48,6 +48,31 @@ abstract final class DiagnosticCodes {
   static const bindingDuplicateAssignmentIgnoringCase =
       'binding.duplicate_assignment_ignoring_case';
 
+  /// A binding does not assign a term declared by the design vocabulary.
+  ///
+  /// Design validation reports this when a [Design] knows the complete vocabulary
+  /// and can compare every [Binding] against it. A binding can still be validated
+  /// on its own without reporting this code, because local binding validation
+  /// does not know which terms are required.
+  static const designMissingBindingValue = 'design.missing_binding_value';
+
+  /// A binding assigns a term outside the design vocabulary.
+  ///
+  /// Design validation reports this when a [Binding] contains an assignment for
+  /// a foreign or misspelled [Term]. Keeping this at the design layer lets
+  /// bindings stay reusable while still preventing complete-but-invalid token
+  /// sets from passing manifest validation.
+  static const designUnknownBindingValue = 'design.unknown_binding_value';
+
+  /// A binding assigns a value that does not match its vocabulary term type.
+  ///
+  /// Design validation reports this when an assignment has the same identifier
+  /// as a vocabulary [Term], but the authored value is not accepted by that term.
+  /// This catches declarations that bypass the typed term object with another
+  /// term using the same identifier and an incompatible type argument.
+  static const designInvalidBindingValueType =
+      'design.invalid_binding_value_type';
+
   /// An empty [Identifier.value].
   static const identifierEmpty = 'identifier.empty';
 
@@ -73,6 +98,41 @@ abstract final class DiagnosticCodes {
   /// namespace. It is not a lexical error for a single [Identifier].
   static const identifierDuplicateIgnoringCase =
       'identifier.duplicate_ignoring_case';
+
+  /// A style declares a part that is not present in its contract.
+  ///
+  /// Contract validation is owned by the style because parts are only meaningful
+  /// through the style's part type.
+  static const styleUnknownPart = 'style.unknown_part';
+
+  /// A style appearance references a term outside the design vocabulary.
+  ///
+  /// Design validation reports this when a [Property.term] inside a style root,
+  /// part, or case appearance points at a foreign or misspelled [Term]. The
+  /// style may still be structurally valid, but it cannot be resolved from the
+  /// validated bindings unless every referenced term belongs to the vocabulary.
+  static const styleUnknownTerm = 'style.unknown_term';
+
+  /// A style appearance references a term with the wrong value type.
+  ///
+  /// Design validation reports this when a style term reference has the same
+  /// identifier as a vocabulary [Term], but its type argument does not match the
+  /// vocabulary term. This protects resolvers from reading a valid binding value
+  /// through a style property that expects a different value type.
+  static const styleInvalidTermType = 'style.invalid_term_type';
+
+  /// A style case uses an axis that is not present in its contract.
+  static const styleUnknownAxis = 'style.unknown_axis';
+
+  /// A style case uses an axis value that does not match its contract axis type.
+  ///
+  /// Design validation reports this when a condition uses an [Axis] with the
+  /// same identifier as a contract axis but with an incompatible type argument
+  /// or value.
+  static const styleInvalidAxisValueType = 'style.invalid_axis_value_type';
+
+  /// A style case uses a state that is not present in its contract.
+  static const styleUnknownState = 'style.unknown_state';
 }
 
 /// A non-throwing validation result for style declarations.
