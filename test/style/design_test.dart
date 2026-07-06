@@ -9,23 +9,28 @@ enum ButtonTone { primary, danger }
 
 void main() {
   test('stores manifest collections in immutable lists', () {
-    const fill = Term<Color>(Identifier('color.action.fill'));
-    final vocabulary = <Term<Object?>>[fill];
-    final terms = _TestVocabulary(vocabulary);
+    const t = _AppTerms();
     final bindings = [
-      Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
+      Binding(Identifier('light'), [
+        t.color.action.fill(const Color(0xff006adc)),
+        t.color.action.content(const Color(0xffffffff)),
+        t.radius.control(8.px),
+      ]),
     ];
     final styles = [
       Style<void>(id: Identifier('button'), root: const Appearance()),
     ];
 
-    final design = Design(terms: terms, bindings: bindings, styles: styles);
-    vocabulary.clear();
+    final design = Design(terms: t, bindings: bindings, styles: styles);
     bindings.clear();
     styles.clear();
 
-    expect(design.terms, same(terms));
-    expect(design.vocabulary, [fill]);
+    expect(design.terms, same(t));
+    expect(design.vocabulary, [
+      t.color.action.fill,
+      t.color.action.content,
+      t.radius.control,
+    ]);
     expect(design.bindings, hasLength(1));
     expect(design.styles, hasLength(1));
     expect(() => design.vocabulary.clear(), throwsUnsupportedError);
@@ -38,7 +43,7 @@ void main() {
     const caseFill = Term<Color>(Identifier('Color.Action.Fill'));
 
     final diagnostics = Design(
-      terms: const _TestVocabulary(<Term<Object?>>[fill, sameFill, caseFill]),
+      terms: const _TermListVocabulary(<Term>[fill, sameFill, caseFill]),
       bindings: [
         Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
         Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
@@ -60,13 +65,14 @@ void main() {
   });
 
   test('reports missing vocabulary terms in bindings', () {
-    const fill = Term<Color>(Identifier('color.action.fill'));
-    const content = Term<Color>(Identifier('color.action.content'));
+    const t = _AppTerms();
 
     final diagnostics = Design(
-      terms: const _TestVocabulary(<Term<Object?>>[fill, content]),
+      terms: t,
       bindings: [
-        Binding(Identifier('light'), [fill(const Color(0xff006adc))]),
+        Binding(Identifier('light'), [
+          t.color.action.fill(const Color(0xff006adc)),
+        ]),
       ],
     ).validate();
 
@@ -80,7 +86,7 @@ void main() {
     const fill = Term<Color>(Identifier('color.action.fill'));
 
     final diagnostics = Design(
-      terms: const _TestVocabulary(<Term<Object?>>[fill]),
+      terms: const _TermListVocabulary(<Term>[fill]),
       bindings: [
         Binding(Identifier('light'), [
           fill(const Color(0xff006adc)),
@@ -111,7 +117,7 @@ void main() {
     );
 
     final diagnostics = Design(
-      terms: const _TestVocabulary(),
+      terms: const _TermListVocabulary(),
       styles: [
         Style<ButtonPart>(
           id: Identifier('button'),
@@ -147,7 +153,7 @@ void main() {
     );
 
     final diagnostics = Design(
-      terms: const _TestVocabulary(),
+      terms: const _TermListVocabulary(),
       styles: [
         Style<void>(
           id: Identifier('button'),
@@ -185,7 +191,7 @@ void main() {
     const hovered = State(Identifier('state.hovered'));
 
     final diagnostics = Design(
-      terms: const _TestVocabulary(),
+      terms: const _TermListVocabulary(),
       styles: [
         Style<ButtonPart>(
           id: Identifier('button'),
@@ -206,7 +212,7 @@ void main() {
 
   test('runs custom policy objects', () {
     final diagnostics = Design(
-      terms: const _TestVocabulary(),
+      terms: const _TermListVocabulary(),
       policies: const [_AlwaysReportPolicy()],
     ).validate();
 
@@ -214,11 +220,46 @@ void main() {
   });
 }
 
-final class _TestVocabulary implements Vocabulary {
-  const _TestVocabulary([this.terms = const []]);
+final class _AppTerms implements Vocabulary {
+  const _AppTerms();
+
+  _ColorTerms get color => const _ColorTerms();
+
+  _RadiusTerms get radius => const _RadiusTerms();
 
   @override
-  final List<Term<Object?>> terms;
+  Iterable<Term> get terms => [
+    color.action.fill,
+    color.action.content,
+    radius.control,
+  ];
+}
+
+final class _ColorTerms {
+  const _ColorTerms();
+
+  _ActionColorTerms get action => const _ActionColorTerms();
+}
+
+final class _ActionColorTerms {
+  const _ActionColorTerms();
+
+  Term<Color> get fill => const Term(Identifier('color.action.fill'));
+
+  Term<Color> get content => const Term(Identifier('color.action.content'));
+}
+
+final class _RadiusTerms {
+  const _RadiusTerms();
+
+  Term<Dimension> get control => const Term(Identifier('radius.control'));
+}
+
+final class _TermListVocabulary implements Vocabulary {
+  const _TermListVocabulary([this.terms = const []]);
+
+  @override
+  final List<Term> terms;
 }
 
 final class _AlwaysReportPolicy implements Policy {

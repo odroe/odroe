@@ -48,7 +48,7 @@ final class Design {
   Design({
     required Vocabulary terms,
     Iterable<Binding> bindings = const [],
-    Iterable<Style<Object?>> styles = const [],
+    Iterable<Style> styles = const [],
     Iterable<Policy> policies = const [],
   }) : terms = terms,
        vocabulary = List.unmodifiable(terms.terms),
@@ -67,13 +67,13 @@ final class Design {
   /// [Design] derives this list from [terms] at construction time. It exists so
   /// validators and policies can inspect the complete vocabulary without knowing
   /// the shape of a project's typed term tree.
-  final List<Term<Object?>> vocabulary;
+  final List<Term> vocabulary;
 
   /// The named value sets available to resolve vocabulary terms.
   final List<Binding> bindings;
 
   /// The reusable style declarations in this design.
-  final List<Style<Object?>> styles;
+  final List<Style> styles;
 
   /// Custom project rules that run after structural validation.
   ///
@@ -153,7 +153,7 @@ final class Design {
     return diagnostics;
   }
 
-  List<Diagnostic> _validateStyle(Style<Object?> style) {
+  List<Diagnostic> _validateStyle(Style style) {
     final contract = style.contract;
     final diagnostics = <Diagnostic>[];
 
@@ -196,8 +196,8 @@ final class Design {
   }
 
   List<Diagnostic> _validateCondition(
-    Style<Object?> style,
-    Contract<Object?>? contract,
+    Style style,
+    Contract? contract,
     Condition condition,
   ) {
     switch (condition) {
@@ -291,7 +291,7 @@ abstract interface class Policy {
 ///   RadiusTerms get radius => const RadiusTerms();
 ///
 ///   @override
-///   Iterable<Term<Object?>> get terms => [
+///   Iterable<Term> get terms => [
 ///     color.action.fill,
 ///     radius.control,
 ///   ];
@@ -302,7 +302,7 @@ abstract interface class Policy {
 /// to introduce a second style language or hidden runtime registry.
 abstract interface class Vocabulary {
   /// Every term that belongs to this vocabulary.
-  Iterable<Term<Object?>> get terms;
+  Iterable<Term> get terms;
 }
 
 /// The reporting surface passed to [Policy.evaluate].
