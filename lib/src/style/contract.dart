@@ -1,4 +1,5 @@
 import 'axis.dart';
+import 'identifier.dart';
 import 'state.dart';
 
 /// The optional styleable shape for a [Style].
@@ -51,9 +52,23 @@ final class Contract<P> {
     return parts.contains(part);
   }
 
+  /// Returns the declared axis with [id], if this contract exposes one.
+  ///
+  /// This lookup intentionally matches by identifier only. Call [allowsAxis] or
+  /// the returned axis's value contract when type compatibility matters.
+  Axis<Object?>? axisNamed(Identifier id) {
+    for (final axis in axes) {
+      if (axis.id == id) {
+        return axis;
+      }
+    }
+
+    return null;
+  }
+
   /// Whether [axis] is declared by this contract.
   bool allowsAxis(Axis<Object?> axis) {
-    return axes.any((declared) => declared.id == axis.id);
+    return axisNamed(axis.id)?.acceptsContract(axis) ?? false;
   }
 
   /// Whether [state] is declared by this contract.

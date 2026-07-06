@@ -113,8 +113,23 @@ abstract final class DiagnosticCodes {
   /// validated bindings unless every referenced term belongs to the vocabulary.
   static const styleUnknownTerm = 'style.unknown_term';
 
+  /// A style appearance references a term with the wrong value type.
+  ///
+  /// Design validation reports this when a style term reference has the same
+  /// identifier as a vocabulary [Term], but its type argument does not match the
+  /// vocabulary term. This protects resolvers from reading a valid binding value
+  /// through a style property that expects a different value type.
+  static const styleInvalidTermType = 'style.invalid_term_type';
+
   /// A style case uses an axis that is not present in its contract.
   static const styleUnknownAxis = 'style.unknown_axis';
+
+  /// A style case uses an axis value that does not match its contract axis type.
+  ///
+  /// Design validation reports this when a condition uses an [Axis] with the
+  /// same identifier as a contract axis but with an incompatible type argument
+  /// or value.
+  static const styleInvalidAxisValueType = 'style.invalid_axis_value_type';
 
   /// A style case uses a state that is not present in its contract.
   static const styleUnknownState = 'style.unknown_state';

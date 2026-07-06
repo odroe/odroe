@@ -1,5 +1,6 @@
 import 'diagnostic.dart';
 import 'identifier.dart';
+import 'value_contract.dart';
 
 /// A typed word in a design vocabulary.
 ///
@@ -23,12 +24,13 @@ import 'identifier.dart';
 /// `Term<double>` creates `Assignment<double>` values, while a `Term<String>`
 /// creates `Assignment<String>` values. Use richer value types such as `Color`
 /// when the term should carry more structure than a primitive value.
-final class Term<T> {
+final class Term<T> implements ValueContract<T> {
   /// Creates a vocabulary term with a stable [id].
   const Term(this.id);
 
   /// The authoring name used to match assignments, diagnostics, and future
   /// resolution.
+  @override
   final Identifier id;
 
   /// The runtime type represented by this term.
@@ -36,6 +38,7 @@ final class Term<T> {
   /// Validators use this when a declaration has been widened to `Term` or
   /// `Assignment<Object?>` and needs to compare authored values against the
   /// typed vocabulary term.
+  @override
   Type get valueType => T;
 
   /// Whether [value] can be assigned to this term.
@@ -43,8 +46,19 @@ final class Term<T> {
   /// This mirrors the static contract enforced by [call]. It lets design-level
   /// validation catch values that were introduced through a different `Term`
   /// with the same identifier but an incompatible type argument.
-  bool accepts(Object? value) {
+  @override
+  bool acceptsValue(Object? value) {
     return value is T;
+  }
+
+  /// Whether [contract] names this same typed vocabulary slot.
+  ///
+  /// Two value contracts are compatible only when both the identifier and value
+  /// type match. This lets validators distinguish a missing term from a term
+  /// that reuses the same identifier with a different type argument.
+  @override
+  bool acceptsContract(ValueContract<Object?> contract) {
+    return contract.id == id && contract.valueType == valueType;
   }
 
   /// Creates an [Assignment] that gives this term a concrete value.

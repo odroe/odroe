@@ -106,7 +106,6 @@ final class Design<V extends Vocabulary> {
   /// ```
   List<Diagnostic> validate() {
     final vocabularyById = _termsById(terms);
-    final vocabularyIds = vocabularyById.keys.toSet();
     final diagnostics = <Diagnostic>[
       ..._validateIdentifiers(kind: 'term', ids: terms.map((term) => term.id)),
       ..._validateIdentifiers(kind: 'binding', ids: bindings.map((b) => b.id)),
@@ -119,7 +118,7 @@ final class Design<V extends Vocabulary> {
     }
 
     for (final style in styles) {
-      diagnostics.addAll(_validateStyle(style, vocabularyIds));
+      diagnostics.addAll(_validateStyle(style, vocabularyById));
     }
 
     final context = _PolicyContext(this, diagnostics);
@@ -154,7 +153,7 @@ final class Design<V extends Vocabulary> {
         continue;
       }
 
-      if (!vocabularyTerm.accepts(assignment.value)) {
+      if (!vocabularyTerm.acceptsValue(assignment.value)) {
         diagnostics.add(
           Diagnostic(
             code: DiagnosticCodes.designInvalidBindingValueType,
@@ -192,7 +191,10 @@ final class Design<V extends Vocabulary> {
     return diagnostics;
   }
 
-  List<Diagnostic> _validateStyle(Style style, Set<String> vocabularyIds) {
+  List<Diagnostic> _validateStyle(
+    Style style,
+    Map<String, Term> vocabularyById,
+  ) {
     final contract = style.contract;
     final diagnostics = <Diagnostic>[];
 
@@ -228,11 +230,11 @@ final class Design<V extends Vocabulary> {
     }
 
     diagnostics.addAll(
-      _validateAppearanceVocabulary(style, style.root, vocabularyIds),
+      _validateAppearanceVocabulary(style, style.root, vocabularyById),
     );
     for (final appearance in style.parts.values) {
       diagnostics.addAll(
-        _validateAppearanceVocabulary(style, appearance, vocabularyIds),
+        _validateAppearanceVocabulary(style, appearance, vocabularyById),
       );
     }
     for (final styleCase in style.cases) {
@@ -241,7 +243,7 @@ final class Design<V extends Vocabulary> {
         _validateAppearanceVocabulary(
           style,
           styleCase.appearance,
-          vocabularyIds,
+          vocabularyById,
         ),
       );
     }
@@ -252,25 +254,39 @@ final class Design<V extends Vocabulary> {
   List<Diagnostic> _validateAppearanceVocabulary(
     Style style,
     Appearance appearance,
-    Set<String> vocabularyIds,
+    Map<String, Term> vocabularyById,
   ) {
     final diagnostics = <Diagnostic>[];
 
     for (final term in _appearanceTerms(appearance)) {
       final termId = term.id.value;
-      if (vocabularyIds.contains(termId)) {
+      final vocabularyTerm = vocabularyById[termId];
+      if (vocabularyTerm == null) {
+        diagnostics.add(
+          Diagnostic(
+            code: DiagnosticCodes.styleUnknownTerm,
+            target: DiagnosticTarget(kind: 'term', name: termId),
+            message:
+                'Style `${style.id.value}` references term `$termId`, but this '
+                'term is not declared by the design vocabulary.',
+          ),
+        );
+
         continue;
       }
 
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCodes.styleUnknownTerm,
-          target: DiagnosticTarget(kind: 'term', name: termId),
-          message:
-              'Style `${style.id.value}` references term `$termId`, but this '
-              'term is not declared by the design vocabulary.',
-        ),
-      );
+      if (!vocabularyTerm.acceptsContract(term)) {
+        diagnostics.add(
+          Diagnostic(
+            code: DiagnosticCodes.styleInvalidTermType,
+            target: DiagnosticTarget(kind: 'term', name: termId),
+            message:
+                'Style `${style.id.value}` references term `$termId` as '
+                '${term.valueType}, but the design vocabulary declares that '
+                'term as ${vocabularyTerm.valueType}.',
+          ),
+        );
+      }
     }
 
     return diagnostics;
@@ -282,18 +298,30 @@ final class Design<V extends Vocabulary> {
     Condition condition,
   ) {
     switch (condition) {
-      case AxisCondition<Object?>(:final axis):
+      case AxisCondition<Object?>(:final axis, :final value):
+        final declaredAxis = contract?.axisNamed(axis.id);
         return [
           ...axis.id.validate(
             target: DiagnosticTarget(kind: 'axis', name: axis.id.value),
           ),
-          if (contract != null && !contract.allowsAxis(axis))
+          if (contract != null && declaredAxis == null)
             Diagnostic(
               code: DiagnosticCodes.styleUnknownAxis,
               target: DiagnosticTarget(kind: 'style', name: style.id.value),
               message:
                   'Style `${style.id.value}` uses axis `${axis.id.value}` that '
                   'is not present in its contract.',
+            ),
+          if (declaredAxis != null &&
+              (!declaredAxis.acceptsContract(axis) ||
+                  !declaredAxis.acceptsValue(value)))
+            Diagnostic(
+              code: DiagnosticCodes.styleInvalidAxisValueType,
+              target: DiagnosticTarget(kind: 'axis', name: axis.id.value),
+              message:
+                  'Style `${style.id.value}` uses a ${value.runtimeType} value '
+                  'for axis `${axis.id.value}`, but its contract declares that '
+                  'axis as ${declaredAxis.valueType}.',
             ),
         ];
       case State(:final id):

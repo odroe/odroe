@@ -259,6 +259,40 @@ void main() {
     );
   });
 
+  test('reports style term references with incompatible value types', () {
+    const t = _AppTerms();
+    const wrongRadius = Term<Color>(Identifier('radius.control'));
+
+    final diagnostics = Design(
+      vocabulary: t,
+      styles: [
+        Style<void>(
+          id: Identifier('button'),
+          root: const Appearance(surface: Surface(fill: .term(wrongRadius))),
+        ),
+      ],
+    ).validate();
+
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.styleInvalidTermType,
+        targetKind: 'term',
+        targetName: 'radius.control',
+      ),
+    );
+    expect(
+      diagnostics,
+      isNot(
+        containsDiagnostic(
+          code: DiagnosticCodes.styleUnknownTerm,
+          targetKind: 'term',
+          targetName: 'radius.control',
+        ),
+      ),
+    );
+  });
+
   test('keeps binding-level duplicate assignment diagnostics', () {
     const fill = Term<Color>(Identifier('color.action.fill'));
 
@@ -320,6 +354,47 @@ void main() {
     expect(
       diagnostics,
       containsDiagnostic(code: DiagnosticCodes.styleUnknownState),
+    );
+  });
+
+  test('reports condition axes with incompatible value types', () {
+    const tone = Axis<ButtonTone>(
+      id: Identifier('button.tone'),
+      defaultValue: ButtonTone.primary,
+    );
+    const stringTone = Axis<String>(
+      id: Identifier('button.tone'),
+      defaultValue: 'primary',
+    );
+
+    final diagnostics = Design(
+      vocabulary: const _TermListVocabulary(),
+      styles: [
+        Style<void>(
+          id: Identifier('button'),
+          contract: Contract<void>(axes: [tone]),
+          root: const Appearance(),
+          cases: [.when(stringTone('danger'), const Appearance())],
+        ),
+      ],
+    ).validate();
+
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.styleInvalidAxisValueType,
+        targetKind: 'axis',
+        targetName: 'button.tone',
+      ),
+    );
+    expect(
+      diagnostics,
+      isNot(
+        containsDiagnostic(
+          code: DiagnosticCodes.styleUnknownAxis,
+          targetName: 'button.tone',
+        ),
+      ),
     );
   });
 
