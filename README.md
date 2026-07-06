@@ -91,7 +91,8 @@ The example demonstrates:
 
 - a typed vocabulary tree;
 - light and dark bindings;
-- a button style with parts, states, axes, and cases;
+- Button, Card/Surface, and TextField styles;
+- parts, states, axes, cases, contracts, and policies;
 - design validation;
 - resolving a style to platform-neutral output values.
 
