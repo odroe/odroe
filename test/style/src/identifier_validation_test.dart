@@ -1,31 +1,28 @@
 import 'package:odroe/src/style/identifier_validation.dart';
 import 'package:odroe/style.dart';
+import 'package:test/test.dart';
 
 void main() {
-  final duplicateDiagnostics = validateIdentifierSet([
-    Identifier('color.action.fill'),
-    Identifier('color.action.fill'),
-    Identifier('Color.Action.Fill'),
-  ]);
+  test('reports duplicate identifiers in one validation set', () {
+    final duplicateDiagnostics = validateIdentifierSet([
+      Identifier('color.action.fill'),
+      Identifier('color.action.fill'),
+      Identifier('Color.Action.Fill'),
+    ]);
 
-  expectCode(
-    duplicateDiagnostics,
-    DiagnosticCodes.identifierDuplicate,
-    'reports exact duplicates',
-  );
-  expectCode(
-    duplicateDiagnostics,
-    DiagnosticCodes.identifierDuplicateIgnoringCase,
-    'reports case-insensitive duplicates',
-  );
+    expect(
+      duplicateDiagnostics,
+      containsDiagnosticCode(DiagnosticCodes.identifierDuplicate),
+    );
+    expect(
+      duplicateDiagnostics,
+      containsDiagnosticCode(DiagnosticCodes.identifierDuplicateIgnoringCase),
+    );
+  });
 }
 
-void expect(bool condition, String message) {
-  if (!condition) {
-    throw StateError(message);
-  }
-}
-
-void expectCode(List<Diagnostic> diagnostics, String code, String message) {
-  expect(diagnostics.any((diagnostic) => diagnostic.code == code), message);
+Matcher containsDiagnosticCode(String code) {
+  return contains(
+    isA<Diagnostic>().having((diagnostic) => diagnostic.code, 'code', code),
+  );
 }

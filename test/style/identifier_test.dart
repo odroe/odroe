@@ -1,47 +1,49 @@
 import 'package:odroe/style.dart';
+import 'package:test/test.dart';
 
 void main() {
-  final identifier = Identifier('color.action.fill');
-  expect(identifier.value == 'color.action.fill', 'keeps the raw id value');
-  expect(
-    identifier.segments.join('/') == 'color/action/fill',
-    'splits identifier segments',
-  );
-  expect(Identifier('button.tone').validate().isEmpty, 'accepts button.tone');
+  test('keeps the raw identifier value', () {
+    const identifier = Identifier('color.action.fill');
 
-  expectCode(
-    Identifier('').validate(),
-    DiagnosticCodes.identifierEmpty,
-    'reports empty identifiers',
-  );
-  expectCode(
-    Identifier('color..action').validate(),
-    DiagnosticCodes.identifierEmptySegment,
-    'reports empty segments',
-  );
-  expectCode(
-    Identifier('Color.Action').validate(),
-    DiagnosticCodes.identifierInvalidSegment,
-    'reports uppercase starts',
-  );
-  expectCode(
-    Identifier('color action').validate(),
-    DiagnosticCodes.identifierInvalidSegment,
-    'reports whitespace',
-  );
-  expectCode(
-    Identifier('color.action-fill').validate(),
-    DiagnosticCodes.identifierInvalidSegment,
-    'reports hyphenated segments',
-  );
+    expect(identifier.value, 'color.action.fill');
+  });
+
+  test('splits dot-separated segments', () {
+    const identifier = Identifier('color.action.fill');
+
+    expect(identifier.segments, ['color', 'action', 'fill']);
+  });
+
+  test('accepts valid identifiers', () {
+    expect(const Identifier('button.tone').validate(), isEmpty);
+  });
+
+  test('reports invalid identifier formats', () {
+    expect(
+      const Identifier('').validate(),
+      containsDiagnosticCode(DiagnosticCodes.identifierEmpty),
+    );
+    expect(
+      const Identifier('color..action').validate(),
+      containsDiagnosticCode(DiagnosticCodes.identifierEmptySegment),
+    );
+    expect(
+      const Identifier('Color.Action').validate(),
+      containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
+    );
+    expect(
+      const Identifier('color action').validate(),
+      containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
+    );
+    expect(
+      const Identifier('color.action-fill').validate(),
+      containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
+    );
+  });
 }
 
-void expect(bool condition, String message) {
-  if (!condition) {
-    throw StateError(message);
-  }
-}
-
-void expectCode(List<Diagnostic> diagnostics, String code, String message) {
-  expect(diagnostics.any((diagnostic) => diagnostic.code == code), message);
+Matcher containsDiagnosticCode(String code) {
+  return contains(
+    isA<Diagnostic>().having((diagnostic) => diagnostic.code, 'code', code),
+  );
 }
