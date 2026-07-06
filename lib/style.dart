@@ -1,8 +1,25 @@
-/// Platform-neutral style core for Odroe.
+/// Platform-neutral style declarations for Odroe.
 ///
-/// This public entrypoint intentionally excludes Flutter, CSS, DOM, Material,
-/// Jaspr, and other platform-specific APIs. Stable style core declarations are
-/// exported from here as they land.
+/// This library models style systems before they are projected to a UI
+/// framework or output format. It intentionally contains no Flutter widgets,
+/// CSS selectors, DOM nodes, Material types, or Jaspr APIs.
+///
+/// A style system starts with named terms, then assigns concrete values through
+/// bindings:
+///
+/// ```dart
+/// const actionFill = Term<String>(Identifier('color.action.fill'));
+/// const actionContent = Term<String>(Identifier('color.action.content'));
+///
+/// final light = Binding(Identifier('light'), [
+///   actionFill('#006adc'),
+///   actionContent('#ffffff'),
+/// ]);
+/// ```
+///
+/// Values are not resolved when declarations are created. Later style APIs will
+/// choose a binding, merge appearances, and produce platform-neutral resolved
+/// values that other packages can adapt for Flutter, CSS, or other targets.
 library;
 
 export 'src/style/binding.dart';

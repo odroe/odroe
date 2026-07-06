@@ -1,67 +1,115 @@
 import 'diagnostic.dart';
 import 'identifier.dart';
 
-/// A typed vocabulary term that can be assigned by a [Binding].
+/// A typed word in a design vocabulary.
 ///
-/// Terms are semantic design words, not resolved token values. For example,
-/// `color.action.fill` can be represented as a `Term<ColorValue>` and assigned
-/// differently by light, dark, brand, or density bindings.
+/// Terms give semantic names to values without choosing the value. A design
+/// system can declare one term and assign different values to it in each
+/// [Binding]:
+///
+/// ```dart
+/// const actionFill = Term<String>(Identifier('color.action.fill'));
+///
+/// final light = Binding(Identifier('light'), [
+///   actionFill('#006adc'),
+/// ]);
+///
+/// final dark = Binding(Identifier('dark'), [
+///   actionFill('#8ab4ff'),
+/// ]);
+/// ```
+///
+/// The type argument is part of the authoring contract. A
+/// `Term<double>` creates `Assignment<double>` values, while a `Term<String>`
+/// creates `Assignment<String>` values. The core does not prescribe concrete
+/// value classes in this slice so applications can start with ordinary Dart
+/// values and move to richer value objects later.
 final class Term<T> {
-  /// Creates a term with a stable [id].
+  /// Creates a vocabulary term with a stable [id].
   const Term(this.id);
 
-  /// The stable authoring name of this term.
+  /// The authoring name used to match assignments, diagnostics, and future
+  /// resolution.
   final Identifier id;
 
-  /// Creates an assignment for this term.
+  /// Creates an [Assignment] that gives this term a concrete value.
   ///
-  /// This method preserves the term's value type in the returned
-  /// [Assignment]. It does not validate or resolve the value.
+  /// Calling a term is only declaration syntax. It does not validate [value],
+  /// read a binding, or resolve references to other terms.
+  ///
+  /// ```dart
+  /// const controlX = Term<int>(Identifier('space.control_x'));
+  ///
+  /// final assignment = controlX(16);
+  /// ```
   Assignment<T> call(T value) {
     return Assignment<T>(this, value);
   }
 }
 
-/// One typed value assigned to a [Term].
+/// A concrete value for one [Term].
 ///
-/// Assignments are declaration data. They do not resolve other terms, normalize
-/// values, or perform platform conversion.
+/// Assignments are the entries inside a [Binding]. They preserve both the term
+/// and the authored value so later validation and resolution can explain where
+/// a value came from.
+///
+/// An assignment is not a resolved token. It does not normalize colors,
+/// calculate inherited values, or convert to platform-specific output.
 final class Assignment<T> {
-  /// Creates an assignment from [term] to [value].
+  /// Creates an authored value for [term].
   const Assignment(this.term, this.value);
 
-  /// The term being assigned.
+  /// The term whose value is declared by this assignment.
   final Term<T> term;
 
-  /// The value assigned to [term].
+  /// The authored value for [term].
   final T value;
 }
 
-/// A named set of concrete values for vocabulary terms.
+/// A named collection of term values.
 ///
-/// A binding can represent a theme, mode, brand, density, or other environment
-/// selection. Terms are not resolved when the binding is declared; resolution is
-/// a later style operation that chooses one binding and reads the assignments.
+/// A binding usually represents a theme, color mode, brand, density, or other
+/// environment choice. It is only a declaration. Creating a binding does not
+/// resolve terms, merge appearances, or choose a platform representation.
+///
+/// ```dart
+/// const fill = Term<String>(Identifier('color.action.fill'));
+/// const radius = Term<double>(Identifier('radius.control'));
+///
+/// final light = Binding(Identifier('light'), [
+///   fill('#006adc'),
+///   radius(8),
+/// ]);
+/// ```
 final class Binding {
-  /// Creates a binding with a stable [id] and concrete [assignments].
+  /// Creates a binding with a stable [id].
   ///
-  /// The assignments are copied into an unmodifiable list so validation and
-  /// resolution see a stable declaration after construction.
+  /// [assignments] is copied into an unmodifiable list. Mutating the source
+  /// iterable after construction will not change the binding.
   Binding(this.id, Iterable<Assignment<Object?>> assignments)
     : assignments = List.unmodifiable(assignments);
 
-  /// The stable authoring name of this binding.
+  /// The authoring name used to select this binding.
   final Identifier id;
 
-  /// The assignments declared by this binding.
+  /// The term values declared by this binding.
+  ///
+  /// The order is preserved for diagnostics, but duplicate terms are reported
+  /// by [validate] instead of being resolved by declaration order.
   final List<Assignment<Object?>> assignments;
 
-  /// Returns diagnostics for this binding declaration.
+  /// Returns declaration diagnostics for this binding.
   ///
-  /// This validates the binding identifier, each assigned term identifier, and
-  /// repeated term assignments inside this binding. It does not check whether
-  /// the terms are declared in a vocabulary or whether all required terms have
-  /// been assigned.
+  /// Validation is intentionally local to the binding. It checks:
+  ///
+  /// * the binding identifier;
+  /// * each assigned term identifier;
+  /// * repeated term assignments inside this binding.
+  ///
+  /// It does not check whether a term belongs to a vocabulary, whether every
+  /// expected term has a value, or whether assigned values are usable by a
+  /// platform adapter. Those checks need a larger owner such as a design
+  /// manifest.
   List<Diagnostic> validate() {
     final diagnostics = <Diagnostic>[
       ...id.validate(
