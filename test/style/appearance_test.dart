@@ -5,12 +5,12 @@ void main() {
   test(
     'declares visual fragments with concrete values and term references',
     () {
-      const actionFill = Term<ColorValue>(Identifier('color.action.fill'));
+      const actionFill = Term<Color>(Identifier('color.action.fill'));
       const controlRadius = Term<Unit>(Identifier('radius.control'));
 
       final appearance = Appearance(
         surface: Surface(fill: .term(actionFill), radius: .term(controlRadius)),
-        content: const Content(color: .literal(ColorValue.hex(0xffffffff))),
+        content: const Content(color: .literal(Color(0xffffffff))),
         metrics: const Metrics(
           padding: Insets.symmetric(
             x: .literal(Unit.px(16)),
@@ -21,7 +21,7 @@ void main() {
 
       expect(
         appearance.surface?.fill,
-        isA<TermProperty<ColorValue>>().having(
+        isA<TermProperty<Color>>().having(
           (property) => property.term,
           'term',
           same(actionFill),
@@ -37,10 +37,10 @@ void main() {
       );
       expect(
         appearance.content?.color,
-        isA<LiteralProperty<ColorValue>>().having(
+        isA<LiteralProperty<Color>>().having(
           (property) => property.value,
           'value',
-          const ColorValue.hex(0xffffffff),
+          const Color(0xffffffff),
         ),
       );
       expect(
@@ -55,12 +55,10 @@ void main() {
   );
 
   test('merges appearances by facet and property', () {
-    const Property<ColorValue> baseFill = .literal(ColorValue.hex(0xff006adc));
-    const Property<ColorValue> nextFill = .literal(ColorValue.hex(0xff004488));
+    const Property<Color> baseFill = .literal(Color(0xff006adc));
+    const Property<Color> nextFill = .literal(Color(0xff004488));
     const Property<Unit> radius = .literal(Unit.px(8));
-    const Property<ColorValue> contentColor = .literal(
-      ColorValue.hex(0xffffffff),
-    );
+    const Property<Color> contentColor = .literal(Color(0xffffffff));
 
     const base = Appearance(
       surface: Surface(fill: baseFill, radius: radius),

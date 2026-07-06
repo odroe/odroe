@@ -8,22 +8,21 @@ import 'identifier.dart';
 /// [Binding]:
 ///
 /// ```dart
-/// const actionFill = Term<String>(Identifier('color.action.fill'));
+/// const actionFill = Term<Color>(Identifier('color.action.fill'));
 ///
 /// final light = Binding(Identifier('light'), [
-///   actionFill('#006adc'),
+///   actionFill(Color(0xff006adc)),
 /// ]);
 ///
 /// final dark = Binding(Identifier('dark'), [
-///   actionFill('#8ab4ff'),
+///   actionFill(Color(0xff8ab4ff)),
 /// ]);
 /// ```
 ///
 /// The type argument is part of the authoring contract. A
 /// `Term<double>` creates `Assignment<double>` values, while a `Term<String>`
-/// creates `Assignment<String>` values. The core does not prescribe concrete
-/// value classes in this slice so applications can start with ordinary Dart
-/// values and move to richer value objects later.
+/// creates `Assignment<String>` values. Use richer value types such as `Color`
+/// when the term should carry more structure than a primitive value.
 final class Term<T> {
   /// Creates a vocabulary term with a stable [id].
   const Term(this.id);
@@ -73,11 +72,11 @@ final class Assignment<T> {
 /// resolve terms, merge appearances, or choose a platform representation.
 ///
 /// ```dart
-/// const fill = Term<String>(Identifier('color.action.fill'));
+/// const fill = Term<Color>(Identifier('color.action.fill'));
 /// const radius = Term<double>(Identifier('radius.control'));
 ///
 /// final light = Binding(Identifier('light'), [
-///   fill('#006adc'),
+///   fill(Color(0xff006adc)),
 ///   radius(8),
 /// ]);
 /// ```

@@ -9,7 +9,7 @@ import 'mergeable.dart';
 /// declarations will use for roots, parts, and conditional cases.
 ///
 /// ```dart
-/// const actionFill = Term<ColorValue>(Identifier('color.action.fill'));
+/// const actionFill = Term<Color>(Identifier('color.action.fill'));
 /// const controlRadius = Term<Unit>(Identifier('radius.control'));
 ///
 /// final control = Appearance(
@@ -67,10 +67,10 @@ final class Surface implements Mergeable<Surface> {
   const Surface({this.fill, this.stroke, this.radius, this.elevation});
 
   /// The surface fill color.
-  final Property<ColorValue>? fill;
+  final Property<Color>? fill;
 
   /// The stroke or border color for the surface.
-  final Property<ColorValue>? stroke;
+  final Property<Color>? stroke;
 
   /// The corner radius or shape radius for the surface.
   final Property<Unit>? radius;
@@ -100,7 +100,7 @@ final class Content implements Mergeable<Content> {
   const Content({this.color, this.text, this.icon, this.opacity});
 
   /// The foreground color for text or icons.
-  final Property<ColorValue>? color;
+  final Property<Color>? color;
 
   /// The semantic text role to use for labels.
   final Property<Identifier>? text;
@@ -190,13 +190,13 @@ final class Metrics implements Mergeable<Metrics> {
 /// Use a literal when the declaration owns the exact value:
 ///
 /// ```dart
-/// const surface = Surface(fill: .literal(ColorValue.hex(0xff006adc)));
+/// const surface = Surface(fill: .literal(Color(0xff006adc)));
 /// ```
 ///
 /// Use a term when the declaration should follow a shared binding:
 ///
 /// ```dart
-/// const fillTerm = Term<ColorValue>(Identifier('color.action.fill'));
+/// const fillTerm = Term<Color>(Identifier('color.action.fill'));
 ///
 /// const surface = Surface(fill: .term(fillTerm));
 /// ```
@@ -235,26 +235,136 @@ final class TermProperty<T> extends Property<T> {
   final Term<T> term;
 }
 
-/// A platform-neutral 32-bit ARGB color.
+/// A platform-neutral color value.
 ///
-/// The integer layout matches `0xAARRGGBB`. This value does not depend on
-/// Flutter's `Color`, CSS color strings, or browser parsing rules.
-final class ColorValue {
-  /// Creates a color from a 32-bit ARGB integer.
-  const ColorValue.hex(this.argb)
-    : assert(argb >= 0),
-      assert(argb <= 0xffffffff);
+/// The default constructor accepts the same `0xAARRGGBB` packed integer shape
+/// used by `dart:ui.Color`, without depending on Flutter's `dart:ui` library.
+/// Channels are stored as floating-point components so declarations can keep
+/// their authored values and convert back to an ARGB integer when needed.
+///
+/// ```dart
+/// const blue = Color(0xff42a5f5);
+/// const sameBlue = Color.fromARGB(0xff, 0x42, 0xa5, 0xf5);
+/// ```
+final class Color {
+  /// Creates an sRGB color from the lower 32 bits of [value].
+  ///
+  /// The bits are interpreted as `0xAARRGGBB`: alpha in bits 24-31, red in
+  /// bits 16-23, green in bits 8-15, and blue in bits 0-7.
+  const Color(int value)
+    : this._fromARGB(
+        (value >> 24) & 0xff,
+        (value >> 16) & 0xff,
+        (value >> 8) & 0xff,
+        value & 0xff,
+      );
 
-  /// The `0xAARRGGBB` color value.
-  final int argb;
+  /// Creates a color from floating-point channel values.
+  ///
+  /// The conventional range for each channel is `0.0` to `1.0`. Values outside
+  /// that range are preserved in the declaration and clamped only when
+  /// converted with [toARGB32].
+  const Color.from({
+    required double alpha,
+    required double red,
+    required double green,
+    required double blue,
+  }) : a = alpha,
+       r = red,
+       g = green,
+       b = blue;
 
-  @override
-  bool operator ==(Object other) {
-    return other is ColorValue && other.argb == argb;
+  /// Creates an sRGB color from integer alpha, red, green, and blue channels.
+  ///
+  /// Only the lower 8 bits of each channel are used, matching
+  /// `dart:ui.Color.fromARGB`.
+  const Color.fromARGB(int a, int r, int g, int b) : this._fromARGB(a, r, g, b);
+
+  /// Creates a color from red, green, blue, and opacity channels.
+  ///
+  /// Only the lower 8 bits of the red, green, and blue channels are used.
+  /// The conventional range for [opacity] is `0.0` to `1.0`.
+  const Color.fromRGBO(int r, int g, int b, double opacity)
+    : a = opacity,
+      r = (r & 0xff) / 255,
+      g = (g & 0xff) / 255,
+      b = (b & 0xff) / 255;
+
+  const Color._fromARGB(int alpha, int red, int green, int blue)
+    : this._fromRGBO(red, green, blue, (alpha & 0xff) / 255);
+
+  const Color._fromRGBO(int red, int green, int blue, double opacity)
+    : a = opacity,
+      r = (red & 0xff) / 255,
+      g = (green & 0xff) / 255,
+      b = (blue & 0xff) / 255;
+
+  /// The alpha channel as a floating-point component.
+  final double a;
+
+  /// The red channel as a floating-point component.
+  final double r;
+
+  /// The green channel as a floating-point component.
+  final double g;
+
+  /// The blue channel as a floating-point component.
+  final double b;
+
+  /// Returns a copy with the provided channels replaced.
+  Color withValues({double? alpha, double? red, double? green, double? blue}) {
+    return Color.from(
+      alpha: alpha ?? a,
+      red: red ?? r,
+      green: green ?? g,
+      blue: blue ?? b,
+    );
+  }
+
+  /// Returns this color as a packed `0xAARRGGBB` integer.
+  ///
+  /// Channel values are rounded to the nearest 8-bit integer and clamped to the
+  /// range `0..255`.
+  int toARGB32() {
+    return _floatToInt8(a) << 24 |
+        _floatToInt8(r) << 16 |
+        _floatToInt8(g) << 8 |
+        _floatToInt8(b);
+  }
+
+  static int _floatToInt8(double value) {
+    final scaled = (value * 255.0).round();
+
+    if (scaled < 0) {
+      return 0;
+    }
+    if (scaled > 255) {
+      return 255;
+    }
+    return scaled;
   }
 
   @override
-  int get hashCode => argb.hashCode;
+  bool operator ==(Object other) {
+    return other is Color &&
+        other.a == a &&
+        other.r == r &&
+        other.g == g &&
+        other.b == b;
+  }
+
+  @override
+  int get hashCode => Object.hash(a, r, g, b);
+
+  @override
+  String toString() {
+    return 'Color('
+        'alpha: ${a.toStringAsFixed(4)}, '
+        'red: ${r.toStringAsFixed(4)}, '
+        'green: ${g.toStringAsFixed(4)}, '
+        'blue: ${b.toStringAsFixed(4)}'
+        ')';
+  }
 }
 
 /// The unit used by a [Unit] value.

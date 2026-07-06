@@ -8,12 +8,12 @@
 /// bindings:
 ///
 /// ```dart
-/// const actionFill = Term<String>(Identifier('color.action.fill'));
-/// const actionContent = Term<String>(Identifier('color.action.content'));
+/// const actionFill = Term<Color>(Identifier('color.action.fill'));
+/// const actionContent = Term<Color>(Identifier('color.action.content'));
 ///
 /// final light = Binding(Identifier('light'), [
-///   actionFill('#006adc'),
-///   actionContent('#ffffff'),
+///   actionFill(Color(0xff006adc)),
+///   actionContent(Color(0xffffffff)),
 /// ]);
 /// ```
 ///
