@@ -7,3 +7,6 @@ issue_tracker: https://github.com/odroe/odroe/issues
 
 environment:
   sdk: ^3.10.0
+
+dev_dependencies:
+  lints: ^6.1.0

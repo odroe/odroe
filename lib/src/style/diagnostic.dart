@@ -171,7 +171,7 @@ final class DiagnosticLocation {
   @override
   String toString() {
     final parts = <String>[
-      if (source != null) source!,
+      ?source,
       if (line != null) 'line $line',
       if (column != null) 'column $column',
       if (offset != null) 'offset $offset',
