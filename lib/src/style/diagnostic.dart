@@ -96,6 +96,14 @@ abstract final class DiagnosticCodes {
   /// through the style's part type.
   static const styleUnknownPart = 'style.unknown_part';
 
+  /// A style appearance references a term outside the design vocabulary.
+  ///
+  /// Design validation reports this when a [Property.term] inside a style root,
+  /// part, or case appearance points at a foreign or misspelled [Term]. The
+  /// style may still be structurally valid, but it cannot be resolved from the
+  /// validated bindings unless every referenced term belongs to the vocabulary.
+  static const styleUnknownTerm = 'style.unknown_term';
+
   /// A style case uses an axis that is not present in its contract.
   static const styleUnknownAxis = 'style.unknown_axis';
 

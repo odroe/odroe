@@ -1,4 +1,5 @@
 import 'axis.dart';
+import 'appearance.dart';
 import 'binding.dart';
 import 'condition.dart';
 import 'contract.dart';
@@ -90,6 +91,7 @@ final class Design<V extends Vocabulary> {
   /// * duplicate assignments inside each binding;
   /// * vocabulary terms missing from a binding;
   /// * binding assignments that do not belong to the vocabulary;
+  /// * style appearance term references that do not belong to the vocabulary;
   /// * style parts, axes, and states that are not declared by the style contract.
   ///
   /// Each [Policy] then receives a [PolicyContext] for project-specific checks:
@@ -102,6 +104,7 @@ final class Design<V extends Vocabulary> {
   /// }
   /// ```
   List<Diagnostic> validate() {
+    final vocabularyIds = {for (final term in terms) term.id.value};
     final diagnostics = <Diagnostic>[
       ..._validateIdentifiers(kind: 'term', ids: terms.map((term) => term.id)),
       ..._validateIdentifiers(kind: 'binding', ids: bindings.map((b) => b.id)),
@@ -110,11 +113,11 @@ final class Design<V extends Vocabulary> {
 
     for (final binding in bindings) {
       diagnostics.addAll(binding.validate());
-      diagnostics.addAll(_validateBindingVocabulary(binding));
+      diagnostics.addAll(_validateBindingVocabulary(binding, vocabularyIds));
     }
 
     for (final style in styles) {
-      diagnostics.addAll(_validateStyle(style));
+      diagnostics.addAll(_validateStyle(style, vocabularyIds));
     }
 
     final context = _PolicyContext(this, diagnostics);
@@ -125,9 +128,11 @@ final class Design<V extends Vocabulary> {
     return diagnostics;
   }
 
-  List<Diagnostic> _validateBindingVocabulary(Binding binding) {
+  List<Diagnostic> _validateBindingVocabulary(
+    Binding binding,
+    Set<String> vocabularyIds,
+  ) {
     final diagnostics = <Diagnostic>[];
-    final vocabularyIds = {for (final term in terms) term.id.value};
     final assigned = {
       for (final assignment in binding.assignments) assignment.term.id.value,
     };
@@ -168,7 +173,7 @@ final class Design<V extends Vocabulary> {
     return diagnostics;
   }
 
-  List<Diagnostic> _validateStyle(Style style) {
+  List<Diagnostic> _validateStyle(Style style, Set<String> vocabularyIds) {
     final contract = style.contract;
     final diagnostics = <Diagnostic>[];
 
@@ -203,8 +208,50 @@ final class Design<V extends Vocabulary> {
       );
     }
 
+    diagnostics.addAll(
+      _validateAppearanceVocabulary(style, style.root, vocabularyIds),
+    );
+    for (final appearance in style.parts.values) {
+      diagnostics.addAll(
+        _validateAppearanceVocabulary(style, appearance, vocabularyIds),
+      );
+    }
     for (final styleCase in style.cases) {
       diagnostics.addAll(_validateCondition(style, contract, styleCase.when));
+      diagnostics.addAll(
+        _validateAppearanceVocabulary(
+          style,
+          styleCase.appearance,
+          vocabularyIds,
+        ),
+      );
+    }
+
+    return diagnostics;
+  }
+
+  List<Diagnostic> _validateAppearanceVocabulary(
+    Style style,
+    Appearance appearance,
+    Set<String> vocabularyIds,
+  ) {
+    final diagnostics = <Diagnostic>[];
+
+    for (final term in _appearanceTerms(appearance)) {
+      final termId = term.id.value;
+      if (vocabularyIds.contains(termId)) {
+        continue;
+      }
+
+      diagnostics.add(
+        Diagnostic(
+          code: DiagnosticCodes.styleUnknownTerm,
+          target: DiagnosticTarget(kind: 'term', name: termId),
+          message:
+              'Style `${style.id.value}` references term `$termId`, but this '
+              'term is not declared by the design vocabulary.',
+        ),
+      );
     }
 
     return diagnostics;
@@ -259,6 +306,56 @@ final class Design<V extends Vocabulary> {
       case Condition():
         return const [];
     }
+  }
+}
+
+Iterable<Term> _appearanceTerms(Appearance appearance) sync* {
+  final surface = appearance.surface;
+  if (surface != null) {
+    yield* _propertyTerms(surface.fill);
+    yield* _propertyTerms(surface.stroke);
+    yield* _propertyTerms(surface.radius);
+    yield* _propertyTerms(surface.elevation);
+  }
+
+  final content = appearance.content;
+  if (content != null) {
+    yield* _propertyTerms(content.color);
+    yield* _propertyTerms(content.text);
+    yield* _propertyTerms(content.icon);
+    yield* _propertyTerms(content.opacity);
+  }
+
+  final metrics = appearance.metrics;
+  if (metrics != null) {
+    yield* _insetTerms(metrics.padding);
+    yield* _propertyTerms(metrics.gap);
+    yield* _propertyTerms(metrics.width);
+    yield* _propertyTerms(metrics.height);
+    yield* _propertyTerms(metrics.minWidth);
+    yield* _propertyTerms(metrics.minHeight);
+    yield* _propertyTerms(metrics.maxWidth);
+    yield* _propertyTerms(metrics.maxHeight);
+  }
+}
+
+Iterable<Term> _insetTerms(Insets? insets) sync* {
+  if (insets == null) {
+    return;
+  }
+
+  yield* _propertyTerms(insets.top);
+  yield* _propertyTerms(insets.right);
+  yield* _propertyTerms(insets.bottom);
+  yield* _propertyTerms(insets.left);
+}
+
+Iterable<Term> _propertyTerms(Property<Object?>? property) sync* {
+  switch (property) {
+    case TermProperty<Object?>(:final term):
+      yield term;
+    case LiteralProperty<Object?>() || null:
+      return;
   }
 }
 

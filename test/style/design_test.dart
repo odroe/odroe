@@ -171,6 +171,65 @@ void main() {
     );
   });
 
+  test('reports style term references outside the vocabulary', () {
+    const t = _AppTerms();
+    const brandFill = Term<Color>(Identifier('color.brand.fill'));
+    const brandRadius = Term<Dimension>(Identifier('radius.brand'));
+
+    final diagnostics = Design(
+      vocabulary: t,
+      styles: [
+        Style<ButtonPart>(
+          id: Identifier('button'),
+          root: Appearance(
+            surface: Surface(fill: .term(brandFill)),
+            content: Content(color: .term(t.color.action.content)),
+          ),
+          parts: {
+            ButtonPart.icon: Appearance(
+              surface: Surface(radius: .term(brandRadius)),
+            ),
+          },
+          cases: [
+            .when(
+              state.hovered,
+              Appearance(
+                metrics: Metrics(padding: Insets.all(.term(t.radius.control))),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ).validate();
+
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.styleUnknownTerm,
+        targetKind: 'term',
+        targetName: 'color.brand.fill',
+      ),
+    );
+    expect(
+      diagnostics,
+      containsDiagnostic(
+        code: DiagnosticCodes.styleUnknownTerm,
+        targetKind: 'term',
+        targetName: 'radius.brand',
+      ),
+    );
+    expect(
+      diagnostics,
+      isNot(
+        containsDiagnostic(
+          code: DiagnosticCodes.styleUnknownTerm,
+          targetKind: 'term',
+          targetName: 'radius.control',
+        ),
+      ),
+    );
+  });
+
   test('keeps binding-level duplicate assignment diagnostics', () {
     const fill = Term<Color>(Identifier('color.action.fill'));
 
