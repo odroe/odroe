@@ -33,6 +33,7 @@ export 'src/style/design.dart';
 export 'src/style/diagnostic.dart';
 export 'src/style/dimension.dart';
 export 'src/style/identifier.dart';
+export 'src/style/resolution.dart';
 export 'src/style/state.dart';
 export 'src/style/style.dart';
 export 'src/style/value_contract.dart';
