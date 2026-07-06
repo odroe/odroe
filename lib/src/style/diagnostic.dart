@@ -99,6 +99,30 @@ abstract final class DiagnosticCodes {
   static const identifierDuplicateIgnoringCase =
       'identifier.duplicate_ignoring_case';
 
+  /// A style property references a term the selected binding does not assign.
+  ///
+  /// Resolution reports this when the final merged appearance still contains a
+  /// [Property.term] reference, but the selected [Binding] has no assignment for
+  /// that term. Declarations remain lazy; this code appears only when a style is
+  /// resolved with a concrete binding.
+  static const resolutionUnresolvedTerm = 'resolution.unresolved_term';
+
+  /// A binding assignment cannot satisfy the type expected by a style property.
+  ///
+  /// Resolution reports this when the selected [Binding] contains the requested
+  /// term identifier but the stored value cannot be used by the term referenced
+  /// from the resolved property.
+  static const resolutionInvalidTermValueType =
+      'resolution.invalid_term_value_type';
+
+  /// A condition cannot be evaluated by the core resolver.
+  ///
+  /// Resolution reports this for custom [Condition] subclasses that are outside
+  /// the current core condition model. Platform adapters or extension packages
+  /// can evaluate their own condition types before calling the core resolver.
+  static const resolutionUnsupportedCondition =
+      'resolution.unsupported_condition';
+
   /// A style declares a part that is not present in its contract.
   ///
   /// Contract validation is owned by the style because parts are only meaningful
