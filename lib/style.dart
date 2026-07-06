@@ -5,5 +5,6 @@
 /// exported from here as they land.
 library;
 
+export 'src/style/binding.dart';
 export 'src/style/diagnostic.dart';
 export 'src/style/identifier.dart';

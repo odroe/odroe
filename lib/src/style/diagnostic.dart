@@ -23,6 +23,21 @@ enum DiagnosticSeverity {
 /// Codes are namespaced by the model area that reports them, such as
 /// `identifier`, and use lower snake case after the dot.
 abstract final class DiagnosticCodes {
+  /// A binding assigns the same term more than once.
+  ///
+  /// A binding is allowed to contain many assignments, but each term should be
+  /// assigned at most once in that binding. Later style resolution can then
+  /// choose a binding without needing declaration-order conflict rules inside
+  /// the binding itself.
+  static const bindingDuplicateAssignment = 'binding.duplicate_assignment';
+
+  /// A binding assigns terms whose identifiers differ only by letter case.
+  ///
+  /// This protects bindings from declarations that would collapse to the same
+  /// key in case-insensitive tooling or generated output.
+  static const bindingDuplicateAssignmentIgnoringCase =
+      'binding.duplicate_assignment_ignoring_case';
+
   /// An empty [Identifier.value].
   static const identifierEmpty = 'identifier.empty';
 
