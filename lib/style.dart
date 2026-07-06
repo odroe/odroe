@@ -5,4 +5,5 @@
 /// exported from here as they land.
 library;
 
-export 'src/style/core.dart';
+export 'src/style/diagnostic.dart';
+export 'src/style/identifier.dart';
