@@ -23,8 +23,12 @@
 library;
 
 export 'src/style/appearance.dart';
+export 'src/style/axis.dart';
 export 'src/style/binding.dart';
+export 'src/style/case.dart';
 export 'src/style/color.dart';
+export 'src/style/condition.dart';
 export 'src/style/diagnostic.dart';
 export 'src/style/dimension.dart';
 export 'src/style/identifier.dart';
+export 'src/style/state.dart';
