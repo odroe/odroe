@@ -300,10 +300,17 @@ final class _ResolutionState {
           return const _ConditionMatch.invalid();
         }
 
+        final hasActiveValue = _axisValues.containsKey(axis.id.value);
         final active = _axisValues[axis.id.value];
-        final activeAxis = active?.axis ?? declaredAxis ?? axis;
-        final activeValue =
-            active?.value ?? declaredAxis?.defaultValue ?? axis.defaultValue;
+        final activeAxis = hasActiveValue ? active!.axis : declaredAxis ?? axis;
+        final Object? activeValue;
+        if (hasActiveValue) {
+          activeValue = active!.value;
+        } else if (declaredAxis != null) {
+          activeValue = declaredAxis.defaultValue;
+        } else {
+          activeValue = axis.defaultValue;
+        }
         return _ConditionMatch(
           matches: axis.acceptsContract(activeAxis) && activeValue == value,
         );

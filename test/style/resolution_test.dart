@@ -166,6 +166,68 @@ void main() {
     expect(resolution.appearance.content?.opacity, 0.75);
   });
 
+  test('preserves explicit null axis values', () {
+    const tone = Axis<ButtonTone?>(
+      id: Identifier('button.tone'),
+      defaultValue: ButtonTone.primary,
+    );
+    final binding = Binding(Identifier('light'), const []);
+    final style = Style<void>(
+      id: Identifier('button'),
+      root: const Appearance(content: Content(opacity: .literal(1))),
+      cases: [
+        .when(
+          tone(null),
+          const Appearance(content: Content(opacity: .literal(0.5))),
+        ),
+        .when(
+          tone(.primary),
+          const Appearance(content: Content(opacity: .literal(0.75))),
+        ),
+      ],
+    );
+
+    final resolution = style.resolve(
+      binding: binding,
+      axisValues: [tone(null)],
+    );
+
+    expect(resolution.diagnostics, isEmpty);
+    expect(resolution.appearance.content?.opacity, 0.5);
+  });
+
+  test('uses nullable contract axis defaults', () {
+    const declaredTone = Axis<ButtonTone?>(
+      id: Identifier('button.tone'),
+      defaultValue: null,
+    );
+    const authoredTone = Axis<ButtonTone?>(
+      id: Identifier('button.tone'),
+      defaultValue: ButtonTone.primary,
+    );
+    final binding = Binding(Identifier('light'), const []);
+    final style = Style<void>(
+      id: Identifier('button'),
+      contract: Contract(axes: [declaredTone]),
+      root: const Appearance(content: Content(opacity: .literal(1))),
+      cases: [
+        .when(
+          authoredTone(null),
+          const Appearance(content: Content(opacity: .literal(0.5))),
+        ),
+        .when(
+          authoredTone(.primary),
+          const Appearance(content: Content(opacity: .literal(0.75))),
+        ),
+      ],
+    );
+
+    final resolution = style.resolve(binding: binding);
+
+    expect(resolution.diagnostics, isEmpty);
+    expect(resolution.appearance.content?.opacity, 0.5);
+  });
+
   test('collects diagnostics from every compound condition child', () {
     final binding = Binding(Identifier('light'), const []);
     final style = Style<void>(
