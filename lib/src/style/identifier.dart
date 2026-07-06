@@ -2,7 +2,7 @@ import 'diagnostic.dart';
 
 final _identifierSegmentPattern = RegExp(r'^[a-z][A-Za-z0-9_]*$');
 
-/// A stable authoring name for a style-core declaration.
+/// A stable authoring name for a style declaration.
 ///
 /// Identifiers name concepts in the design model, such as
 /// `color.action.fill`, `space.control_x`, or `button.tone`. They are not
@@ -14,14 +14,19 @@ final _identifierSegmentPattern = RegExp(r'^[a-z][A-Za-z0-9_]*$');
 /// Construction does not validate the string. Invalid identifiers need to be
 /// representable so tools can load incomplete design data and report structured
 /// diagnostics instead of throwing while reading.
+///
+/// ```dart
+/// const id = Identifier('color.action.fill');
+/// final diagnostics = id.validate();
+/// ```
 extension type const Identifier(String value) {
-  /// The path segments separated by dots in [value].
+  /// The dot-separated path segments in [value].
   ///
   /// Empty segments are preserved. For example, `color..action` produces
   /// `['color', '', 'action']`, which lets [validate] report the exact problem.
   List<String> get segments => value.split('.');
 
-  /// Returns lexical diagnostics for this identifier.
+  /// Checks whether [value] follows Odroe's identifier syntax.
   ///
   /// Valid identifiers are dot-separated paths whose segments start with a
   /// lowercase letter and then contain only letters, digits, or underscores.
@@ -38,6 +43,12 @@ extension type const Identifier(String value) {
   /// The optional `target` argument is copied to each reported
   /// [Diagnostic.target]. When it is omitted, diagnostics point at this
   /// identifier value with a target kind of `identifier`.
+  ///
+  /// ```dart
+  /// final diagnostics = Identifier('Color').validate();
+  ///
+  /// assert(diagnostics.single.code == DiagnosticCodes.identifierInvalidSegment);
+  /// ```
   List<Diagnostic> validate({DiagnosticTarget? target}) {
     final diagnosticTarget =
         target ?? DiagnosticTarget(kind: 'identifier', name: value);
