@@ -22,6 +22,7 @@
 /// values that other packages can adapt for Flutter, CSS, or other targets.
 library;
 
+export 'src/style/appearance.dart';
 export 'src/style/binding.dart';
 export 'src/style/diagnostic.dart';
 export 'src/style/identifier.dart';
