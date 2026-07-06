@@ -12,6 +12,14 @@ final class State extends Condition {
 
   /// The authoring name for this state.
   final Identifier id;
+
+  @override
+  bool operator ==(Object other) {
+    return other is State && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 /// The built-in style state namespace.
