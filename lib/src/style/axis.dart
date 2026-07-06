@@ -36,7 +36,7 @@ final class Axis<T> {
 
   @override
   bool operator ==(Object other) {
-    return other is Axis<T> &&
+    return other is Axis<Object?> &&
         other.id == id &&
         other.defaultValue == defaultValue;
   }
