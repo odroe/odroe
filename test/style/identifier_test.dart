@@ -1,6 +1,8 @@
 import 'package:odroe/style.dart';
 import 'package:test/test.dart';
 
+import '_utils.dart';
+
 void main() {
   test('keeps the raw identifier value', () {
     const identifier = Identifier('color.action.fill');
@@ -40,10 +42,4 @@ void main() {
       containsDiagnosticCode(DiagnosticCodes.identifierInvalidSegment),
     );
   });
-}
-
-Matcher containsDiagnosticCode(String code) {
-  return contains(
-    isA<Diagnostic>().having((diagnostic) => diagnostic.code, 'code', code),
-  );
 }
