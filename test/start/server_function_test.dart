@@ -71,6 +71,9 @@ void main() {
           'numbers': ServerFunction<NoServerInput, Stream<int>>(
             handler: (_) => Stream<int>.fromIterable(<int>[1, 2, 3]),
           ),
+          'raw': ServerFunction<NoServerInput, StartResponse>(
+            handler: (_) => StartResponse.text('download'),
+          ),
         },
       );
       final client = StartRpcClient(
@@ -107,6 +110,10 @@ void main() {
         id: 'numbers',
       ).call(client, input);
       expect(await stream.toList(), <int>[1, 2, 3]);
+      final raw = await const ServerFunctionRef<NoServerInput, StartResponse>(
+        id: 'raw',
+      ).call(client, input);
+      expect(await raw.readText(), 'download');
     },
   );
 

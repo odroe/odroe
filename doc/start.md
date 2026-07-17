@@ -2,6 +2,8 @@
 
 Start 是 Odroe 的全栈运行与构建产品。它复用 Router 的同一棵 `AppRoute` tree，并把 `server.dart`、Server Function、Query handoff 和宿主 adapter 接成一个应用；它不是 Flutter Web 的别名，也不绑定数据库或某个 HTTP server。
 
+本地 runtime 基准可运行 `dart run benchmark/start.dart`，覆盖完整 typed RPC serialization 与 route + Query handoff，而不是只测一个脱离产品链路的 Map lookup。
+
 ## 正常开发入口
 
 ```sh
@@ -19,7 +21,7 @@ dart run odroe dev --server-only --port 3000
 
 # 明确选择 Flutter build target，同时构建 Start server
 dart run odroe build apk
-dart run odroe build web --release
+dart run odroe build -- web --release
 
 # 只构建当前宿主平台的 Start server executable
 dart run odroe build --server-only

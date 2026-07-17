@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 /// Data lifecycle independent from active transport state.
 enum QueryStatus { pending, success, error }
 

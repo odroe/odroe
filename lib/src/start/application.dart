@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -100,6 +102,13 @@ final class StartApplication {
       query: query,
       type: type,
     );
+    if (request.cancelled case final cancelled?) {
+      unawaited(
+        cancelled.then<void>(
+          (_) => query.cancelQueries(const QueryFilter(), true, false),
+        ),
+      );
+    }
     final csrf = StartCsrfMiddleware(
       allowRequestsWithoutOrigin: options.allowRpcWithoutOrigin,
     );
@@ -167,8 +176,9 @@ final class StartApplication {
     String id,
   ) async {
     final function = functions[id];
-    if (function == null)
+    if (function == null) {
       throw const StartNotFound('Server function not found.');
+    }
     if (context.request.method != function.method) {
       return StartResponse.text(
         'Expected ${function.method.wire}.',

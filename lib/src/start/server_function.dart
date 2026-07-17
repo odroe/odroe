@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -145,6 +147,7 @@ final class StartRpcClient {
 
   Future<O> call<I, O>(ServerFunctionRef<I, O> function, I data) async {
     final response = await _send(function.id, function.method, data);
+    if (O == StartResponse) return response as O;
     final contentType = response.headers.value('content-type') ?? '';
     if (contentType.startsWith('application/x-ndjson')) {
       throw const StartProtocolException(

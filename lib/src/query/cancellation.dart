@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import 'dart:async';
 
 /// Cancellation raised by Query without treating it as a request failure.

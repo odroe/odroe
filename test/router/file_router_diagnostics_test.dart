@@ -47,4 +47,22 @@ void main() {
       contains('ServerFunction "_hidden" must be public'),
     );
   });
+
+  test(
+    'server function domain types must come from a prefixed shared import',
+    () {
+      final compiler = FileRouteCompiler(
+        projectRoot: Directory('test/fixtures/unshared_server_type').absolute,
+      );
+      final output = compiler.compile();
+
+      expect(output.hasErrors, isTrue);
+      expect(
+        output.diagnostics.single.toString(),
+        contains(
+          'uses client-visible type(s) LocalValue without an import prefix',
+        ),
+      );
+    },
+  );
 }

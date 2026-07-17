@@ -5,6 +5,7 @@ import 'package:args/args.dart';
 import 'package:odroe/router_compiler.dart';
 import 'package:path/path.dart' as p;
 
+/// Runs the Odroe command-line product and returns a process exit code.
 Future<int> runOdroe(
   List<String> arguments, {
   StringSink? output,
@@ -477,8 +478,8 @@ String _usage(ArgParser parser) =>
     '  build     Build a chosen Flutter target and Start server.\n'
     '  routes    Generate routes only, optionally watching.\n\n'
     '${parser.usage}\n\n'
-    'Flutter arguments for dev follow --. Build takes the Flutter target as '
-    'its first trailing argument.';
+    'Flutter arguments and options follow --. A build target without options '
+    'may be passed directly, for example: odroe build apk.';
 
 String _commandUsage(String name, ArgParser parser) =>
     'Usage: dart run odroe $name [arguments]\n\n${parser.usage}';

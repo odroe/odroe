@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -77,10 +79,9 @@ final class StartRequest {
     required this.uri,
     StartHeaders? headers,
     Stream<List<int>>? body,
-    Future<void>? cancelled,
+    this.cancelled,
   }) : headers = headers ?? StartHeaders(),
-       body = body ?? const Stream<List<int>>.empty(),
-       cancelled = cancelled ?? Completer<void>().future;
+       body = body ?? const Stream<List<int>>.empty();
 
   factory StartRequest.bytes({
     required StartMethod method,
@@ -100,7 +101,7 @@ final class StartRequest {
   final Stream<List<int>> body;
 
   /// Completes when the adapter observes client disconnection.
-  final Future<void> cancelled;
+  final Future<void>? cancelled;
 
   Future<Uint8List> readBytes({int maxBytes = 10 * 1024 * 1024}) async {
     final builder = BytesBuilder(copy: false);

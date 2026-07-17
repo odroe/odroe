@@ -2,6 +2,8 @@
 
 Odroe Query 管理异步 server state。它可独立用于 Dart，也与 Flutter、Router 和 Start 使用同一份状态机。
 
+性能基准可直接运行 `dart run benchmark/query.dart`；它覆盖 hot cache read、稳定 key 编码和三路并发请求去重，不引入 benchmark framework 依赖。
+
 ## 入口
 
 - `package:odroe/query_core.dart`：纯 Dart client、cache、observer、mutation、infinite query、hydration 和 persistence。
@@ -177,4 +179,3 @@ await persistence.restoreAndListen();
 ```
 
 写入会合并短时间内的 cache 更新。恢复时先检查 max age 和 buster；损坏载荷应由 adapter 抛出，Query 会删除它并阻止继续使用。
-

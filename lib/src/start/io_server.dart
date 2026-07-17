@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import 'dart:async';
 import 'dart:io';
 
@@ -38,21 +40,32 @@ final class StartIoServer {
     try {
       final headers = <String, Iterable<String>>{};
       incoming.headers.forEach((name, values) => headers[name] = values);
+      final cancelled = Completer<void>();
+      unawaited(
+        incoming.response.done.whenComplete(() {
+          if (!cancelled.isCompleted) cancelled.complete();
+        }),
+      );
       final request = StartRequest(
         method: StartMethod.parse(incoming.method),
         uri: incoming.requestedUri,
         headers: StartHeaders(headers),
         body: incoming,
+        cancelled: cancelled.future,
       );
       final response = await handler(request);
       incoming.response.statusCode = response.status;
       final reason = response.reason;
       if (reason != null) incoming.response.reasonPhrase = reason;
       for (final entry in response.headers.toMap().entries) {
-        incoming.response.headers.set(entry.key, entry.value);
+        incoming.response.headers.removeAll(entry.key);
+        for (final value in entry.value) {
+          incoming.response.headers.add(entry.key, value);
+        }
       }
-      if (incoming.method != 'HEAD')
+      if (incoming.method != 'HEAD') {
         await incoming.response.addStream(response.body);
+      }
     } on Object catch (error) {
       try {
         incoming.response.statusCode = 500;

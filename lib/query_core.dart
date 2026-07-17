@@ -2,6 +2,7 @@
 library;
 
 export 'src/query/cancellation.dart';
+export 'src/query/cache.dart';
 export 'src/query/client.dart';
 export 'src/query/hydration.dart';
 export 'src/query/infinite.dart';

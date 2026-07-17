@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
 /// A deterministic, serializable identity for one server-state resource.
 final class QueryKey {
@@ -132,22 +131,4 @@ Object? structurallyShare(Object? previous, Object? next, [int depth = 0]) {
     return equal ? previous : next;
   }
   return next;
-}
-
-/// A cheap stable hash for generated internal identifiers.
-String stableQueryHash(String input) {
-  var hash = 0xcbf29ce484222325;
-  for (final codeUnit in input.codeUnits) {
-    hash ^= codeUnit;
-    hash = (hash * 0x100000001b3) & 0x7fffffffffffffff;
-  }
-  const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
-  if (hash == 0) return '0';
-  final output = <String>[];
-  var value = hash.abs();
-  while (value > 0) {
-    output.add(alphabet[value % alphabet.length]);
-    value = value ~/ alphabet.length;
-  }
-  return output.reversed.join().substring(0, math.min(13, output.length));
 }

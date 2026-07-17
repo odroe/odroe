@@ -1,3 +1,5 @@
+// ignore_for_file: public_member_api_docs
+
 import '../query/client.dart';
 import 'request.dart';
 
@@ -33,8 +35,9 @@ final class StartRequestContext {
 
   T require<T>(StartContextKey<T> key) {
     final value = get(key);
-    if (value == null)
+    if (value == null) {
       throw StateError('Missing request context: ${key.name}.');
+    }
     return value;
   }
 
