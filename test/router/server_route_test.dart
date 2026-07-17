@@ -3,6 +3,9 @@ import 'package:test/test.dart';
 
 typedef _Params = ({int postId});
 
+Future<StartResponse> _auth(StartRequestContext context, StartNext next) =>
+    next();
+
 void main() {
   test('server fragment preserves the shared typed route contract', () async {
     final definition = AppRoute<_Params, NoSearch, String>(
@@ -14,7 +17,7 @@ void main() {
     );
     final fragment = definition.server(
       load: (context) => 'post-${context.params.postId}',
-      middleware: const <Object>['auth'],
+      middleware: <StartMiddleware>[_auth],
     );
     final scope = RouteLoadScope.from(
       <({AnyAppRoute route, Object? params, Object? search})>[
@@ -24,7 +27,7 @@ void main() {
 
     expect(fragment.definition, same(definition));
     expect(
-      await fragment.load(
+      await fragment.load!(
         RouteLoadContext<_Params, NoSearch>(
           params: (postId: 42),
           search: const NoSearch(),
@@ -34,7 +37,7 @@ void main() {
       ),
       'post-42',
     );
-    expect(fragment.middleware, const <Object>['auth']);
-    expect(() => fragment.middleware.add('metrics'), throwsUnsupportedError);
+    expect(fragment.serverMiddleware, <StartMiddleware>[_auth]);
+    expect(() => fragment.serverMiddleware.add(_auth), throwsUnsupportedError);
   });
 }
