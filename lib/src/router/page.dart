@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import '../query/client.dart';
 import 'codec.dart';
 import 'match.dart';
 import 'pattern.dart';
@@ -250,7 +251,8 @@ final class PageRouteFragment<P, S, D>
     Object? search,
     Uri location,
     RouteLoadScope scope,
-  ) => definition.loadObject(params, search, location, scope);
+    QueryClient query,
+  ) => definition.loadObject(params, search, location, scope, query);
 
   @override
   List<String> encodePath(Object? params) => definition.encodePath(params);
@@ -461,7 +463,8 @@ final class ShellRouteFragment<P, S, D>
     Object? search,
     Uri location,
     RouteLoadScope scope,
-  ) => definition.loadObject(params, search, location, scope);
+    QueryClient query,
+  ) => definition.loadObject(params, search, location, scope, query);
 
   @override
   List<String> encodePath(Object? params) => definition.encodePath(params);

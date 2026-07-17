@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import '../query/client.dart';
 import 'codec.dart';
 import 'pattern.dart';
 import 'route.dart';
@@ -34,8 +35,14 @@ final class RouteMatch<P, S, D> {
   final RouteLoadScope _scope;
 
   /// Runs the route loader.
-  Future<D> load() async {
-    final value = await route.loadObject(params, search, location, _scope);
+  Future<D> load({QueryClient? query}) async {
+    final value = await route.loadObject(
+      params,
+      search,
+      location,
+      _scope,
+      query ?? QueryClient(),
+    );
     return value as D;
   }
 }
@@ -158,7 +165,8 @@ final class RouteMatches {
   }
 
   /// Runs every matched route loader in parallel.
-  Future<Map<Object, RouteLoadResult>> loadAll() async {
+  Future<Map<Object, RouteLoadResult>> loadAll({QueryClient? query}) async {
+    final queryClient = query ?? QueryClient();
     final entries = await Future.wait(
       _matches.map((match) async {
         try {
@@ -167,6 +175,7 @@ final class RouteMatches {
             match.search,
             location,
             _scope,
+            queryClient,
           );
           return MapEntry<Object, RouteLoadResult>(
             match.route.identity,

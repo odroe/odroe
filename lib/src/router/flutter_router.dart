@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../query/client.dart';
 import 'match.dart';
 import 'page.dart';
 import 'route.dart';
@@ -22,6 +23,7 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
     WidgetBuilder? loading,
     WidgetBuilder? notFound,
     RouterErrorBuilder? error,
+    QueryClient? query,
   }) {
     late final Uri location;
     if (initialLocation case final initial?) {
@@ -39,25 +41,35 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
       );
       location = platform.hasAbsolutePath ? platform : Uri(path: '/');
     }
+    final queryClient = query ?? QueryClient();
     final provider = _OdroeRouteInformationProvider(location);
     late final OdroeRouter router;
     final delegate = _OdroeRouterDelegate(
       matcher: RouteMatcher(routes),
       provider: provider,
       router: () => router,
+      query: queryClient,
       loading: loading,
       notFound: notFound,
       error: error,
     );
-    router = OdroeRouter._(provider: provider, delegate: delegate);
+    router = OdroeRouter._(
+      provider: provider,
+      delegate: delegate,
+      query: queryClient,
+      ownsQuery: query == null,
+    );
     return router;
   }
 
   OdroeRouter._({
     required _OdroeRouteInformationProvider provider,
     required _OdroeRouterDelegate delegate,
+    required this.query,
+    required bool ownsQuery,
   }) : _provider = provider,
        _delegate = delegate,
+       _ownsQuery = ownsQuery,
        super(
          routeInformationProvider: provider,
          routeInformationParser: const _OdroeRouteInformationParser(),
@@ -67,6 +79,10 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
 
   final _OdroeRouteInformationProvider _provider;
   final _OdroeRouterDelegate _delegate;
+  final bool _ownsQuery;
+
+  /// Query client shared by every route loader and Flutter query observer.
+  final QueryClient query;
 
   @override
   Uri get location => _delegate.location ?? _provider.value.uri;
@@ -89,6 +105,7 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
   void dispose() {
     _delegate.dispose();
     _provider.dispose();
+    if (_ownsQuery) query.clear();
   }
 }
 
@@ -285,12 +302,14 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
     required RouteMatcher matcher,
     required _OdroeRouteInformationProvider provider,
     required OdroeRouter Function() router,
+    required QueryClient query,
     required WidgetBuilder? loading,
     required WidgetBuilder? notFound,
     required RouterErrorBuilder? error,
   }) : _matcher = matcher,
        _provider = provider,
        _router = router,
+       _query = query,
        _loading = loading,
        _notFound = notFound,
        _error = error;
@@ -298,6 +317,7 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
   final RouteMatcher _matcher;
   final _OdroeRouteInformationProvider _provider;
   final OdroeRouter Function() _router;
+  final QueryClient _query;
   final WidgetBuilder? _loading;
   final WidgetBuilder? _notFound;
   final RouterErrorBuilder? _error;
@@ -362,7 +382,7 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
   }
 
   Future<void> _load(_NavigationRecord record, RouteMatches matches) async {
-    final results = await matches.loadAll();
+    final results = await matches.loadAll(query: _query);
     if (!_records.contains(record)) return;
     record.snapshot.results = results;
     notifyListeners();

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import '../query/client.dart';
 import 'codec.dart';
 import 'pattern.dart';
 
@@ -58,12 +59,14 @@ final class RouteLoadScope {
 /// Typed input passed to a route loader.
 final class RouteLoadContext<P, S> {
   /// Creates loader input.
-  const RouteLoadContext({
+  RouteLoadContext({
     required this.params,
     required this.search,
     required this.location,
+    QueryClient? query,
     required RouteLoadScope scope,
-  }) : _scope = scope;
+  }) : query = query ?? QueryClient(),
+       _scope = scope;
 
   /// Parameters owned by the route.
   final P params;
@@ -73,6 +76,9 @@ final class RouteLoadContext<P, S> {
 
   /// The complete matched location.
   final Uri location;
+
+  /// Query client shared by every loader in the matched branch.
+  final QueryClient query;
 
   final RouteLoadScope _scope;
 
@@ -149,6 +155,7 @@ abstract class AnyAppRoute {
     Object? search,
     Uri location,
     RouteLoadScope scope,
+    QueryClient query,
   );
 
   /// Encodes this route's local path through an erased generated boundary.
@@ -367,6 +374,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     Object? search,
     Uri location,
     RouteLoadScope scope,
+    QueryClient query,
   ) {
     final loader = load;
     if (loader == null) return const NoData();
@@ -375,6 +383,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
         params: params as P,
         search: search as S,
         location: location,
+        query: query,
         scope: scope,
       ),
     );
