@@ -245,9 +245,12 @@ final class SearchInput {
   }
 
   /// Returns every query value stored for [name].
-  List<String> strings(String name) {
+  List<String> strings(
+    String name, {
+    Iterable<String> fallback = const <String>[],
+  }) {
     _readKeys.add(name);
-    return List<String>.unmodifiable(_values[name] ?? const <String>[]);
+    return List<String>.unmodifiable(_values[name] ?? fallback);
   }
 
   Set<String> _takeReadKeys() => Set<String>.unmodifiable(_readKeys);
@@ -288,10 +291,14 @@ final class SearchOutput {
     _write(name, <String>[value.toString()]);
   }
 
-  /// Writes repeated query values.
-  void strings(String name, Iterable<String> values) {
+  /// Writes repeated query values, omitting [omitIf].
+  void strings(
+    String name,
+    Iterable<String> values, {
+    Iterable<String>? omitIf,
+  }) {
     final result = List<String>.unmodifiable(values);
-    if (result.isEmpty) return;
+    if (result.isEmpty || _iterableEquals(result, omitIf)) return;
     _write(name, result);
   }
 
@@ -306,6 +313,16 @@ final class SearchOutput {
 
   Map<String, List<String>> _take() =>
       Map<String, List<String>>.unmodifiable(_values);
+
+  static bool _iterableEquals(List<String> value, Iterable<String>? other) {
+    if (other == null) return false;
+    final otherValues = other.toList(growable: false);
+    if (value.length != otherValues.length) return false;
+    for (var index = 0; index < value.length; index++) {
+      if (value[index] != otherValues[index]) return false;
+    }
+    return true;
+  }
 }
 
 /// The result of decoding one route's search state.
@@ -326,12 +343,28 @@ final class DecodedSearch<S> {
 /// A bidirectional typed search-state contract.
 final class SearchParams<S> {
   /// Creates an explicit runtime codec.
-  const SearchParams.codec({
+  factory SearchParams.codec({
+    required Iterable<String> keys,
+    required S defaults,
+    required S Function(SearchInput input) decode,
+    required void Function(S value, SearchOutput output) encode,
+    InvalidSearchBehavior invalid = InvalidSearchBehavior.fallback,
+  }) => SearchParams<S>._codec(
+    keys: Set<String>.unmodifiable(keys),
+    defaults: defaults,
+    decode: decode,
+    encode: encode,
+    invalid: invalid,
+  );
+
+  SearchParams._codec({
+    required Set<String> keys,
     required this.defaults,
     required S Function(SearchInput input) decode,
     required void Function(S value, SearchOutput output) encode,
-    this.invalid = InvalidSearchBehavior.fallback,
-  }) : _decode = decode,
+    required this.invalid,
+  }) : _keys = keys,
+       _decode = decode,
        _encode = encode,
        isSchema = false;
 
@@ -339,7 +372,8 @@ final class SearchParams<S> {
   const SearchParams.schema({
     required this.defaults,
     this.invalid = InvalidSearchBehavior.fallback,
-  }) : _decode = null,
+  }) : _keys = null,
+       _decode = null,
        _encode = null,
        isSchema = true;
 
@@ -349,6 +383,7 @@ final class SearchParams<S> {
   /// The invalid-value policy.
   final InvalidSearchBehavior invalid;
 
+  final Set<String>? _keys;
   final S Function(SearchInput input)? _decode;
   final void Function(S value, SearchOutput output)? _encode;
 
@@ -363,17 +398,13 @@ final class SearchParams<S> {
     }
     final input = SearchInput(values);
     try {
-      return DecodedSearch<S>(
-        value: decode(input),
-        keys: input._takeReadKeys(),
-      );
-    } on Object catch (error) {
+      final value = decode(input);
+      _validateReads(input);
+      return DecodedSearch<S>(value: value, keys: _keys!);
+    } on ParameterFormatException catch (error) {
+      _validateReads(input);
       if (invalid == InvalidSearchBehavior.error) rethrow;
-      return DecodedSearch<S>(
-        value: defaults,
-        keys: input._takeReadKeys(),
-        error: error,
-      );
+      return DecodedSearch<S>(value: defaults, keys: _keys!, error: error);
     }
   }
 
@@ -385,7 +416,23 @@ final class SearchParams<S> {
     }
     final output = SearchOutput();
     encode(value, output);
-    return output._take();
+    final encoded = output._take();
+    final undeclared = encoded.keys.toSet().difference(_keys!);
+    if (undeclared.isNotEmpty) {
+      throw StateError(
+        'SearchParams.codec() encoded undeclared keys $undeclared.',
+      );
+    }
+    return encoded;
+  }
+
+  void _validateReads(SearchInput input) {
+    final undeclared = input._takeReadKeys().difference(_keys!);
+    if (undeclared.isNotEmpty) {
+      throw StateError(
+        'SearchParams.codec() decoded undeclared keys $undeclared.',
+      );
+    }
   }
 }
 

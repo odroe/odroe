@@ -23,9 +23,22 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
     WidgetBuilder? notFound,
     RouterErrorBuilder? error,
   }) {
-    final location =
-        initialLocation ??
-        Uri.parse(ui.PlatformDispatcher.instance.defaultRouteName);
+    late final Uri location;
+    if (initialLocation case final initial?) {
+      if (!initial.hasAbsolutePath) {
+        throw ArgumentError.value(
+          initial,
+          'initialLocation',
+          'Router locations must have an absolute path.',
+        );
+      }
+      location = initial;
+    } else {
+      final platform = Uri.parse(
+        ui.PlatformDispatcher.instance.defaultRouteName,
+      );
+      location = platform.hasAbsolutePath ? platform : Uri(path: '/');
+    }
     final provider = _OdroeRouteInformationProvider(location);
     late final OdroeRouter router;
     final delegate = _OdroeRouterDelegate(
@@ -317,22 +330,30 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
 
   Future<void> _apply(_RouteConfiguration configuration) {
     late final _NavigationSnapshot snapshot;
+    late final _RouteConfiguration effectiveConfiguration;
     try {
       final matches = _matcher.match(configuration.uri);
       snapshot = matches == null
           ? _NavigationSnapshot.notFound()
           : _NavigationSnapshot.matches(matches);
+      effectiveConfiguration = matches == null
+          ? configuration
+          : _RouteConfiguration(
+              uri: matches.location,
+              request: configuration.request,
+            );
     } on Object catch (error, stackTrace) {
       snapshot = _NavigationSnapshot.error(error, stackTrace);
+      effectiveConfiguration = configuration;
     }
 
     final record = _NavigationRecord(
-      configuration: configuration,
+      configuration: effectiveConfiguration,
       snapshot: snapshot,
-      completion: configuration.request.completion,
+      completion: effectiveConfiguration.request.completion,
     );
-    _install(record, configuration.request.operation);
-    _configuration = configuration;
+    _install(record, effectiveConfiguration.request.operation);
+    _configuration = effectiveConfiguration;
     notifyListeners();
 
     final matches = snapshot.matches;
@@ -350,11 +371,7 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
   void _install(_NavigationRecord record, _NavigationOperation operation) {
     switch (operation) {
       case _NavigationOperation.push:
-        if (_records.isEmpty) {
-          _records.add(record);
-        } else {
-          _records.add(record);
-        }
+        _records.add(record);
       case _NavigationOperation.replace:
         if (_records.isNotEmpty) {
           _records.removeLast().completion?.complete(null);
@@ -429,9 +446,18 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
     }
 
     final matches = snapshot.matches!;
-    var routes = matches.routes.whereType<PageBoundRoute>().toList();
-    if (pushed && routes.isNotEmpty) routes = <PageBoundRoute>[routes.last];
-    if (routes.isEmpty) {
+    var routes = matches.routes;
+    if (pushed) {
+      final shellIndex = routes.indexWhere((route) => route is ShellBoundRoute);
+      if (shellIndex >= 0) {
+        routes = routes.sublist(shellIndex);
+      } else {
+        final page = routes.whereType<PageBoundRoute>().lastOrNull;
+        routes = page == null ? const <AnyAppRoute>[] : <AnyAppRoute>[page];
+      }
+    }
+    final pages = _buildMatchedPages(context, record, matches, routes);
+    if (pages.isEmpty) {
       final page = _FallbackPage(
         key: ValueKey<Object>(record.pageScope),
         child:
@@ -443,20 +469,73 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
       return;
     }
 
-    for (final route in routes) {
-      final page = route.buildPage(
-        context: context,
-        router: _router(),
-        matches: matches,
-        loadResult: snapshot.results?[route.identity],
-        pageScope: pushed ? record.pageScope : null,
-        onPopInvoked: (didPop, result) {
-          if (didPop) record.popResult = result;
-        },
-      );
-      _pageOwners[page] = record;
-      yield page;
+    yield* pages;
+  }
+
+  List<Page<Object?>> _buildMatchedPages(
+    BuildContext context,
+    _NavigationRecord record,
+    RouteMatches matches,
+    List<AnyAppRoute> routes,
+  ) {
+    final pages = <Page<Object?>>[];
+    for (var index = 0; index < routes.length; index++) {
+      final route = routes[index];
+      if (route is ShellBoundRoute) {
+        final nestedPages = <Page<Object?>>[];
+        final indexPage = route.indexPage;
+        if (indexPage != null) {
+          nestedPages.add(_buildPage(context, record, matches, indexPage));
+        }
+        nestedPages.addAll(
+          _buildMatchedPages(
+            context,
+            record,
+            matches,
+            routes.sublist(index + 1),
+          ),
+        );
+        final page = route.buildShellPage(
+          context: context,
+          router: _router(),
+          matches: matches,
+          loadResult: record.snapshot.results?[route.identity],
+          pageScope: record.completion == null ? null : record.pageScope,
+          pages: nestedPages,
+          onPopInvoked: (didPop, result) {
+            if (didPop) record.popResult = result;
+          },
+          onDidRemovePage: _didRemovePage,
+        );
+        _pageOwners[page] = record;
+        pages.add(page);
+        return pages;
+      }
+      if (route is PageBoundRoute) {
+        pages.add(_buildPage(context, record, matches, route));
+      }
     }
+    return pages;
+  }
+
+  Page<Object?> _buildPage(
+    BuildContext context,
+    _NavigationRecord record,
+    RouteMatches matches,
+    PageBoundRoute route,
+  ) {
+    final page = route.buildPage(
+      context: context,
+      router: _router(),
+      matches: matches,
+      loadResult: record.snapshot.results?[route.identity],
+      pageScope: record.completion == null ? null : record.pageScope,
+      onPopInvoked: (didPop, result) {
+        if (didPop) record.popResult = result;
+      },
+    );
+    _pageOwners[page] = record;
+    return page;
   }
 
   void _didRemovePage(Page<Object?> page) {
@@ -486,8 +565,23 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
   @override
   Future<bool> popRoute() async {
     final navigator = navigatorKey.currentState;
-    if (navigator == null || !navigator.canPop()) return false;
-    return navigator.maybePop();
+    if (navigator != null && navigator.canPop()) {
+      return navigator.maybePop();
+    }
+    if (_records.isEmpty) return false;
+    final parent = _records.last.snapshot.matches?.parentLocation;
+    if (parent == null) return false;
+    _provider.navigate(parent, _NavigationOperation.replace);
+    return true;
+  }
+
+  @override
+  void dispose() {
+    for (final record in _records) {
+      record.completion?.complete(null);
+    }
+    _records.clear();
+    super.dispose();
   }
 }
 

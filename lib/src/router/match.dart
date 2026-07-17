@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'codec.dart';
 import 'pattern.dart';
@@ -12,7 +13,8 @@ final class RouteMatch<P, S, D> {
     required this.search,
     required this.searchError,
     required this.location,
-  });
+    required RouteLoadScope scope,
+  }) : _scope = scope;
 
   /// The matched route definition.
   final AppRoute<P, S, D> route;
@@ -29,9 +31,11 @@ final class RouteMatch<P, S, D> {
   /// The complete matched location.
   final Uri location;
 
+  final RouteLoadScope _scope;
+
   /// Runs the route loader.
   Future<D> load() async {
-    final value = await route.loadObject(params, search, location);
+    final value = await route.loadObject(params, search, location, _scope);
     return value as D;
   }
 }
@@ -77,12 +81,54 @@ final class RouteLoadResult {
 
 /// The ordered matches for one location.
 final class RouteMatches {
-  const RouteMatches._(this.location, this._matches);
+  RouteMatches._(this.sourceLocation, this._matches)
+    : location = _canonicalize(sourceLocation, _matches),
+      _scope = RouteLoadScope.from(
+        _matches.map(
+          (match) =>
+              (route: match.route, params: match.params, search: match.search),
+        ),
+      );
 
-  /// The matched location.
+  /// The incoming location before typed codecs normalized it.
+  final Uri sourceLocation;
+
+  /// The canonical location rebuilt from typed params and search state.
   final Uri location;
 
   final List<_ErasedMatch> _matches;
+  final RouteLoadScope _scope;
+
+  static Uri _canonicalize(Uri source, List<_ErasedMatch> matches) {
+    final segments = <String>[];
+    final claimedSearchKeys = <String>{};
+    for (final match in matches) {
+      segments.addAll(match.route.encodePath(match.params));
+      claimedSearchKeys.addAll(match.searchKeys);
+    }
+
+    final query = <String, List<String>>{};
+    for (final entry in source.queryParametersAll.entries) {
+      if (!claimedSearchKeys.contains(entry.key)) {
+        query[entry.key] = entry.value;
+      }
+    }
+    for (final match in matches) {
+      query.addAll(match.route.encodeQuery(match.search));
+    }
+
+    return segments.isEmpty
+        ? Uri(
+            path: '/',
+            queryParameters: query.isEmpty ? null : query,
+            fragment: source.hasFragment ? source.fragment : null,
+          )
+        : Uri(
+            pathSegments: <String>['', ...segments],
+            queryParameters: query.isEmpty ? null : query,
+            fragment: source.hasFragment ? source.fragment : null,
+          );
+  }
 
   /// Matched route definitions from root to leaf.
   List<AnyAppRoute> get routes =>
@@ -93,15 +139,20 @@ final class RouteMatches {
     for (var index = _matches.length - 2; index >= 0; index--) {
       final match = _matches[index];
       if (!match.route.terminal) continue;
-      return Uri(
-        pathSegments: <String>[
-          '',
-          ...location.pathSegments.take(match.pathEnd),
-        ],
-        queryParameters: location.queryParametersAll.isEmpty
-            ? null
-            : location.queryParametersAll,
-      );
+      final segments = location.pathSegments.take(match.pathEnd).toList();
+      return segments.isEmpty
+          ? Uri(
+              path: '/',
+              queryParameters: location.queryParametersAll.isEmpty
+                  ? null
+                  : location.queryParametersAll,
+            )
+          : Uri(
+              pathSegments: <String>['', ...segments],
+              queryParameters: location.queryParametersAll.isEmpty
+                  ? null
+                  : location.queryParametersAll,
+            );
     }
     return null;
   }
@@ -115,6 +166,7 @@ final class RouteMatches {
             match.params,
             match.search,
             location,
+            _scope,
           );
           return MapEntry<Object, RouteLoadResult>(
             match.route.identity,
@@ -128,9 +180,11 @@ final class RouteMatches {
         }
       }),
     );
-    return Map<Object, RouteLoadResult>.unmodifiable(
-      Map<Object, RouteLoadResult>.fromEntries(entries),
-    );
+    final result = HashMap<Object, RouteLoadResult>.identity();
+    for (final entry in entries) {
+      result[entry.key] = entry.value;
+    }
+    return UnmodifiableMapView<Object, RouteLoadResult>(result);
   }
 
   /// Returns the typed match belonging to [route].
@@ -143,6 +197,7 @@ final class RouteMatches {
           search: value.search as S,
           searchError: value.searchError,
           location: location,
+          scope: _scope,
         );
       }
     }
@@ -165,13 +220,22 @@ final class RouteMatcher {
   /// Creates a matcher and validates route patterns eagerly.
   RouteMatcher(Iterable<AnyAppRoute> routes)
     : _routes = _sort(List<AnyAppRoute>.unmodifiable(routes)) {
-    _validate(_routes);
+    _prepare(_routes, HashSet<Object>.identity());
   }
 
   final List<AnyAppRoute> _routes;
+  final Map<Object, List<AnyAppRoute>> _children =
+      HashMap<Object, List<AnyAppRoute>>.identity();
 
   /// Matches [location], returning `null` when no complete branch matches.
   RouteMatches? match(Uri location) {
+    if (!location.hasAbsolutePath) {
+      throw ArgumentError.value(
+        location,
+        'location',
+        'Route locations must have an absolute path.',
+      );
+    }
     final segments = location.pathSegments;
     final query = location.queryParametersAll;
     final result = _matchLevel(
@@ -225,7 +289,7 @@ final class RouteMatcher {
       }
 
       final childResult = _matchLevel(
-        routes: _sort(route.children),
+        routes: _children[route.identity]!,
         segments: segments,
         query: query,
         index: patternMatch.nextIndex,
@@ -247,15 +311,22 @@ final class RouteMatcher {
     return result;
   }
 
-  static void _validate(List<AnyAppRoute> routes) {
+  void _prepare(List<AnyAppRoute> routes, Set<Object> identities) {
     for (final route in routes) {
+      if (!identities.add(route.identity)) {
+        throw StateError(
+          'A route definition cannot appear more than once in one tree.',
+        );
+      }
       final dynamicNames = route.compiledPattern.parameterNames;
       if (dynamicNames.isNotEmpty && !route.hasPathCodec) {
         throw StateError(
           'Route "${route.path}" must declare PathParams for $dynamicNames.',
         );
       }
-      _validate(route.children);
+      final children = _sort(route.children);
+      _children[route.identity] = children;
+      _prepare(children, identities);
     }
   }
 }

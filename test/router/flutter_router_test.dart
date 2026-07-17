@@ -12,6 +12,62 @@ PathParams<_IdParams> get _idParams => PathParams<_IdParams>.codec(
 );
 
 void main() {
+  testWidgets('publishes loader completion on the same Navigator page', (
+    tester,
+  ) async {
+    final completion = Completer<String>();
+    final route =
+        AppRoute<NoParams, NoSearch, String>(
+          path: '/slow',
+          load: (_) => completion.future,
+        ).page(
+          pending: (_) => const Text('pending'),
+          build: (context) => Text(context.data),
+        );
+    final router = OdroeRouter(
+      routes: <AnyAppRoute>[route],
+      initialLocation: Uri.parse('/slow'),
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    expect(find.text('pending'), findsOneWidget);
+
+    completion.complete('ready');
+    await tester.pumpAndSettle();
+    expect(find.text('ready'), findsOneWidget);
+    expect(find.text('pending'), findsNothing);
+  });
+
+  testWidgets('updates typed search on the same route page', (tester) async {
+    final route = AppRoute<NoParams, ({int page}), NoData>(
+      path: '/posts',
+      search: SearchParams<({int page})>.codec(
+        keys: const <String>{'page'},
+        defaults: (page: 1),
+        decode: (input) => (page: input.integer('page') ?? 1),
+        encode: (value, output) =>
+            output.integer('page', value.page, omitIf: 1),
+      ),
+    ).page(build: (context) => Text('page-${context.search.page}'));
+    final router = OdroeRouter(
+      routes: <AnyAppRoute>[route],
+      initialLocation: Uri.parse('/posts?page=01'),
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+    expect(find.text('page-1'), findsOneWidget);
+    expect(router.location.toString(), '/posts');
+
+    router.go(route.to(search: (page: 2)));
+    await tester.pumpAndSettle();
+    expect(find.text('page-2'), findsOneWidget);
+    expect(find.text('page-1'), findsNothing);
+  });
+
   testWidgets('runs typed loaders and renders Navigator pages', (tester) async {
     final home = AppRoute<NoParams, NoSearch, NoData>(
       path: '/',
@@ -80,6 +136,33 @@ void main() {
     expect(find.text('stale-data'), findsNothing);
   });
 
+  testWidgets('advanced pages receive typed state and navigator settings', (
+    tester,
+  ) async {
+    final custom =
+        AppRoute<NoParams, NoSearch, String>(
+          path: '/custom',
+          load: (_) => 'ready',
+        ).page(
+          page: (state, settings) => MaterialPage<Object?>(
+            key: settings.key,
+            name: settings.name,
+            onPopInvoked: settings.onPopInvoked,
+            child: Text(state.data),
+          ),
+        );
+    final router = OdroeRouter(
+      routes: <AnyAppRoute>[custom],
+      initialLocation: Uri.parse('/custom'),
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ready'), findsOneWidget);
+  });
+
   testWidgets('push completes with the popped result', (tester) async {
     final home = AppRoute<NoParams, NoSearch, NoData>(
       path: '/',
@@ -111,6 +194,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(await result, 'done');
+    expect(find.text('home'), findsOneWidget);
+    expect(router.location.path, '/');
+  });
+
+  testWidgets('replace completes the replaced push and preserves its parent', (
+    tester,
+  ) async {
+    final home = AppRoute<NoParams, NoSearch, NoData>(
+      path: '/',
+    ).page(build: (_) => const Text('home'));
+    final first = AppRoute<NoParams, NoSearch, NoData>(
+      path: '/first',
+    ).page(build: (_) => const Text('first'));
+    final second = AppRoute<NoParams, NoSearch, NoData>(
+      path: '/second',
+    ).page(build: (_) => const Text('second'));
+    final router = OdroeRouter(
+      routes: <AnyAppRoute>[home, first, second],
+      initialLocation: Uri.parse('/'),
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final replaced = router.push<String>(first.to());
+    await tester.pumpAndSettle();
+    expect(find.text('first'), findsOneWidget);
+
+    router.replace(second.to());
+    await tester.pumpAndSettle();
+    expect(await replaced, isNull);
+    expect(find.text('second'), findsOneWidget);
+
+    expect(await router.routerDelegate.popRoute(), isTrue);
+    await tester.pumpAndSettle();
     expect(find.text('home'), findsOneWidget);
     expect(router.location.path, '/');
   });

@@ -1,9 +1,10 @@
-import 'package:odroe/router.dart';
+import 'package:odroe/router_core.dart';
 import 'package:test/test.dart';
 
 typedef _PostParams = ({int postId});
 typedef _PostSearch = ({int page, String? query});
 typedef _OrganizationParams = ({String organizationId});
+typedef _OrganizationSearch = ({String tab});
 typedef _ProjectParams = ({int projectId});
 
 PathParams<_PostParams> get _postParams => PathParams<_PostParams>.codec(
@@ -12,6 +13,7 @@ PathParams<_PostParams> get _postParams => PathParams<_PostParams>.codec(
 );
 
 SearchParams<_PostSearch> get _postSearch => SearchParams<_PostSearch>.codec(
+  keys: const <String>{'page', 'query'},
   defaults: (page: 1, query: null),
   decode: (input) =>
       (page: input.integer('page') ?? 1, query: input.string('query')),
@@ -62,6 +64,52 @@ void main() {
 
       expect(route.to().uri.toString(), '/about');
     });
+
+    test('keeps the root destination canonical', () {
+      final route = AppRoute<NoParams, NoSearch, NoData>(path: '/');
+
+      expect(route.to().uri.toString(), '/');
+    });
+
+    test('RouteRef composes typed nested params and search ownership', () {
+      final organization =
+          AppRoute<_OrganizationParams, _OrganizationSearch, NoData>(
+            path: '/organizations/[organizationId]',
+            params: PathParams<_OrganizationParams>.codec(
+              decode: (input) =>
+                  (organizationId: input.requiredString('organizationId')),
+              encode: (value, output) =>
+                  output.string('organizationId', value.organizationId),
+            ),
+            search: SearchParams<_OrganizationSearch>.codec(
+              keys: const <String>{'tab'},
+              defaults: (tab: 'overview'),
+              decode: (input) => (tab: input.string('tab') ?? 'overview'),
+              encode: (value, output) =>
+                  output.string('tab', value.tab, omitIf: 'overview'),
+            ),
+            terminal: false,
+          );
+      final project = AppRoute<_ProjectParams, NoSearch, NoData>(
+        path: 'projects/[projectId]',
+        params: PathParams<_ProjectParams>.codec(
+          decode: (input) => (projectId: input.requiredInt('projectId')),
+          encode: (value, output) =>
+              output.integer('projectId', value.projectId),
+        ),
+      );
+
+      final destination = organization
+          .ref(params: (organizationId: 'odroe'), search: (tab: 'activity'))
+          .then(project.ref(params: (projectId: 7)))
+          .destination;
+
+      expect(
+        destination.uri.toString(),
+        '/organizations/odroe/projects/7?tab=activity',
+      );
+      expect(destination.route.identity, same(project.identity));
+    });
   });
 
   group('matching', () {
@@ -92,7 +140,16 @@ void main() {
       );
     });
 
-    test('retains typed parent and leaf matches', () {
+    test('rejects relative locations', () {
+      final route = AppRoute<NoParams, NoSearch, NoData>(path: '/about');
+
+      expect(
+        () => RouteMatcher(<AnyAppRoute>[route]).match(Uri.parse('about')),
+        throwsArgumentError,
+      );
+    });
+
+    test('retains typed parent and leaf matches', () async {
       final organization = AppRoute<_OrganizationParams, NoSearch, NoData>(
         path: '/organizations/[organizationId]',
         params: PathParams<_OrganizationParams>.codec(
@@ -103,13 +160,16 @@ void main() {
         ),
         terminal: false,
       );
-      final project = AppRoute<_ProjectParams, NoSearch, NoData>(
+      final project = AppRoute<_ProjectParams, NoSearch, String>(
         path: 'projects/[projectId]',
         params: PathParams<_ProjectParams>.codec(
           decode: (input) => (projectId: input.requiredInt('projectId')),
           encode: (value, output) =>
               output.integer('projectId', value.projectId),
         ),
+        load: (context) =>
+            '${context.match(organization)!.params.organizationId}:'
+            '${context.params.projectId}',
       );
       final matcher = RouteMatcher(<AnyAppRoute>[
         organization.withChildren(<AnyAppRoute>[project]),
@@ -121,6 +181,7 @@ void main() {
 
       expect(matches.match(organization)!.params.organizationId, 'odroe');
       expect(matches.leaf(project).params.projectId, 7);
+      expect(await matches.leaf(project).load(), 'odroe:7');
     });
 
     test('falls back to canonical search state and retains the error', () {
@@ -138,11 +199,38 @@ void main() {
       expect(match.searchError, isA<ParameterFormatException>());
     });
 
+    test(
+      'normalizes params and owned search while preserving unknown keys',
+      () {
+        final route = AppRoute<_PostParams, _PostSearch, NoData>(
+          path: '/posts/[postId]',
+          params: _postParams,
+          search: _postSearch,
+        );
+
+        final matches = RouteMatcher(<AnyAppRoute>[route]).match(
+          Uri.parse(
+            '/posts/0042?page=1&query=flutter+router&utm_source=docs#install',
+          ),
+        )!;
+
+        expect(
+          matches.location.toString(),
+          '/posts/42?utm_source=docs&query=flutter+router#install',
+        );
+        expect(
+          matches.sourceLocation.toString(),
+          '/posts/0042?page=1&query=flutter+router&utm_source=docs#install',
+        );
+      },
+    );
+
     test('surfaces strict search errors', () {
       final route = AppRoute<_PostParams, _PostSearch, NoData>(
         path: '/posts/[postId]',
         params: _postParams,
         search: SearchParams<_PostSearch>.codec(
+          keys: const <String>{'page', 'query'},
           defaults: (page: 1, query: null),
           invalid: InvalidSearchBehavior.error,
           decode: (input) =>
@@ -161,6 +249,7 @@ void main() {
 
     test('rejects search keys owned by two active routes', () {
       SearchParams<({int page})> search() => SearchParams<({int page})>.codec(
+        keys: const <String>{'page'},
         defaults: (page: 1),
         decode: (input) => (page: input.integer('page') ?? 1),
         encode: (value, output) =>
@@ -183,6 +272,50 @@ void main() {
         ]).match(Uri.parse('/posts/popular')),
         throwsStateError,
       );
+    });
+
+    test('keeps declared search ownership when fallback exits early', () {
+      final parent = AppRoute<NoParams, ({int page, String sort}), NoData>(
+        path: '/posts',
+        search: SearchParams<({int page, String sort})>.codec(
+          keys: const <String>{'page', 'sort'},
+          defaults: (page: 1, sort: 'newest'),
+          decode: (input) => (
+            page: input.integer('page') ?? 1,
+            sort: input.string('sort') ?? 'newest',
+          ),
+          encode: (value, output) {},
+        ),
+        terminal: false,
+      );
+      final child = AppRoute<NoParams, ({String sort}), NoData>(
+        path: 'popular',
+        search: SearchParams<({String sort})>.codec(
+          keys: const <String>{'sort'},
+          defaults: (sort: 'newest'),
+          decode: (input) => (sort: input.string('sort') ?? 'newest'),
+          encode: (value, output) {},
+        ),
+      );
+
+      expect(
+        () => RouteMatcher(<AnyAppRoute>[
+          parent.withChildren(<AnyAppRoute>[child]),
+        ]).match(Uri.parse('/posts/popular?page=invalid')),
+        throwsStateError,
+      );
+    });
+
+    test('rejects undeclared keys in custom search codecs', () {
+      final search = SearchParams<({String value})>.codec(
+        keys: const <String>{'declared'},
+        defaults: (value: ''),
+        decode: (input) => (value: input.string('undeclared') ?? ''),
+        encode: (value, output) => output.string('undeclared', value.value),
+      );
+
+      expect(() => search.decode(const {}), throwsStateError);
+      expect(() => search.encode((value: 'x')), throwsStateError);
     });
 
     test('runs a loader with typed route values', () async {

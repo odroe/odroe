@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'codec.dart';
 import 'pattern.dart';
@@ -7,6 +8,53 @@ import 'pattern.dart';
 typedef RouteLoader<P, S, D> =
     FutureOr<D> Function(RouteLoadContext<P, S> context);
 
+/// Typed params and search belonging to one active route.
+final class RouteValues<P, S> {
+  const RouteValues._({required this.params, required this.search});
+
+  /// Path parameters owned by the route.
+  final P params;
+
+  /// Search state owned by the route.
+  final S search;
+}
+
+/// Read-only lookup for every route in an active matched branch.
+final class RouteLoadScope {
+  /// Creates infrastructure scope from erased active-route values.
+  RouteLoadScope.from(
+    Iterable<({AnyAppRoute route, Object? params, Object? search})> values,
+  ) : _values = _buildValues(values);
+
+  final Map<Object, ({Object? params, Object? search})> _values;
+
+  static Map<Object, ({Object? params, Object? search})> _buildValues(
+    Iterable<({AnyAppRoute route, Object? params, Object? search})> values,
+  ) {
+    final result =
+        HashMap<Object, ({Object? params, Object? search})>.identity();
+    for (final value in values) {
+      result[value.route.identity] = (
+        params: value.params,
+        search: value.search,
+      );
+    }
+    return UnmodifiableMapView<Object, ({Object? params, Object? search})>(
+      result,
+    );
+  }
+
+  /// Returns typed values for an active ancestor or current route.
+  RouteValues<P, S>? match<P, S, D>(AppRoute<P, S, D> route) {
+    final value = _values[route.identity];
+    if (value == null) return null;
+    return RouteValues<P, S>._(
+      params: value.params as P,
+      search: value.search as S,
+    );
+  }
+}
+
 /// Typed input passed to a route loader.
 final class RouteLoadContext<P, S> {
   /// Creates loader input.
@@ -14,7 +62,8 @@ final class RouteLoadContext<P, S> {
     required this.params,
     required this.search,
     required this.location,
-  });
+    required RouteLoadScope scope,
+  }) : _scope = scope;
 
   /// Parameters owned by the route.
   final P params;
@@ -24,17 +73,30 @@ final class RouteLoadContext<P, S> {
 
   /// The complete matched location.
   final Uri location;
-}
 
-/// Declares loader data supplied by a separate route fragment.
-final class RouteData<D> {
-  /// Creates a loader-data type witness.
-  const RouteData();
+  final RouteLoadScope _scope;
+
+  /// Returns typed values for an active ancestor or current route.
+  RouteValues<ParentP, ParentS>? match<ParentP, ParentS, ParentD>(
+    AppRoute<ParentP, ParentS, ParentD> route,
+  ) => _scope.match(route);
 }
 
 /// An immutable navigation target.
 final class Destination {
   const Destination._({required this.route, required this.uri});
+
+  /// Creates a destination for a custom or generated route reference.
+  factory Destination.forRoute({required AnyAppRoute route, required Uri uri}) {
+    if (!uri.hasAbsolutePath) {
+      throw ArgumentError.value(
+        uri,
+        'uri',
+        'Destination path must be absolute.',
+      );
+    }
+    return Destination._(route: route, uri: uri);
+  }
 
   /// The target route.
   final AnyAppRoute route;
@@ -82,17 +144,111 @@ abstract class AnyAppRoute {
   DecodedSearch<Object?> decodeQuery(Map<String, List<String>> values);
 
   /// Runs this route's loader through an erased route-tree boundary.
-  FutureOr<Object?> loadObject(Object? params, Object? search, Uri location);
+  FutureOr<Object?> loadObject(
+    Object? params,
+    Object? search,
+    Uri location,
+    RouteLoadScope scope,
+  );
+
+  /// Encodes this route's local path through an erased generated boundary.
+  List<String> encodePath(Object? params);
+
+  /// Encodes this route's local search state.
+  Map<String, List<String>> encodeQuery(Object? search);
+}
+
+/// A route whose local params and search types are known at compile time.
+abstract class TypedAppRoute<P, S, D> implements AnyAppRoute {}
+
+abstract interface class _ErasedRouteRef {
+  AnyAppRoute get erasedRoute;
+  List<String> buildPath();
+  Map<String, List<String>> buildQuery();
+}
+
+/// One strongly typed, locally bound route reference.
+final class RouteRef<P, S, D> implements _ErasedRouteRef {
+  const RouteRef._({required this.route, required this.params, this.search});
+
+  /// The referenced route.
+  final TypedAppRoute<P, S, D> route;
+
+  /// Path parameters owned by this route.
+  final P params;
+
+  /// Search state owned by this route, or its canonical defaults when absent.
+  final S? search;
+
+  @override
+  AnyAppRoute get erasedRoute => route;
+
+  @override
+  List<String> buildPath() => route.encodePath(params);
+
+  @override
+  Map<String, List<String>> buildQuery() => route.encodeQuery(search);
+
+  /// Appends [child] to this manual or generated route branch.
+  RouteRefPath then<ChildP, ChildS, ChildD>(
+    RouteRef<ChildP, ChildS, ChildD> child,
+  ) => RouteRefPath._(<_ErasedRouteRef>[this, child]);
+
+  /// Builds a destination containing only this route reference.
+  Destination get destination =>
+      RouteRefPath._(<_ErasedRouteRef>[this]).destination;
+}
+
+/// An ordered branch of strongly typed route references.
+final class RouteRefPath {
+  RouteRefPath._(List<_ErasedRouteRef> refs)
+    : _refs = List<_ErasedRouteRef>.unmodifiable(refs);
+
+  final List<_ErasedRouteRef> _refs;
+
+  /// Appends [child] to this branch.
+  RouteRefPath then<P, S, D>(RouteRef<P, S, D> child) =>
+      RouteRefPath._(<_ErasedRouteRef>[..._refs, child]);
+
+  /// Encodes this complete branch into one canonical destination.
+  Destination get destination {
+    final segments = <String>[];
+    final query = <String, List<String>>{};
+    for (final ref in _refs) {
+      segments.addAll(ref.buildPath());
+      for (final entry in ref.buildQuery().entries) {
+        if (query.containsKey(entry.key)) {
+          throw StateError(
+            'Search parameter "${entry.key}" is encoded by more than one '
+            'route reference.',
+          );
+        }
+        query[entry.key] = entry.value;
+      }
+    }
+    final target = _refs.last.erasedRoute;
+    if (!target.terminal) {
+      throw StateError('A destination must end at a terminal route.');
+    }
+    return Destination._(
+      route: target,
+      uri: segments.isEmpty
+          ? Uri(path: '/', queryParameters: query.isEmpty ? null : query)
+          : Uri(
+              pathSegments: <String>['', ...segments],
+              queryParameters: query.isEmpty ? null : query,
+            ),
+    );
+  }
 }
 
 /// A typed route definition shared by manual and file routing.
-final class AppRoute<P, S, D> implements AnyAppRoute {
+final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
   /// Creates a route definition.
   factory AppRoute({
     String? path,
     PathParams<P>? params,
     SearchParams<S>? search,
-    RouteData<D>? data,
     RouteLoader<P, S, D>? load,
     bool terminal = true,
     Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
@@ -100,7 +256,6 @@ final class AppRoute<P, S, D> implements AnyAppRoute {
     path: path,
     params: params,
     search: search,
-    data: data,
     load: load,
     terminal: terminal,
     children: children,
@@ -111,7 +266,6 @@ final class AppRoute<P, S, D> implements AnyAppRoute {
     required this.path,
     required this.params,
     required this.search,
-    required this.data,
     required this.load,
     required this.terminal,
     required Iterable<AnyAppRoute> children,
@@ -127,9 +281,6 @@ final class AppRoute<P, S, D> implements AnyAppRoute {
 
   /// The typed search contract, when the route owns query state.
   final SearchParams<S>? search;
-
-  /// The data contract for a loader supplied by another fragment.
-  final RouteData<D>? data;
 
   /// The route loader, when it runs in the current application.
   final RouteLoader<P, S, D>? load;
@@ -159,12 +310,28 @@ final class AppRoute<P, S, D> implements AnyAppRoute {
         path: path,
         params: params,
         search: search,
-        data: data,
         load: load,
         terminal: terminal,
         children: children,
         identity: identity,
       );
+
+  /// Binds a file-system path and generated codecs to this definition.
+  AppRoute<P, S, D> compiled({
+    required String path,
+    PathParams<P>? params,
+    SearchParams<S>? search,
+    required bool terminal,
+    Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
+  }) => AppRoute<P, S, D>._(
+    path: path,
+    params: params ?? this.params,
+    search: search ?? this.search,
+    load: load,
+    terminal: terminal,
+    children: children,
+    identity: identity,
+  );
 
   @override
   Object? decodePath(Map<String, List<String>> values) {
@@ -195,7 +362,12 @@ final class AppRoute<P, S, D> implements AnyAppRoute {
   }
 
   @override
-  FutureOr<Object?> loadObject(Object? params, Object? search, Uri location) {
+  FutureOr<Object?> loadObject(
+    Object? params,
+    Object? search,
+    Uri location,
+    RouteLoadScope scope,
+  ) {
     final loader = load;
     if (loader == null) return const NoData();
     return loader(
@@ -203,35 +375,48 @@ final class AppRoute<P, S, D> implements AnyAppRoute {
         params: params as P,
         search: search as S,
         location: location,
+        scope: scope,
       ),
     );
   }
 
-  Destination _buildDestination(P params, S? search) {
-    final pattern = compiledPattern;
-    final encodedPath =
-        this.params?.encode(params) ?? const <String, List<String>>{};
-    final pathSegments = pattern.build(encodedPath);
-    final encodedSearch = search == null
+  @override
+  List<String> encodePath(Object? params) {
+    final encoded = this.params == null
         ? const <String, List<String>>{}
-        : this.search?.encode(search) ?? const <String, List<String>>{};
-    final uri = Uri(
-      pathSegments: <String>['', ...pathSegments],
-      queryParameters: encodedSearch.isEmpty ? null : encodedSearch,
-    );
-    return Destination._(route: this, uri: uri);
+        : this.params!.encode(params as P);
+    return compiledPattern.build(encoded);
+  }
+
+  @override
+  Map<String, List<String>> encodeQuery(Object? search) {
+    if (search == null || this.search == null) {
+      return const <String, List<String>>{};
+    }
+    return this.search!.encode(search as S);
   }
 }
 
-/// Creates a destination for a route with path parameters.
-extension ParameterizedAppRouteDestination<P, S, D> on AppRoute<P, S, D> {
-  /// Builds a canonical destination.
+/// Binds params and search to a typed route.
+extension ParameterizedRouteReference<P, S, D> on TypedAppRoute<P, S, D> {
+  /// Creates a local route reference.
+  RouteRef<P, S, D> ref({required P params, S? search}) =>
+      RouteRef<P, S, D>._(route: this, params: params, search: search);
+
+  /// Builds a destination containing only this route.
   Destination to({required P params, S? search}) =>
-      _buildDestination(params, search);
+      ref(params: params, search: search).destination;
 }
 
-/// Creates a destination for a route without path parameters.
-extension StaticAppRouteDestination<S, D> on AppRoute<NoParams, S, D> {
-  /// Builds a canonical destination.
-  Destination to({S? search}) => _buildDestination(const NoParams(), search);
+/// Binds search to a typed route without path parameters.
+extension StaticRouteReference<S, D> on TypedAppRoute<NoParams, S, D> {
+  /// Creates a local route reference.
+  RouteRef<NoParams, S, D> ref({S? search}) => RouteRef<NoParams, S, D>._(
+    route: this,
+    params: const NoParams(),
+    search: search,
+  );
+
+  /// Builds a destination containing only this route.
+  Destination to({S? search}) => ref(search: search).destination;
 }
