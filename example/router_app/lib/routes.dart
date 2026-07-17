@@ -2,6 +2,8 @@
 // ignore_for_file: type=lint
 
 import 'package:odroe/router.dart';
+import 'package:odroe/start.dart';
+import 'models.dart' as _postsPostIdModelsType;
 import 'routes/page.dart' as _rootPage;
 import 'routes/shell.dart' as _rootShell;
 import 'routes/(account)/settings/page.dart' as _accountSettingsPage;
@@ -210,6 +212,31 @@ final class AppPostsRoutes {
 
 final class AppPostsPostIdRoutes {
   const AppPostsPostIdRoutes();
+
+  ServerFunctionRef<int, String> get readTitle =>
+      const ServerFunctionRef<int, String>(
+        id: "lib/routes/posts/[postId]/server.dart#readTitle",
+        method: StartMethod.get,
+      );
+
+  ServerStreamFunctionRef<NoServerInput, int> get watchViews =>
+      const ServerStreamFunctionRef<NoServerInput, int>(
+        id: "lib/routes/posts/[postId]/server.dart#watchViews",
+        method: StartMethod.post,
+      );
+
+  ServerFunctionRef<
+    _postsPostIdModelsType.PostId,
+    _postsPostIdModelsType.PostId
+  >
+  get normalizePost =>
+      const ServerFunctionRef<
+        _postsPostIdModelsType.PostId,
+        _postsPostIdModelsType.PostId
+      >(
+        id: "lib/routes/posts/[postId]/server.dart#normalizePost",
+        method: StartMethod.post,
+      );
 
   Destination to({
     required ({int postId}) params,

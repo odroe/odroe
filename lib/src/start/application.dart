@@ -240,7 +240,8 @@ final class StartApplication {
     final middleware = serverRoutes
         .expand((route) => route.serverMiddleware)
         .toList(growable: false);
-    final leaf = serverRoutes.isEmpty ? null : serverRoutes.last;
+    final matchedLeaf = matches.routes.last;
+    final leaf = matchedLeaf is AnyServerRoute ? matchedLeaf : null;
     final routeHandler = leaf?.handle(context.request.method, context, matches);
     if (routeHandler != null) {
       context.type = StartHandlerType.serverRoute;
@@ -335,7 +336,8 @@ final class StartHandoffRenderer {
     final payload = <String, Object?>{
       'version': 1,
       'location': context.matches.location.toString(),
-      'loads': context.loads.values
+      'loads': context.matches.routes
+          .map((route) => context.loads[route.identity]!)
           .map(
             (result) => result.data is NoData
                 ? null
@@ -439,11 +441,26 @@ final class StartHandoffRenderer {
           completeOne();
         },
         onError: (Object _, StackTrace _) {
+          final now = context.query.scheduler.now();
+          final state = <String, Object?>{
+            ...item.state,
+            'status': 'error',
+            'error': 'Query failed.',
+            'errorUpdatedAt': now.millisecondsSinceEpoch,
+            'errorUpdateCount': (item.state['errorUpdateCount']! as int) + 1,
+            'fetchFailureCount': (item.state['fetchFailureCount']! as int) + 1,
+          };
           controller.add(<String, Object?>{
             'version': 1,
             'type': 'queryError',
             'key': item.key.toJson(),
             'message': 'Query failed.',
+            'query': DehydratedQuery(
+              key: item.key,
+              state: state,
+              dehydratedAt: now,
+              meta: item.meta,
+            ).toJson(),
           });
           completeOne();
         },

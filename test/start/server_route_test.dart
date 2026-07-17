@@ -45,6 +45,31 @@ void main() {
     },
   );
 
+  test('an ancestor HTTP handler never intercepts a child URL', () async {
+    final child = AppRoute<NoParams, NoSearch, NoData>(path: 'child');
+    final parent =
+        AppRoute<NoParams, NoSearch, NoData>(path: '/api', terminal: false)
+            .server(
+              handlers: <StartMethod, ServerRouteHandler<NoParams, NoSearch>>{
+                StartMethod.get: (_) => StartResponse.text('parent'),
+              },
+            )
+            .withChildren(<AnyAppRoute>[child]);
+    final app = StartApplication(routes: <AnyAppRoute>[parent]);
+
+    final response = await app.handle(
+      StartRequest.bytes(
+        method: StartMethod.get,
+        uri: Uri.parse('http://localhost/api/child'),
+        headers: StartHeaders.single(<String, String>{
+          'accept': 'application/json',
+        }),
+      ),
+    );
+    final payload = jsonDecode(await response.readText()) as Map;
+    expect(payload['location'], '/api/child');
+  });
+
   test('app route loaders hand Query state to the default renderer', () async {
     var calls = 0;
     final data = QueryOptions<int>(
@@ -125,6 +150,45 @@ void main() {
     final update = Map<String, Object?>.from(jsonDecode(lines.current) as Map);
     handoff.apply(update);
     expect(clientQuery.getQueryData<int>(options.key), 7);
+    expect(await lines.moveNext(), isFalse);
+  });
+
+  test('a failed streamed Query leaves the client in error state', () async {
+    final pending = Completer<int>();
+    final options = QueryOptions<int>(
+      key: QueryKey('failed-deferred'),
+      query: (_) => pending.future,
+    );
+    final route = AppRoute<NoParams, NoSearch, NoData>(path: '/').server(
+      load: (context) {
+        unawaited(context.query.prefetchQuery(options));
+        return const NoData();
+      },
+    );
+    final app = StartApplication(routes: <AnyAppRoute>[route]);
+    final response = await app.handle(
+      StartRequest.bytes(
+        method: StartMethod.get,
+        uri: Uri.parse('http://localhost/'),
+        headers: StartHeaders.single(<String, String>{
+          'accept': 'application/json',
+        }),
+      ),
+    );
+    final lines = StreamIterator<String>(
+      response.body.transform(utf8.decoder).transform(const LineSplitter()),
+    );
+    final clientQuery = QueryClient();
+    final handoff = StartHandoffClient(query: clientQuery);
+    expect(await lines.moveNext(), isTrue);
+    handoff.apply(Map<String, Object?>.from(jsonDecode(lines.current) as Map));
+
+    pending.completeError(StateError('private failure'));
+    expect(await lines.moveNext(), isTrue);
+    handoff.apply(Map<String, Object?>.from(jsonDecode(lines.current) as Map));
+    final state = clientQuery.getQueryState<int>(options.key)!;
+    expect(state.status, QueryStatus.error);
+    expect(state.error, 'Query failed.');
     expect(await lines.moveNext(), isFalse);
   });
 }

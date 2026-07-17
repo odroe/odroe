@@ -4,9 +4,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:odroe/router.dart';
 import 'package:odroe/router_compiler.dart';
+import 'package:odroe/start.dart';
 
 // ignore: avoid_relative_lib_imports
 import '../../example/router_app/lib/routes.dart' as fixture;
+// ignore: avoid_relative_lib_imports
+import '../../example/router_app/lib/routes.server.dart' as server_fixture;
+// ignore: avoid_relative_lib_imports
+import '../../example/router_app/lib/models.dart' as models;
+
+final class _PostIdAdapter implements StartSerializationAdapter<models.PostId> {
+  const _PostIdAdapter();
+
+  @override
+  String get tag => 'PostId';
+
+  @override
+  bool canEncode(Object value) => value is models.PostId;
+
+  @override
+  Object? encode(models.PostId value, StartSerializer serializer) =>
+      value.value;
+
+  @override
+  models.PostId decode(Object? value, StartSerializer serializer) =>
+      models.PostId(value! as int);
+}
 
 void main() {
   final project = Directory('example/router_app').absolute;
@@ -18,7 +41,15 @@ void main() {
     expect(output.diagnostics, isEmpty);
     expect(output.routeCount, 9);
     expect(output.source, compiler.outputFile.readAsStringSync());
-    expect(output.source, isNot(contains('server.dart')));
+    expect(output.serverSource, compiler.serverOutputFile.readAsStringSync());
+    expect(
+      output.source,
+      isNot(contains("import 'routes/posts/[postId]/server.dart'")),
+    );
+    expect(
+      output.serverSource,
+      contains("import 'routes/posts/[postId]/server.dart'"),
+    );
   });
 
   test('generated references preserve inherited params and typed search', () {
@@ -51,6 +82,36 @@ void main() {
   test('route groups organize references without changing the URL', () {
     expect(fixture.routes.account.settings.to().uri.toString(), '/settings');
     expect(fixture.routes.marketing.pricing.to().uri.toString(), '/pricing');
+  });
+
+  test('generated function refs bind the server-only manifest', () async {
+    final serializer = StartSerializer(
+      adapters: const <StartSerializationAdapter<dynamic>>[_PostIdAdapter()],
+    );
+    final client = StartRpcClient(
+      baseUri: Uri.parse('http://localhost'),
+      transport: InMemoryStartTransport(
+        server_fixture.createStartApplication(serializer: serializer).handle,
+      ),
+      serializer: serializer,
+    );
+
+    expect(
+      await fixture.routes.posts.postId.readTitle.call(client, 7),
+      'Post 7',
+    );
+    final views = await fixture.routes.posts.postId.watchViews.call(
+      client,
+      const NoServerInput(),
+    );
+    expect(await views.toList(), <int>[1, 2, 3]);
+    expect(
+      await fixture.routes.posts.postId.normalizePost.call(
+        client,
+        const models.PostId(-9),
+      ),
+      const models.PostId(9),
+    );
   });
 
   testWidgets('shell.dart owns a real nested navigator', (tester) async {

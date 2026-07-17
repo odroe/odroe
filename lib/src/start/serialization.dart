@@ -18,6 +18,9 @@ final class StartSerializer {
          ...adapters,
        ] {
     for (final adapter in _adapters) {
+      if (adapter.tag == 'Map') {
+        throw ArgumentError('Serialization adapter tag "Map" is reserved.');
+      }
       if (_byTag.containsKey(adapter.tag)) {
         throw ArgumentError('Duplicate serialization adapter: ${adapter.tag}');
       }
@@ -36,15 +39,6 @@ final class StartSerializer {
       }
       return value;
     }
-    if (value is List) return value.map(encode).toList(growable: false);
-    if (value is Map) {
-      if (value.keys.any((key) => key is! String)) {
-        throw ArgumentError('Serialized maps require String keys.');
-      }
-      return value.map<String, Object?>(
-        (key, item) => MapEntry(key as String, encode(item)),
-      );
-    }
     for (final adapter in _adapters) {
       if (adapter.canEncode(value)) {
         return <String, Object?>{
@@ -52,6 +46,24 @@ final class StartSerializer {
           r'$value': encode(adapter.encode(value, this)),
         };
       }
+    }
+    if (value is List) return value.map(encode).toList(growable: false);
+    if (value is Map) {
+      if (value.keys.any((key) => key is! String)) {
+        throw ArgumentError('Serialized maps require String keys.');
+      }
+      final encoded = value.map<String, Object?>(
+        (key, item) => MapEntry(key as String, encode(item)),
+      );
+      if (encoded.containsKey(r'$type') && encoded.containsKey(r'$value')) {
+        return <String, Object?>{
+          r'$type': 'Map',
+          r'$value': encoded.entries
+              .map<Object?>((entry) => <Object?>[entry.key, entry.value])
+              .toList(growable: false),
+        };
+      }
+      return encoded;
     }
     throw ArgumentError.value(
       value,
@@ -66,6 +78,13 @@ final class StartSerializer {
       final typed = Map<String, Object?>.from(value);
       final tag = typed[r'$type'];
       if (tag is String && typed.containsKey(r'$value')) {
+        if (tag == 'Map') {
+          final entries = typed[r'$value']! as List;
+          return <String, Object?>{
+            for (final entry in entries.cast<List>())
+              entry[0]! as String: decode(entry[1]),
+          };
+        }
         final adapter = _byTag[tag];
         if (adapter == null) throw FormatException('Unknown type tag: $tag');
         return adapter.decode(decode(typed[r'$value']), this);

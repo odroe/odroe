@@ -20,6 +20,9 @@ final class StartHandoffClient {
       case 'query':
         _hydrateQuery(Map<String, Object?>.from(frame['query']! as Map));
       case 'queryError':
+        if (frame['query'] case final Map queryState) {
+          _hydrateQuery(Map<String, Object?>.from(queryState));
+        }
         return;
       default:
         if (frame.containsKey('query') && frame.containsKey('location')) {

@@ -42,6 +42,7 @@ final class FileRouteOutput {
   /// Creates compiler output.
   const FileRouteOutput({
     required this.source,
+    required this.serverSource,
     required this.diagnostics,
     required this.routeCount,
     this.changed = false,
@@ -49,6 +50,9 @@ final class FileRouteOutput {
 
   /// Generated Dart source.
   final String source;
+
+  /// Generated server-only route tree and function manifest.
+  final String serverSource;
 
   /// Diagnostics collected without throwing.
   final List<FileRouteDiagnostic> diagnostics;
@@ -84,11 +88,15 @@ final class FileRouteCompiler {
     required Directory projectRoot,
     String routesPath = 'lib/routes',
     String outputPath = 'lib/routes.dart',
+    String serverOutputPath = 'lib/routes.server.dart',
   }) : projectRoot = projectRoot.absolute,
        routesDirectory = Directory(
          p.join(projectRoot.absolute.path, routesPath),
        ),
-       outputFile = File(p.join(projectRoot.absolute.path, outputPath));
+       outputFile = File(p.join(projectRoot.absolute.path, outputPath)),
+       serverOutputFile = File(
+         p.join(projectRoot.absolute.path, serverOutputPath),
+       );
 
   /// Application package root.
   final Directory projectRoot;
@@ -98,6 +106,9 @@ final class FileRouteCompiler {
 
   /// Generated route-tree file.
   final File outputFile;
+
+  /// Generated server-only route tree and function manifest.
+  final File serverOutputFile;
 
   /// Compiles routes without changing the file system.
   FileRouteOutput compile() {
@@ -112,6 +123,7 @@ final class FileRouteCompiler {
       );
       return FileRouteOutput(
         source: '',
+        serverSource: '',
         diagnostics: List<FileRouteDiagnostic>.unmodifiable(diagnostics),
         routeCount: 0,
       );
@@ -128,11 +140,13 @@ final class FileRouteCompiler {
     _flatten(root, nodes);
     _validateGeneratedNames(nodes, diagnostics);
     var source = '';
+    var serverSource = '';
     if (!diagnostics.any(
       (diagnostic) => diagnostic.severity == FileRouteDiagnosticSeverity.error,
     )) {
       try {
         source = _generate(root, nodes);
+        serverSource = _generateServer(root, nodes);
       } on FormatterException catch (error) {
         _error(
           diagnostics,
@@ -143,6 +157,7 @@ final class FileRouteCompiler {
     }
     return FileRouteOutput(
       source: source,
+      serverSource: serverSource,
       diagnostics: List<FileRouteDiagnostic>.unmodifiable(diagnostics),
       routeCount: nodes.length,
     );
@@ -155,23 +170,35 @@ final class FileRouteCompiler {
       throw FileRouteCompilationException(output.diagnostics);
     }
     outputFile.parent.createSync(recursive: true);
-    if (outputFile.existsSync() &&
-        outputFile.readAsStringSync() == output.source) {
+    serverOutputFile.parent.createSync(recursive: true);
+    final clientChanged =
+        !outputFile.existsSync() ||
+        outputFile.readAsStringSync() != output.source;
+    final serverChanged =
+        !serverOutputFile.existsSync() ||
+        serverOutputFile.readAsStringSync() != output.serverSource;
+    if (!clientChanged && !serverChanged) {
       return output;
     }
-    final temporary = File('${outputFile.path}.tmp');
-    try {
-      temporary.writeAsStringSync(output.source);
-      temporary.renameSync(outputFile.path);
-    } finally {
-      if (temporary.existsSync()) temporary.deleteSync();
-    }
+    if (clientChanged) _writeAtomic(outputFile, output.source);
+    if (serverChanged) _writeAtomic(serverOutputFile, output.serverSource);
     return FileRouteOutput(
       source: output.source,
+      serverSource: output.serverSource,
       diagnostics: output.diagnostics,
       routeCount: output.routeCount,
       changed: true,
     );
+  }
+
+  void _writeAtomic(File target, String source) {
+    final temporary = File('${target.path}.tmp');
+    try {
+      temporary.writeAsStringSync(source);
+      temporary.renameSync(target.path);
+    } finally {
+      if (temporary.existsSync()) temporary.deleteSync();
+    }
   }
 
   _RouteNode _scan(
@@ -204,7 +231,7 @@ final class FileRouteCompiler {
       _requireRouteVariable(file, diagnostics);
     }
     if (node.serverFile case final file?) {
-      _requireRouteVariable(file, diagnostics);
+      _parseServerFile(node, file, diagnostics);
       if (node.routeFile == null) {
         _error(
           diagnostics,
@@ -439,6 +466,127 @@ final class FileRouteCompiler {
     }
   }
 
+  void _parseServerFile(
+    _RouteNode node,
+    File file,
+    List<FileRouteDiagnostic> diagnostics,
+  ) {
+    final result = parseString(
+      content: file.readAsStringSync(),
+      path: file.path,
+      throwIfDiagnostics: false,
+    );
+    for (final error in result.errors) {
+      _error(diagnostics, file.path, error.message);
+    }
+    if (result.errors.isNotEmpty) return;
+
+    for (final directive
+        in result.unit.directives.whereType<ImportDirective>()) {
+      final uri = directive.uri.stringValue;
+      if (uri == null) continue;
+      node.serverImports.add(
+        _ServerImport(uri: uri, prefix: directive.prefix?.name),
+      );
+    }
+
+    var exportsRoute = false;
+    for (final declaration
+        in result.unit.declarations.whereType<TopLevelVariableDeclaration>()) {
+      for (final variable in declaration.variables.variables) {
+        final name = variable.name.lexeme;
+        if (name == 'route') {
+          exportsRoute = true;
+          final initializer = variable.initializer;
+          final arguments = switch (initializer) {
+            InstanceCreationExpression() => initializer.argumentList,
+            MethodInvocation() => initializer.argumentList,
+            _ => null,
+          };
+          node.serverTerminal =
+              arguments?.arguments.whereType<NamedExpression>().any(
+                (argument) => argument.name.label.name == 'handlers',
+              ) ??
+              false;
+          continue;
+        }
+        final initializer = variable.initializer;
+        final (typeName, typeArguments, argumentList) = switch (initializer) {
+          InstanceCreationExpression() => (
+            initializer.constructorName.type.name.lexeme,
+            initializer.constructorName.type.typeArguments,
+            initializer.argumentList,
+          ),
+          MethodInvocation() => (
+            initializer.methodName.name,
+            initializer.typeArguments,
+            initializer.argumentList,
+          ),
+          _ => (null, null, null),
+        };
+        if (typeName != 'ServerFunction') continue;
+        final arguments = typeArguments?.arguments;
+        if (arguments == null || arguments.length != 2) {
+          _error(
+            diagnostics,
+            file.path,
+            'ServerFunction "$name" must declare input and output types.',
+          );
+          continue;
+        }
+        if (name.startsWith('_')) {
+          _error(
+            diagnostics,
+            file.path,
+            'ServerFunction "$name" must be public so generated code can bind it.',
+          );
+          continue;
+        }
+        final input = arguments[0].toSource();
+        final output = arguments[1];
+        final streamType =
+            output is NamedType &&
+                output.name.lexeme == 'Stream' &&
+                output.typeArguments?.arguments.length == 1
+            ? output.typeArguments!.arguments.single.toSource()
+            : null;
+        var method = 'StartMethod.post';
+        for (final argument
+            in argumentList!.arguments.whereType<NamedExpression>()) {
+          if (argument.name.label.name != 'method') continue;
+          final source = argument.expression.toSource();
+          if (!RegExp(
+            r'^(?:[A-Za-z_]\w*\.)?StartMethod\.[a-z]+$',
+          ).hasMatch(source)) {
+            _error(
+              diagnostics,
+              file.path,
+              'ServerFunction "$name" method must be a StartMethod value.',
+            );
+          } else {
+            method = 'StartMethod.${source.split('.').last}';
+          }
+        }
+        node.functions.add(
+          _ServerFunction(
+            name: name,
+            inputType: input,
+            outputType: output.toSource(),
+            streamType: streamType,
+            method: method,
+          ),
+        );
+      }
+    }
+    if (!exportsRoute) {
+      _error(
+        diagnostics,
+        file.path,
+        'File must export a top-level variable named route.',
+      );
+    }
+  }
+
   void _validateTree(
     _RouteNode node,
     List<FileRouteDiagnostic> diagnostics,
@@ -622,11 +770,21 @@ final class FileRouteCompiler {
   }
 
   String _generate(_RouteNode root, List<_RouteNode> nodes) {
+    final hasFunctions = nodes.any((node) => node.functions.isNotEmpty);
+    final clientImports = _clientFunctionImports(nodes);
     final buffer = StringBuffer()
       ..writeln('// Generated by Odroe. Do not edit.')
       ..writeln('// ignore_for_file: type=lint')
       ..writeln()
       ..writeln("import 'package:odroe/router.dart';");
+    if (hasFunctions) buffer.writeln("import 'package:odroe/start.dart';");
+    for (final entry in clientImports.imports) {
+      buffer.writeln(
+        entry.alias == null
+            ? "import '${entry.uri}';"
+            : "import '${entry.uri}' as ${entry.alias};",
+      );
+    }
     for (final node in nodes) {
       for (final entry in node.imports(outputFile.parent.path)) {
         buffer.writeln("import '${entry.uri}' as ${entry.alias};");
@@ -645,11 +803,104 @@ final class FileRouteCompiler {
       ..writeln('const routes = AppRoutes();')
       ..writeln();
     for (final node in nodes) {
-      _writeFacade(buffer, node);
+      _writeFacade(buffer, node, clientImports.prefixes);
     }
     return DartFormatter(
       languageVersion: DartFormatter.latestLanguageVersion,
     ).format(buffer.toString());
+  }
+
+  String _generateServer(_RouteNode root, List<_RouteNode> nodes) {
+    final buffer = StringBuffer()
+      ..writeln('// Generated by Odroe. Do not edit.')
+      ..writeln('// ignore_for_file: type=lint')
+      ..writeln()
+      ..writeln("import 'package:odroe/start.dart';");
+    for (final node in nodes) {
+      if (node.routeFile case final file?) {
+        buffer.writeln(
+          "import '${_importUri(file, serverOutputFile.parent.path)}' "
+          'as ${node.routeAlias};',
+        );
+      }
+      if (node.serverFile case final file?) {
+        buffer.writeln(
+          "import '${_importUri(file, serverOutputFile.parent.path)}' "
+          'as ${node.serverAlias};',
+        );
+      }
+    }
+    buffer.writeln();
+    for (final node in nodes.reversed) {
+      _writeCompiledServerRoute(buffer, node);
+    }
+    buffer
+      ..writeln(
+        'final List<AnyAppRoute> serverRouteTree = '
+        '<AnyAppRoute>[${root.serverVariable}];',
+      )
+      ..writeln()
+      ..writeln('final Map<String, AnyServerFunction> serverFunctions =')
+      ..writeln('    <String, AnyServerFunction>{');
+    for (final node in nodes) {
+      for (final function in node.functions) {
+        buffer.writeln(
+          '  ${jsonEncode(_functionId(node, function))}: '
+          '${node.serverAlias}.${function.name},',
+        );
+      }
+    }
+    buffer
+      ..writeln('};')
+      ..writeln()
+      ..writeln('StartApplication createStartApplication({')
+      ..writeln(
+        '  Iterable<StartMiddleware> middleware = const <StartMiddleware>[],',
+      )
+      ..writeln('  StartSerializer? serializer,')
+      ..writeln('  StartRenderer? renderer,')
+      ..writeln('  StartOptions options = const StartOptions(),')
+      ..writeln('}) => StartApplication(')
+      ..writeln('  routes: serverRouteTree,')
+      ..writeln('  functions: serverFunctions,')
+      ..writeln('  middleware: middleware,')
+      ..writeln('  serializer: serializer,')
+      ..writeln('  renderer: renderer,')
+      ..writeln('  options: options,')
+      ..writeln(');');
+    return DartFormatter(
+      languageVersion: DartFormatter.latestLanguageVersion,
+    ).format(buffer.toString());
+  }
+
+  void _writeCompiledServerRoute(StringBuffer buffer, _RouteNode node) {
+    final base = node.serverFile != null
+        ? '${node.serverAlias}.route'
+        : node.routeFile != null
+        ? '${node.routeAlias}.route'
+        : 'AppRoute<NoParams, NoSearch, NoData>()';
+    buffer
+      ..writeln('final ${node.serverVariable} = $base.compiled(')
+      ..writeln('  path: ${jsonEncode(node.path)},')
+      ..writeln('  terminal: ${node.pageFile != null || node.serverTerminal},');
+    final contract = node.contract;
+    if (contract?.paramsSchema ?? false) {
+      _writeParamsCodec(buffer, node, contract!.params!);
+    }
+    if (contract?.searchSchema ?? false) {
+      _writeSearchCodec(buffer, node, contract!.search!);
+    }
+    if (node.children.isNotEmpty) {
+      buffer
+        ..writeln('  children: <AnyAppRoute>[')
+        ..writeAll(
+          node.children.map((child) => '    ${child.serverVariable},\n'),
+        )
+        ..writeln('  ],');
+    }
+    buffer
+      ..writeln(');')
+      ..writeln();
   }
 
   void _writeCompiledRoute(StringBuffer buffer, _RouteNode node) {
@@ -734,7 +985,11 @@ final class FileRouteCompiler {
       ..writeln('  ),');
   }
 
-  void _writeFacade(StringBuffer buffer, _RouteNode node) {
+  void _writeFacade(
+    StringBuffer buffer,
+    _RouteNode node,
+    Map<String, String> typePrefixes,
+  ) {
     buffer
       ..writeln('final class ${node.className} {')
       ..writeln('  const ${node.className}();');
@@ -745,6 +1000,21 @@ final class FileRouteCompiler {
           '  final ${child.className} ${child.memberName} = '
           'const ${child.className}();',
         );
+    }
+    for (final function in node.functions) {
+      final input = _clientFunctionType(node, function.inputType, typePrefixes);
+      final output = function.streamType == null
+          ? _clientFunctionType(node, function.outputType, typePrefixes)
+          : _clientFunctionType(node, function.streamType!, typePrefixes);
+      final reference = function.streamType == null
+          ? 'ServerFunctionRef<$input, $output>'
+          : 'ServerStreamFunctionRef<$input, $output>';
+      buffer
+        ..writeln()
+        ..writeln('  $reference get ${function.name} => const $reference(')
+        ..writeln('    id: ${jsonEncode(_functionId(node, function))},')
+        ..writeln('    method: ${function.method},')
+        ..writeln('  );');
     }
     if (node.pageFile != null) {
       final params = node.allParams;
@@ -824,6 +1094,114 @@ final class FileRouteCompiler {
       return '$bare$suffix';
     }
     return '${field.owner!.routeAlias}.$bare$suffix';
+  }
+
+  _ClientFunctionImports _clientFunctionImports(List<_RouteNode> nodes) {
+    final imports = <_GeneratedImport>[];
+    final prefixes = <String, String>{};
+    final seen = <String>{};
+    var needsTypedData = false;
+    for (final node in nodes) {
+      for (final function in node.functions) {
+        final sources = <String>[
+          function.inputType,
+          function.outputType,
+          if (function.streamType != null) function.streamType!,
+        ];
+        needsTypedData |= sources.any(
+          (source) => RegExp(
+            r'\b(?:Uint8List|Int8List|Uint16List|Int16List|Uint32List|Int32List|Uint64List|Int64List|Float32List|Float64List|ByteData|ByteBuffer)\b',
+          ).hasMatch(source),
+        );
+        for (final entry in node.serverImports) {
+          final prefix = entry.prefix;
+          if (prefix == null ||
+              !sources.any((source) => source.contains('$prefix.'))) {
+            continue;
+          }
+          final key = '${node.key}:$prefix';
+          if (entry.uri == 'package:odroe/start.dart') {
+            prefixes[key] = '';
+            continue;
+          }
+          final serverFile = node.serverFile!;
+          final imported = _resolveImport(serverFile, entry.uri);
+          if (node.routeFile != null &&
+              imported != null &&
+              p.equals(imported, node.routeFile!.absolute.path)) {
+            prefixes[key] = node.routeAlias;
+            continue;
+          }
+          final alias =
+              '_${_lowerIdentifier(node.key)}${_upperIdentifier(prefix)}Type';
+          prefixes[key] = alias;
+          final uri = _forwardImportUri(serverFile, entry.uri, outputFile);
+          if (seen.add('$uri|$alias')) {
+            imports.add(_GeneratedImport(uri: uri, alias: alias));
+          }
+        }
+      }
+    }
+    if (needsTypedData && seen.add('dart:typed_data|')) {
+      imports.add(const _GeneratedImport(uri: 'dart:typed_data'));
+    }
+    return _ClientFunctionImports(imports: imports, prefixes: prefixes);
+  }
+
+  String _clientFunctionType(
+    _RouteNode node,
+    String source,
+    Map<String, String> prefixes,
+  ) {
+    var result = source;
+    for (final entry in node.serverImports) {
+      final prefix = entry.prefix;
+      if (prefix == null) continue;
+      final replacement = prefixes['${node.key}:$prefix'];
+      if (replacement == null) continue;
+      result = result.replaceAll(
+        '$prefix.',
+        replacement.isEmpty ? '' : '$replacement.',
+      );
+    }
+    return result;
+  }
+
+  String _functionId(_RouteNode node, _ServerFunction function) {
+    final path = _relative(node.serverFile!.path).split(p.separator).join('/');
+    return '$path#${function.name}';
+  }
+
+  String? _resolveImport(File from, String uri) {
+    final parsed = Uri.tryParse(uri);
+    if (parsed != null && parsed.hasScheme) return null;
+    return p.normalize(p.join(from.parent.path, uri));
+  }
+
+  String _forwardImportUri(File from, String uri, File target) {
+    final resolved = _resolveImport(from, uri);
+    if (resolved == null) return uri;
+    return p
+        .relative(resolved, from: target.parent.path)
+        .split(p.separator)
+        .join('/');
+  }
+
+  String _importUri(File file, String from) =>
+      p.relative(file.path, from: from).split(p.separator).join('/');
+
+  String _lowerIdentifier(String value) {
+    final clean = value.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    return clean.isEmpty
+        ? 'route'
+        : '${clean[0].toLowerCase()}${clean.substring(1)}';
+  }
+
+  String _upperIdentifier(String value) {
+    final clean = value.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    return clean.isEmpty
+        ? 'Import'
+        : '${clean[0].toUpperCase()}${clean.substring(1)}';
   }
 
   bool _schemaFieldsSupported(List<_RouteField> fields, {required bool path}) =>
@@ -955,6 +1333,9 @@ final class _RouteNode {
   final File? shellFile;
   final File? serverFile;
   final List<_RouteNode> children = <_RouteNode>[];
+  final List<_ServerFunction> functions = <_ServerFunction>[];
+  final List<_ServerImport> serverImports = <_ServerImport>[];
+  bool serverTerminal = false;
   _RouteContract? contract;
   _RouteNode? parent;
 
@@ -970,11 +1351,13 @@ final class _RouteNode {
       : segments.map(_identifierPart).map(_upperFirst).join();
 
   String get variable => '_route$key';
+  String get serverVariable => '_serverRoute$key';
   String get className => segments.isEmpty ? 'AppRoutes' : 'App${key}Routes';
   String get memberName => segments.isEmpty ? 'root' : _member(segments.last);
   String get routeAlias => '_${_lowerFirst(key)}Definition';
   String get pageAlias => '_${_lowerFirst(key)}Page';
   String get shellAlias => '_${_lowerFirst(key)}Shell';
+  String get serverAlias => '_${_lowerFirst(key)}Server';
 
   String get effectivePattern {
     final parts = lineage
@@ -1123,6 +1506,43 @@ final class _RouteNode {
 
   static String _lowerFirst(String value) =>
       value.isEmpty ? value : '${value[0].toLowerCase()}${value.substring(1)}';
+}
+
+final class _ServerFunction {
+  const _ServerFunction({
+    required this.name,
+    required this.inputType,
+    required this.outputType,
+    required this.streamType,
+    required this.method,
+  });
+
+  final String name;
+  final String inputType;
+  final String outputType;
+  final String? streamType;
+  final String method;
+}
+
+final class _ServerImport {
+  const _ServerImport({required this.uri, required this.prefix});
+
+  final String uri;
+  final String? prefix;
+}
+
+final class _ClientFunctionImports {
+  const _ClientFunctionImports({required this.imports, required this.prefixes});
+
+  final List<_GeneratedImport> imports;
+  final Map<String, String> prefixes;
+}
+
+final class _GeneratedImport {
+  const _GeneratedImport({required this.uri, this.alias});
+
+  final String uri;
+  final String? alias;
 }
 
 final class _RouteContract {

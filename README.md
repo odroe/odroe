@@ -9,7 +9,8 @@ Odroe 是面向 Flutter 应用的全栈元框架。应用最终构建 Android、
 - `package:odroe/router_compiler.dart`：`routes/` 文件路由编译器；
 - `package:odroe/query.dart`：Query core 与 Flutter bindings；
 - `package:odroe/query_core.dart`：平台中立的 server-state、mutation、hydration 与 persistence；
-- `package:odroe/start.dart`：服务端 route fragment 的边界；Start 的 HTTP/RPC runtime 后续实现。
+- `package:odroe/start.dart`：adapter-neutral Start runtime、Server Function/Route、middleware、serialization 与首屏 handoff；
+- `package:odroe/start_io.dart`：默认 Dart IO host adapter。
 
 ## 创建应用
 
@@ -36,17 +37,20 @@ lib/
             └── server.dart
 ```
 
-编译路由：
+生成 client 与 server 两个 route target：
 
 ```sh
-dart run odroe routes
+dart run odroe generate
 ```
 
-开发时持续编译：
+正常开发直接运行：
 
 ```sh
-dart run odroe routes --watch
+dart run odroe dev
+dart run odroe dev -- -d macos
 ```
+
+Flutter target 始终由用户或 Flutter CLI 选择；Odroe 不默认 Web。
 
 在应用入口使用生成的普通 route tree：
 
@@ -119,4 +123,4 @@ final destination = organization
     .destination;
 ```
 
-完整文件规范、params/search 规则、shell、loader 与导航 API 见 [Router 文档](doc/router.md)。Query 的请求去重、Flutter binding、mutation、infinite query 和 hydration 见 [Query 文档](doc/query.md)。可运行应用见 [`example/router_app`](example/router_app)。
+完整文件规范、params/search 规则、shell、loader 与导航 API 见 [Router 文档](doc/router.md)。Query 的请求去重、Flutter binding、mutation、infinite query 和 hydration 见 [Query 文档](doc/query.md)。Start 的 RPC、公开 HTTP route、middleware、serialization、streaming、handoff 与 CLI 见 [Start 文档](doc/start.md)。可运行全链路应用见 [`example/router_app`](example/router_app)。

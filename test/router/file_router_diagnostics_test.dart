@@ -34,4 +34,17 @@ void main() {
       contains('Terminal route pattern "/profile" conflicts'),
     );
   });
+
+  test('server functions require a generated-code-visible declaration', () {
+    final compiler = FileRouteCompiler(
+      projectRoot: Directory('test/fixtures/invalid_server_functions').absolute,
+    );
+    final output = compiler.compile();
+
+    expect(output.hasErrors, isTrue);
+    expect(
+      output.diagnostics.single.toString(),
+      contains('ServerFunction "_hidden" must be public'),
+    );
+  });
 }

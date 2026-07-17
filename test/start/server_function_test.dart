@@ -1,9 +1,22 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:odroe/start.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('serializer preserves typed bytes and protocol-shaped maps', () {
+    final serializer = StartSerializer();
+    final bytes = Uint8List.fromList(<int>[1, 2, 255]);
+    final reserved = <String, Object?>{
+      r'$type': 'user-value',
+      r'$value': <String, Object?>{'nested': true},
+    };
+
+    expect(serializer.decodeJson(serializer.encodeJson(bytes)), bytes);
+    expect(serializer.decodeJson(serializer.encodeJson(reserved)), reserved);
+  });
+
   test(
     'typed RPC executes middleware and server implementation in memory',
     () async {

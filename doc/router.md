@@ -112,7 +112,7 @@ final route = definition.route.server(
 );
 ```
 
-`server.dart` 不会进入客户端 `lib/routes.dart`。本阶段只冻结 `ServerRouteFragment` 的 loader/middleware attachment；Start 的请求、RPC、序列化和传输 API 不在 Router 中提前发明。
+`server.dart` 不会进入客户端 `lib/routes.dart`。编译器把它写入独立的 `lib/routes.server.dart`，并把其中的 Server Function 转成 client-safe typed ref。loader、middleware、公开 HTTP handler 和 RPC 都复用同一个 route identity；完整协议见 [Start 文档](start.md)。
 
 Loader 可以强类型读取 active ancestor 的 params/search，父子 loader 仍然并行：
 
@@ -197,11 +197,11 @@ SearchParams<Search>.codec(
 运行：
 
 ```sh
-dart run odroe routes
-dart run odroe routes --watch
+dart run odroe generate
+dart run odroe dev
 ```
 
-默认读取 `lib/routes/`，输出格式化后的 `lib/routes.dart`。也可设置 `--project`、`--routes`、`--output`。
+默认读取 `lib/routes/`，输出格式化后的 `lib/routes.dart` 和 `lib/routes.server.dart`。也可设置 `--project`、`--routes`、`--output`、`--server-output`。`routes` 子命令仍可用于只生成 Router，但正常应用开发使用 `generate/dev/build`。
 
 生成文件只包含：
 
