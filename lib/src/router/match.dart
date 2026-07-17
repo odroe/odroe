@@ -43,6 +43,7 @@ final class _ErasedMatch {
     required this.search,
     required this.searchKeys,
     required this.searchError,
+    required this.pathEnd,
   });
 
   final AnyAppRoute route;
@@ -50,6 +51,28 @@ final class _ErasedMatch {
   final Object? search;
   final Set<String> searchKeys;
   final Object? searchError;
+  final int pathEnd;
+}
+
+/// The result of running one route loader.
+final class RouteLoadResult {
+  /// Creates a successful loader result.
+  const RouteLoadResult.data(this.data) : error = null, stackTrace = null;
+
+  /// Creates a failed loader result.
+  const RouteLoadResult.error(this.error, this.stackTrace) : data = null;
+
+  /// Loader data, when loading succeeded.
+  final Object? data;
+
+  /// The loader error, when loading failed.
+  final Object? error;
+
+  /// The loader error stack trace.
+  final StackTrace? stackTrace;
+
+  /// Whether loading succeeded.
+  bool get hasData => error == null;
 }
 
 /// The ordered matches for one location.
@@ -64,6 +87,51 @@ final class RouteMatches {
   /// Matched route definitions from root to leaf.
   List<AnyAppRoute> get routes =>
       List<AnyAppRoute>.unmodifiable(_matches.map((match) => match.route));
+
+  /// The closest terminal ancestor location, if one exists.
+  Uri? get parentLocation {
+    for (var index = _matches.length - 2; index >= 0; index--) {
+      final match = _matches[index];
+      if (!match.route.terminal) continue;
+      return Uri(
+        pathSegments: <String>[
+          '',
+          ...location.pathSegments.take(match.pathEnd),
+        ],
+        queryParameters: location.queryParametersAll.isEmpty
+            ? null
+            : location.queryParametersAll,
+      );
+    }
+    return null;
+  }
+
+  /// Runs every matched route loader in parallel.
+  Future<Map<Object, RouteLoadResult>> loadAll() async {
+    final entries = await Future.wait(
+      _matches.map((match) async {
+        try {
+          final data = await match.route.loadObject(
+            match.params,
+            match.search,
+            location,
+          );
+          return MapEntry<Object, RouteLoadResult>(
+            match.route.identity,
+            RouteLoadResult.data(data),
+          );
+        } on Object catch (error, stackTrace) {
+          return MapEntry<Object, RouteLoadResult>(
+            match.route.identity,
+            RouteLoadResult.error(error, stackTrace),
+          );
+        }
+      }),
+    );
+    return Map<Object, RouteLoadResult>.unmodifiable(
+      Map<Object, RouteLoadResult>.fromEntries(entries),
+    );
+  }
 
   /// Returns the typed match belonging to [route].
   RouteMatch<P, S, D>? match<P, S, D>(AppRoute<P, S, D> route) {
@@ -149,6 +217,7 @@ final class RouteMatcher {
         search: search.value,
         searchKeys: search.keys,
         searchError: search.error,
+        pathEnd: patternMatch.nextIndex,
       );
 
       if (patternMatch.nextIndex == segments.length && route.terminal) {
@@ -181,9 +250,7 @@ final class RouteMatcher {
   static void _validate(List<AnyAppRoute> routes) {
     for (final route in routes) {
       final dynamicNames = route.compiledPattern.parameterNames;
-      if (dynamicNames.isNotEmpty &&
-          route is AppRoute<Object?, Object?, Object?> &&
-          route.params == null) {
+      if (dynamicNames.isNotEmpty && !route.hasPathCodec) {
         throw StateError(
           'Route "${route.path}" must declare PathParams for $dynamicNames.',
         );

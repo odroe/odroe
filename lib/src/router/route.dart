@@ -69,6 +69,9 @@ abstract class AnyAppRoute {
   /// Whether this route can be the final match for a location.
   bool get terminal;
 
+  /// Whether dynamic path values have a typed codec.
+  bool get hasPathCodec;
+
   /// The parsed path pattern.
   RoutePattern get compiledPattern;
 
@@ -133,6 +136,9 @@ final class AppRoute<P, S, D> implements AnyAppRoute {
 
   @override
   final bool terminal;
+
+  @override
+  bool get hasPathCodec => params != null;
 
   @override
   final List<AnyAppRoute> children;
