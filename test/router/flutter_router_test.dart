@@ -12,6 +12,33 @@ PathParams<_IdParams> get _idParams => PathParams<_IdParams>.codec(
 );
 
 void main() {
+  testWidgets('uses server loader data for the first Flutter route', (
+    tester,
+  ) async {
+    var loaderCalls = 0;
+    final route = AppRoute<NoParams, NoSearch, String>(
+      path: '/',
+      load: (_) {
+        loaderCalls++;
+        return 'client';
+      },
+    ).page(build: (context) => Text(context.data));
+    final router = OdroeRouter(
+      routes: <AnyAppRoute>[route],
+      initialState: RouterInitialState(
+        location: Uri.parse('/'),
+        loads: const <RouteLoadResult>[RouteLoadResult.data('server')],
+      ),
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    expect(find.text('server'), findsOneWidget);
+    expect(loaderCalls, 0);
+  });
+
   testWidgets('publishes loader completion on the same Navigator page', (
     tester,
   ) async {

@@ -2,6 +2,8 @@
 
 import '../query/client.dart';
 import '../query/hydration.dart';
+import '../router/codec.dart';
+import '../router/match.dart';
 import 'serialization.dart';
 
 /// Applies initial and streamed Start frames to one application QueryClient.
@@ -13,7 +15,7 @@ final class StartHandoffClient {
   final StartSerializer serializer;
 
   Uri? location;
-  List<Object?> loads = const <Object?>[];
+  List<RouteLoadResult> loads = const <RouteLoadResult>[];
 
   void apply(Map<String, Object?> frame) {
     switch (frame['type']) {
@@ -38,7 +40,7 @@ final class StartHandoffClient {
   void _applyInitial(Map<String, Object?> data) {
     location = Uri.parse(data['location']! as String);
     loads = (data['loads'] as List? ?? const <Object?>[])
-        .map(serializer.decode)
+        .map(_decodeLoad)
         .toList(growable: false);
     hydrate(
       query,
@@ -47,6 +49,18 @@ final class StartHandoffClient {
       ),
       deserializeData: serializer.decode,
     );
+  }
+
+  RouteLoadResult _decodeLoad(Object? value) {
+    if (value case final Map encoded) {
+      switch (encoded['type']) {
+        case 'noData':
+          return const RouteLoadResult.data(NoData());
+        case 'data':
+          return RouteLoadResult.data(serializer.decode(encoded['data']));
+      }
+    }
+    return RouteLoadResult.data(serializer.decode(value));
   }
 
   void _hydrateQuery(Map<String, Object?> queryState) {

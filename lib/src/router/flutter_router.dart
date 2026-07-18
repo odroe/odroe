@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,18 @@ import 'route.dart';
 typedef RouterErrorBuilder =
     Widget Function(BuildContext context, Object error, StackTrace stackTrace);
 
+/// Server-rendered loader data consumed by the first Flutter navigation.
+final class RouterInitialState {
+  /// Creates the initial route state produced by the Start server.
+  const RouterInitialState({required this.location, required this.loads});
+
+  /// The canonical location that produced [loads].
+  final Uri location;
+
+  /// Ordered loader results for the matched route branch.
+  final List<RouteLoadResult> loads;
+}
+
 /// Flutter's RouterConfig implementation backed by typed Odroe routes.
 final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
   /// Creates a router from manually assembled or generated routes.
@@ -24,6 +37,7 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
     WidgetBuilder? notFound,
     RouterErrorBuilder? error,
     QueryClient? query,
+    RouterInitialState? initialState,
   }) {
     late final Uri location;
     if (initialLocation case final initial?) {
@@ -35,6 +49,8 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
         );
       }
       location = initial;
+    } else if (initialState case final initial?) {
+      location = initial.location;
     } else {
       final platform = Uri.parse(
         ui.PlatformDispatcher.instance.defaultRouteName,
@@ -52,6 +68,7 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
       loading: loading,
       notFound: notFound,
       error: error,
+      initialState: initialState,
     );
     router = OdroeRouter._(
       provider: provider,
@@ -306,13 +323,15 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
     required WidgetBuilder? loading,
     required WidgetBuilder? notFound,
     required RouterErrorBuilder? error,
+    required RouterInitialState? initialState,
   }) : _matcher = matcher,
        _provider = provider,
        _router = router,
        _query = query,
        _loading = loading,
        _notFound = notFound,
-       _error = error;
+       _error = error,
+       _initialState = initialState;
 
   final RouteMatcher _matcher;
   final _OdroeRouteInformationProvider _provider;
@@ -321,6 +340,7 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
   final WidgetBuilder? _loading;
   final WidgetBuilder? _notFound;
   final RouterErrorBuilder? _error;
+  RouterInitialState? _initialState;
   final List<_NavigationRecord> _records = <_NavigationRecord>[];
   final Expando<_NavigationRecord> _pageOwners = Expando<_NavigationRecord>(
     'Odroe page owner',
@@ -356,6 +376,18 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
       snapshot = matches == null
           ? _NavigationSnapshot.notFound()
           : _NavigationSnapshot.matches(matches);
+      final initial = _initialState;
+      if (matches != null &&
+          initial != null &&
+          matches.location == initial.location &&
+          matches.routes.length == initial.loads.length) {
+        final results = HashMap<Object, RouteLoadResult>.identity();
+        for (var index = 0; index < matches.routes.length; index++) {
+          results[matches.routes[index].identity] = initial.loads[index];
+        }
+        snapshot.results = results;
+        _initialState = null;
+      }
       effectiveConfiguration = matches == null
           ? configuration
           : _RouteConfiguration(
@@ -377,7 +409,9 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
     notifyListeners();
 
     final matches = snapshot.matches;
-    if (matches != null) unawaited(_load(record, matches));
+    if (matches != null && snapshot.results == null) {
+      unawaited(_load(record, matches));
+    }
     return SynchronousFuture<void>(null);
   }
 

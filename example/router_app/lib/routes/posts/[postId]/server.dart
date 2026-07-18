@@ -14,6 +14,10 @@ final watchViews = ServerFunction<NoServerInput, Stream<int>>(
   handler: (_) => Stream<int>.fromIterable(const <int>[1, 2, 3]),
 );
 
+final doubleValues = ServerFunction<List<int>, List<int>>(
+  handler: (context) => context.data.map((value) => value * 2).toList(),
+);
+
 final normalizePost = ServerFunction<models.PostId, models.PostId>(
   handler: (context) => models.PostId(context.data.value.abs()),
 );

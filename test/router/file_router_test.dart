@@ -106,6 +106,13 @@ void main() {
     );
     expect(await views.toList(), <int>[1, 2, 3]);
     expect(
+      await fixture.routes.posts.postId.doubleValues.call(client, const <int>[
+        2,
+        4,
+      ]),
+      <int>[4, 8],
+    );
+    expect(
       await fixture.routes.posts.postId.normalizePost.call(
         client,
         const models.PostId(-9),

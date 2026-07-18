@@ -95,9 +95,30 @@ void main() {
         jsonDecode(await response.readText()) as Map<String, Object?>;
 
     expect(calls, 1);
-    expect(payload['loads'], <Object?>[1]);
+    expect(payload['loads'], <Object?>[
+      <String, Object?>{'type': 'data', 'data': 1},
+    ]);
     final query = payload['query']! as Map<String, Object?>;
     expect(query['queries'], isNotEmpty);
+  });
+
+  test('HTML handoff escapes script terminators case-insensitively', () async {
+    final route = AppRoute<NoParams, NoSearch, String>(
+      path: '/',
+    ).server(load: (_) => '</SCRIPT><p>unsafe</p>');
+    final app = StartApplication(routes: <AnyAppRoute>[route]);
+
+    final response = await app.handle(
+      StartRequest.bytes(
+        method: StartMethod.get,
+        uri: Uri.parse('http://localhost/'),
+        headers: StartHeaders.single(<String, String>{'accept': 'text/html'}),
+      ),
+    );
+    final html = await response.readText();
+
+    expect(html, isNot(contains('</SCRIPT>')));
+    expect(html, contains(r'<\/script>'));
   });
 
   test('pending Query state streams after the initial handoff', () async {

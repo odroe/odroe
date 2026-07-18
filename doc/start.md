@@ -37,6 +37,20 @@ dart run odroe build --server-only
 
 这些文件不使用 annotation、`part` 或 build_runner。`server.dart` 从不被 `routes.dart` import。
 
+Flutter 应用使用标准入口后，不需要手动组装 Router、Query 和 handoff：
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:odroe/odroe.dart';
+
+import 'routes.dart';
+
+void main() => runOdroeApp(
+  routes: routeTree,
+  builder: (app) => MaterialApp.router(routerConfig: app.router),
+);
+```
+
 ## `server.dart`
 
 每个 route 的 `server.dart` 复用同目录 `route.dart`，并导出最终 `route` fragment：
@@ -104,7 +118,7 @@ await for (final count in views) {
 
 ## Serialization
 
-默认 wire protocol 支持 JSON-like 值，以及 `DateTime`、`Duration`、`Uri`、`BigInt`、`Uint8List`。领域类型注册一个 tagged adapter：
+默认 wire protocol 支持 JSON-like 值、递归的 `List`/`Set`/`Iterable`/`Map<String, T>`，以及 `DateTime`、`Duration`、`Uri`、`BigInt`、`Uint8List`。文件路由编译器会为 generic collection 自动生成输入与输出 decoder，不要求用户写 cast。领域类型注册一个 tagged adapter：
 
 ```dart
 final serializer = StartSerializer(
@@ -119,7 +133,9 @@ final rpc = StartRpcClient(
 );
 ```
 
-自定义类型应位于 client/server 都可导入的共享文件，并在 `server.dart` 中使用带 prefix 的 import。编译器只把该共享类型 import 转发到 `routes.dart`，不会转发服务端实现。
+自定义类型应位于 client/server 都可导入的共享文件，并在 `server.dart` 中使用带 prefix 的 import。编译器只把 decoder 必需的共享类型 import 转发到生成文件，不会把服务端实现转发到客户端。
+
+Record、`Future`、嵌套 `Stream`、非 String key Map，以及没有内置 serializer 的 typed-data 类型会在生成阶段报出源文件诊断，而不是留到 RPC 运行时 cast 失败。手动组装 generic collection Server Function 时，可分别通过 `ServerFunction.decodeInput` 与 `ServerFunctionRef.decodeOutput` 提供 decoder。
 
 Server Function 的边界仍是不可信输入。Serializer 恢复类型表示，授权和领域校验必须在 function 或 middleware 内执行。
 
@@ -167,7 +183,9 @@ Server Function 默认经过 same-origin CSRF middleware。浏览器请求必须
 
 JSON 客户端在没有 pending Query 时收到普通 JSON；存在 pending Query 时收到 `application/x-ndjson`，首 frame 为 `initial`，后续为 `query` 或安全的 `queryError`。默认 HTML renderer 先发送可读取的 initial state，再追加 `<script type="application/json" data-odroe-frame>`，不会为了慢 Query 阻塞首字节。
 
-`StartHandoffClient.apply(frame)` 同时支持初始 payload 与流式 frame，并使用 Query hydration 的时间仲裁避免旧服务端状态覆盖更新后的客户端数据。
+`runOdroeApp` 在浏览器启动时读取并移除 initial state，把服务端 loader data 直接交给第一次 Flutter navigation，随后持续消费流式 frame。`StartHandoffClient.apply(frame)` 也可独立使用，并通过跨 server/client 时钟换算与更新时间仲裁，避免迟到的服务端错误或旧数据覆盖客户端新状态。
+
+这条链路当前是 HTML shell + 数据 handoff + Flutter 接管，不是 Flutter widget tree 的 HTML renderer。可见内容 SSR、面向 SEO/GEO 的 document 输出与 SSG 构建命令仍是后续独立能力；在它们落地前不应把当前 handoff 称为完整 SSR/SSG。
 
 ## 宿主与部署
 
@@ -177,6 +195,6 @@ JSON 客户端在没有 pending Query 时收到普通 JSON；存在 pending Quer
 StartRequest -> Future<StartResponse>
 ```
 
-`package:odroe/start_io.dart` 提供开箱即用的 Dart IO adapter。Relic、Cloudflare/Dart runtime、测试内存宿主或未来提取的基础设施只需转换 request/response，不应改变 Router、Query、RPC 或用户文件结构。
+`package:odroe/start_io.dart` 提供开箱即用的 Dart IO adapter。生成的 bootstrap 默认从 `build/web` 提供 Flutter Web 产物，也可用 `ODROE_WEB_ROOT` 改写目录；稳定文件使用 revalidation，只有带内容 hash 的文件使用 immutable cache。Relic、Cloudflare/Dart runtime、测试内存宿主或未来提取的基础设施只需转换 request/response，不应改变 Router、Query、RPC 或用户文件结构。
 
 默认生成的 `createStartApplication()` 可传入全局 middleware、serializer、renderer 和 options。需要自定义部署生命周期时，直接导入 `routes.server.dart` 并把 `app.handler` 交给自己的 adapter。

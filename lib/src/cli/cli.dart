@@ -114,6 +114,9 @@ Future<int> runOdroe(
   } on FileSystemException catch (error) {
     err.writeln(error.message);
     return 1;
+  } on ProcessException catch (error) {
+    err.writeln(error.message);
+    return error.errorCode == 0 ? 1 : error.errorCode;
   }
 }
 
@@ -230,10 +233,16 @@ Future<int> _dev(
   );
   Process? flutter;
   if (!serverOnly) {
-    flutter = await _start('flutter', <String>[
-      'run',
-      ...flutterArguments,
-    ], project: project);
+    try {
+      flutter = await _start('flutter', <String>[
+        'run',
+        ...flutterArguments,
+      ], project: project);
+    } on Object {
+      server.kill(ProcessSignal.sigterm);
+      await server.exitCode;
+      rethrow;
+    }
   }
 
   final done = Completer<int>();
@@ -251,42 +260,58 @@ Future<int> _dev(
   });
 
   Timer? debounce;
-  FileSystemEvent? pendingEvent;
-  final changes = project.libDirectory.watch(recursive: true).listen((event) {
-    if (!event.path.endsWith('.dart')) return;
-    if (p.equals(event.path, project.compiler.outputFile.path) ||
-        p.equals(event.path, project.compiler.serverOutputFile.path)) {
+  var serverRestartNeeded = false;
+  var restartQueued = false;
+  Future<void> restart() async {
+    if (stopping) return;
+    if (restarting) {
+      restartQueued = true;
       return;
     }
-    pendingEvent = event;
-    debounce?.cancel();
-    debounce = Timer(const Duration(milliseconds: 120), () async {
-      if (stopping || restarting) return;
-      restarting = true;
-      final generated = _generate(project, out, err);
-      final changed = pendingEvent;
-      final name = changed == null ? '' : p.basename(changed.path);
-      final flutterOnlyModification =
-          changed?.type == FileSystemEvent.modify &&
-          (name == 'page.dart' || name == 'shell.dart');
-      if (!generated || flutterOnlyModification) {
-        restarting = false;
-        return;
-      }
-      server.kill(ProcessSignal.sigterm);
-      await server.exitCode;
-      if (!stopping) {
+    restarting = true;
+    try {
+      do {
+        restartQueued = false;
+        final shouldRestartServer = serverRestartNeeded;
+        serverRestartNeeded = false;
+        final generated = _generate(project, out, err);
+        if (!generated || !shouldRestartServer) continue;
+
+        server.kill(ProcessSignal.sigterm);
+        await server.exitCode;
+        if (stopping) break;
         server = await _start(
           Platform.resolvedExecutable,
           <String>['run', project.bootstrap.path],
           project: project,
           environment: environment,
         );
-        restarting = false;
         observeServer(server);
-      } else {
-        restarting = false;
-      }
+      } while (restartQueued && !stopping);
+    } finally {
+      restarting = false;
+    }
+  }
+
+  final changes = project.libDirectory.watch(recursive: true).listen((event) {
+    if (!event.path.endsWith('.dart')) return;
+    if (p.equals(event.path, project.compiler.outputFile.path) ||
+        p.equals(event.path, project.compiler.serverOutputFile.path)) {
+      return;
+    }
+    final name = p.basename(event.path);
+    final flutterOnlyModification =
+        event.type == FileSystemEvent.modify &&
+        (name == 'page.dart' || name == 'shell.dart');
+    serverRestartNeeded |= !flutterOnlyModification;
+    debounce?.cancel();
+    debounce = Timer(const Duration(milliseconds: 120), () {
+      unawaited(
+        restart().catchError((Object error, StackTrace stackTrace) {
+          err.writeln(error);
+          if (!done.isCompleted) done.complete(1);
+        }),
+      );
     });
   });
 
@@ -338,32 +363,25 @@ Future<int> _build(
     );
     return 64;
   }
-  final processes = <Process>[];
-  if (!serverOnly) {
-    processes.add(
-      await _start('flutter', <String>[
-        'build',
-        ...flutterArguments,
-      ], project: project),
-    );
-  }
   if (buildServer) {
     final artifact = File(p.join(project.root.path, serverArtifact));
     artifact.parent.createSync(recursive: true);
-    processes.add(
-      await _start(Platform.resolvedExecutable, <String>[
-        'compile',
-        'exe',
-        project.bootstrap.path,
-        '-o',
-        artifact.path,
-      ], project: project),
-    );
+    final process = await _start(Platform.resolvedExecutable, <String>[
+      'compile',
+      'exe',
+      project.bootstrap.path,
+      '-o',
+      artifact.path,
+    ], project: project);
+    final code = await process.exitCode;
+    if (code != 0) return code;
   }
-  final codes = await Future.wait<int>(
-    processes.map((process) => process.exitCode),
-  );
-  return codes.fold<int>(0, (result, code) => result == 0 ? code : result);
+  if (serverOnly) return 0;
+  final flutter = await _start('flutter', <String>[
+    'build',
+    ...flutterArguments,
+  ], project: project);
+  return flutter.exitCode;
 }
 
 Future<Process> _start(
@@ -451,6 +469,9 @@ Future<void> main() async {
     createStartApplication().handler,
     address: host,
     port: port,
+    publicDirectory: Directory(
+      Platform.environment['ODROE_WEB_ROOT'] ?? 'build/web',
+    ),
   );
   stdout.writeln(
     'Odroe Start listening on http://\${server.address.host}:\${server.port}',

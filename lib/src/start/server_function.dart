@@ -29,12 +29,15 @@ final class ServerFunctionContext<I> {
 typedef ServerFunctionHandler<I, O> =
     FutureOr<O> Function(ServerFunctionContext<I> context);
 
+/// Restores a generic wire value whose Dart runtime type was erased by JSON.
+typedef StartValueDecoder<T> = T Function(Object? value);
+
 /// Erased server-function implementation stored by generated manifests.
 abstract interface class AnyServerFunction {
   String? get id;
   StartMethod get method;
   List<StartMiddleware> get middleware;
-  AnyServerFunction bind(String id);
+  AnyServerFunction bind(String id, {StartValueDecoder<Object?>? decodeInput});
   FutureOr<Object?> executeObject(
     Object? data,
     StartRequestContext request,
@@ -46,6 +49,7 @@ abstract interface class AnyServerFunction {
 final class ServerFunction<I, O> implements AnyServerFunction {
   ServerFunction({
     required this.handler,
+    this.decodeInput,
     this.method = StartMethod.post,
     Iterable<StartMiddleware> middleware = const <StartMiddleware>[],
   }) : middleware = List<StartMiddleware>.unmodifiable(middleware),
@@ -53,12 +57,16 @@ final class ServerFunction<I, O> implements AnyServerFunction {
 
   ServerFunction._({
     required this.handler,
+    required this.decodeInput,
     required this.method,
     required this.middleware,
     required this.id,
   });
 
   final ServerFunctionHandler<I, O> handler;
+
+  /// Optional decoder for generic collection input in manually assembled apps.
+  final StartValueDecoder<I>? decodeInput;
 
   @override
   final StartMethod method;
@@ -70,8 +78,14 @@ final class ServerFunction<I, O> implements AnyServerFunction {
   final String? id;
 
   @override
-  ServerFunction<I, O> bind(String id) => ServerFunction<I, O>._(
+  ServerFunction<I, O> bind(
+    String id, {
+    StartValueDecoder<Object?>? decodeInput,
+  }) => ServerFunction<I, O>._(
     handler: handler,
+    decodeInput: decodeInput == null
+        ? this.decodeInput
+        : (value) => decodeInput(value) as I,
     method: method,
     middleware: middleware,
     id: id,
@@ -85,7 +99,7 @@ final class ServerFunction<I, O> implements AnyServerFunction {
   ) {
     final input = I == NoServerInput && data == null
         ? const NoServerInput() as I
-        : data as I;
+        : decodeInput?.call(data) ?? data as I;
     return handler(
       ServerFunctionContext<I>(data: input, request: request, id: id),
     );
@@ -94,10 +108,15 @@ final class ServerFunction<I, O> implements AnyServerFunction {
 
 /// A generated, client-safe reference to one server function.
 final class ServerFunctionRef<I, O> {
-  const ServerFunctionRef({required this.id, this.method = StartMethod.post});
+  const ServerFunctionRef({
+    required this.id,
+    this.method = StartMethod.post,
+    this.decodeOutput,
+  });
 
   final String id;
   final StartMethod method;
+  final StartValueDecoder<O>? decodeOutput;
 
   Future<O> call(StartRpcClient client, I data) => client.call(this, data);
 }
@@ -107,10 +126,12 @@ final class ServerStreamFunctionRef<I, T> {
   const ServerStreamFunctionRef({
     required this.id,
     this.method = StartMethod.post,
+    this.decodeOutput,
   });
 
   final String id;
   final StartMethod method;
+  final StartValueDecoder<T>? decodeOutput;
 
   Future<Stream<T>> call(StartRpcClient client, I data) =>
       client.stream(this, data);
@@ -155,7 +176,11 @@ final class StartRpcClient {
       );
     }
     final frame = await _readFrame(response);
-    return _decodeFrame<O>(frame, response.status);
+    return _decodeFrame<O>(
+      frame,
+      response.status,
+      decode: function.decodeOutput,
+    );
   }
 
   Future<Stream<T>> stream<I, T>(
@@ -183,7 +208,8 @@ final class StartRpcClient {
               status: response.status,
             );
           }
-          return serializer.decode(frame['data']);
+          final value = serializer.decode(frame['data']);
+          return function.decodeOutput?.call(value) ?? value;
         })
         .cast<T>();
   }
@@ -222,10 +248,15 @@ final class StartRpcClient {
         : Map<String, Object?>.from(jsonDecode(text) as Map);
   }
 
-  O _decodeFrame<O>(Map<String, Object?> frame, int status) {
+  O _decodeFrame<O>(
+    Map<String, Object?> frame,
+    int status, {
+    StartValueDecoder<O>? decode,
+  }) {
     switch (frame['type']) {
       case 'data':
-        return serializer.decode(frame['data']) as O;
+        final value = serializer.decode(frame['data']);
+        return decode?.call(value) ?? value as O;
       case 'redirect':
         throw StartRedirect(
           Uri.parse(frame['location']! as String),

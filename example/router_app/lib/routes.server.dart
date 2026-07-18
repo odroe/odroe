@@ -116,12 +116,23 @@ final List<AnyAppRoute> serverRouteTree = <AnyAppRoute>[_serverRouteRoot];
 
 final Map<String, AnyServerFunction> serverFunctions =
     <String, AnyServerFunction>{
-      "lib/routes/posts/[postId]/server.dart#readTitle":
-          _postsPostIdServer.readTitle,
-      "lib/routes/posts/[postId]/server.dart#watchViews":
-          _postsPostIdServer.watchViews,
-      "lib/routes/posts/[postId]/server.dart#normalizePost":
-          _postsPostIdServer.normalizePost,
+      "lib/routes/posts/[postId]/server.dart#readTitle": _postsPostIdServer
+          .readTitle
+          .bind("lib/routes/posts/[postId]/server.dart#readTitle"),
+      "lib/routes/posts/[postId]/server.dart#watchViews": _postsPostIdServer
+          .watchViews
+          .bind("lib/routes/posts/[postId]/server.dart#watchViews"),
+      "lib/routes/posts/[postId]/server.dart#doubleValues": _postsPostIdServer
+          .doubleValues
+          .bind(
+            "lib/routes/posts/[postId]/server.dart#doubleValues",
+            decodeInput: (value) => (value as List)
+                .map((item) => item as int)
+                .toList(growable: false),
+          ),
+      "lib/routes/posts/[postId]/server.dart#normalizePost": _postsPostIdServer
+          .normalizePost
+          .bind("lib/routes/posts/[postId]/server.dart#normalizePost"),
     };
 
 StartApplication createStartApplication({

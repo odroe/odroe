@@ -43,8 +43,21 @@ void main() {
 
     expect(output.hasErrors, isTrue);
     expect(
-      output.diagnostics.single.toString(),
+      output.diagnostics.map((diagnostic) => diagnostic.toString()).join('\n'),
       contains('ServerFunction "_hidden" must be public'),
+    );
+  });
+
+  test('server functions reject wire types the serializer cannot restore', () {
+    final compiler = FileRouteCompiler(
+      projectRoot: Directory('test/fixtures/invalid_server_functions').absolute,
+    );
+    final output = compiler.compile();
+
+    expect(output.hasErrors, isTrue);
+    expect(
+      output.diagnostics.map((diagnostic) => diagnostic.toString()).join('\n'),
+      contains('({int value}) is not JSON serializable'),
     );
   });
 

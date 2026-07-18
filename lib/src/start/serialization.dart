@@ -50,6 +50,7 @@ final class StartSerializer {
       }
     }
     if (value is List) return value.map(encode).toList(growable: false);
+    if (value is Iterable) return value.map(encode).toList(growable: false);
     if (value is Map) {
       if (value.keys.any((key) => key is! String)) {
         throw ArgumentError('Serialized maps require String keys.');

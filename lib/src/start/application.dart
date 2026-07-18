@@ -348,11 +348,7 @@ final class StartHandoffRenderer {
       'location': context.matches.location.toString(),
       'loads': context.matches.routes
           .map((route) => context.loads[route.identity]!)
-          .map(
-            (result) => result.data is NoData
-                ? null
-                : context.serializer.encode(result.data),
-          )
+          .map((result) => _encodeLoad(result, context.serializer))
           .toList(growable: false),
       'query': context.dehydrated.toJson(),
     };
@@ -370,7 +366,7 @@ final class StartHandoffRenderer {
         body: _jsonHandoff(payload, pending),
       );
     }
-    final encoded = jsonEncode(payload).replaceAll('</script', r'<\/script');
+    final encoded = _escapeScript(jsonEncode(payload));
     return StartResponse(
       headers: StartHeaders.single(<String, String>{
         'content-type': 'text/html; charset=utf-8',
@@ -378,6 +374,16 @@ final class StartHandoffRenderer {
       body: _htmlHandoff(encoded, pending),
     );
   }
+
+  Map<String, Object?> _encodeLoad(
+    RouteLoadResult result,
+    StartSerializer serializer,
+  ) => result.data is NoData
+      ? const <String, Object?>{'type': 'noData'}
+      : <String, Object?>{
+          'type': 'data',
+          'data': serializer.encode(result.data),
+        };
 
   Stream<List<int>> _jsonHandoff(
     Map<String, Object?> initial,
@@ -403,7 +409,7 @@ final class StartHandoffRenderer {
       'async></script>',
     );
     await for (final frame in pending) {
-      final encoded = jsonEncode(frame).replaceAll('</script', r'<\/script');
+      final encoded = _escapeScript(jsonEncode(frame));
       yield utf8.encode(
         '<script type="application/json" data-odroe-frame>$encoded</script>',
       );
@@ -479,3 +485,8 @@ final class StartHandoffRenderer {
     return controller.stream;
   }
 }
+
+String _escapeScript(String value) => value.replaceAllMapped(
+  RegExp(r'</script', caseSensitive: false),
+  (_) => r'<\/script',
+);

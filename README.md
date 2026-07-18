@@ -4,12 +4,14 @@ Odroe 是面向 Flutter 应用的全栈元框架。应用最终构建 Android、
 
 仓库采用单一 `odroe` package，以产品能力划分入口：
 
+- `package:odroe/odroe.dart`：标准 Odroe Flutter App 入口，组合 Router、Query 与 Start handoff；
 - `package:odroe/router.dart`：可独立使用的强类型 Router；
 - `package:odroe/router_core.dart`：供共享 `route.dart` 与 Dart VM 使用的平台中立契约；
 - `package:odroe/router_compiler.dart`：`routes/` 文件路由编译器；
 - `package:odroe/query.dart`：Query core 与 Flutter bindings；
 - `package:odroe/query_core.dart`：平台中立的 server-state、mutation、hydration 与 persistence；
 - `package:odroe/start.dart`：adapter-neutral Start runtime、Server Function/Route、middleware、serialization 与首屏 handoff；
+- `package:odroe/start_flutter.dart`：Start 浏览器 handoff 与标准 Flutter bootstrap；
 - `package:odroe/start_io.dart`：默认 Dart IO host adapter。
 
 ## 创建应用
@@ -52,20 +54,23 @@ dart run odroe dev -- -d macos
 
 Flutter target 始终由用户或 Flutter CLI 选择；Odroe 不默认 Web。
 
-在应用入口使用生成的普通 route tree：
+标准 Odroe App 入口直接使用生成的 route tree。它会创建同一个 Router/Query runtime，并在 Web 上自动消费 Start 首屏 handoff：
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:odroe/router.dart';
+import 'package:odroe/odroe.dart';
 
 import 'routes.dart';
 
-final router = OdroeRouter(routes: routeTree);
-
-void main() => runApp(
-  MaterialApp.router(routerConfig: router),
+void main() => runOdroeApp(
+  routes: routeTree,
+  builder: (app) => MaterialApp.router(routerConfig: app.router),
 );
 ```
+
+只需要 Router 时仍可直接使用 `OdroeRouter`，不必采用 Start 或标准 bootstrap。
+
+当前 Start Web 链路提供服务端 HTML shell、首屏 loader/Query 状态、流式 Query frame、Flutter 静态资源与客户端接管；它还没有把 Flutter widget tree 渲染为可见 HTML，也尚未提供 SSG 命令，因此当前版本不能宣称完整 SSR/SSG。
 
 ## 路由文件
 

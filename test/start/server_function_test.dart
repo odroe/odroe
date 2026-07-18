@@ -52,6 +52,29 @@ void main() {
     },
   );
 
+  test('manual RPC decoders restore generic collection types', () async {
+    final app = StartApplication(
+      routes: <AnyAppRoute>[AppRoute<NoParams, NoSearch, NoData>(path: '/')],
+      functions: <String, AnyServerFunction>{
+        'double': ServerFunction<List<int>, List<int>>(
+          decodeInput: (value) => (value! as List).cast<int>(),
+          handler: (context) =>
+              context.data.map((value) => value * 2).toList(growable: false),
+        ),
+      },
+    );
+    final client = StartRpcClient(
+      baseUri: Uri.parse('http://localhost'),
+      transport: InMemoryStartTransport(app.handle),
+    );
+    final function = ServerFunctionRef<List<int>, List<int>>(
+      id: 'double',
+      decodeOutput: (value) => (value! as List).cast<int>(),
+    );
+
+    expect(await function.call(client, <int>[2, 4]), <int>[4, 8]);
+  });
+
   test(
     'RPC transports redirect, not-found, errors, and streams distinctly',
     () async {

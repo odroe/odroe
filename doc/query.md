@@ -163,6 +163,8 @@ final route = AppRoute<Params, Search, Post>(
 
 `OdroeRouter.query` 是 Flutter Router 使用的 client。Start 为每个 HTTP request 创建独立 client，执行 loaders 后 `dehydrate`，Flutter 通过同一格式 `hydrate`，不会泄漏其他请求的数据。
 
+Hydration 以 snapshot 的 `dehydratedAt` 计算状态年龄，而不是直接比较两台机器的墙上时钟；迟到的无数据错误也不会清掉客户端已有内容。这样首屏流式 Query 与用户随后触发的客户端刷新可以安全竞争。
+
 ## Persistence
 
 存储只需实现 `QueryPersister`：

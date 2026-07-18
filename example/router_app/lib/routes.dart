@@ -224,6 +224,14 @@ final class AppPostsPostIdRoutes {
         method: StartMethod.post,
       );
 
+  ServerFunctionRef<List<int>, List<int>> get doubleValues =>
+      ServerFunctionRef<List<int>, List<int>>(
+        id: "lib/routes/posts/[postId]/server.dart#doubleValues",
+        method: StartMethod.post,
+        decodeOutput: (value) =>
+            (value as List).map((item) => item as int).toList(growable: false),
+      );
+
   ServerFunctionRef<
     _postsPostIdModelsType.PostId,
     _postsPostIdModelsType.PostId
