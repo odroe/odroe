@@ -197,35 +197,56 @@ void hydrate(
 }) {
   for (final item in dehydrated.queries) {
     final serialized = item.state;
-    final updatedAt = serialized['dataUpdatedAt'] == null
+    final serverDataUpdatedAt = serialized['dataUpdatedAt'] == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(
             serialized['dataUpdatedAt']! as int,
           );
+    final serverErrorUpdatedAt = serialized['errorUpdatedAt'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(
+            serialized['errorUpdatedAt']! as int,
+          );
+    final now = client.scheduler.now();
+    final updatedAt = _translateServerTime(
+      serverDataUpdatedAt,
+      dehydratedAt: item.dehydratedAt,
+      now: now,
+    );
+    final errorUpdatedAt = _translateServerTime(
+      serverErrorUpdatedAt,
+      dehydratedAt: item.dehydratedAt,
+      now: now,
+    );
+    final hasData = serialized['hasData']! as bool;
     final existing = client.queryCache.getAny(item.key.canonical);
-    if (existing != null &&
-        existing.state.dataUpdatedAt != null &&
-        updatedAt != null &&
-        !updatedAt.isAfter(existing.state.dataUpdatedAt!)) {
-      continue;
+    if (existing != null) {
+      final current = existing.state;
+      if (current.hasData && !hasData) continue;
+      final currentDataUpdatedAt = current.dataUpdatedAt;
+      if (currentDataUpdatedAt != null &&
+          (updatedAt == null || !updatedAt.isAfter(currentDataUpdatedAt))) {
+        continue;
+      }
+      final currentErrorUpdatedAt = current.errorUpdatedAt;
+      if (!hasData &&
+          currentErrorUpdatedAt != null &&
+          (errorUpdatedAt == null ||
+              !errorUpdatedAt.isAfter(currentErrorUpdatedAt))) {
+        continue;
+      }
     }
     final status = QueryStatus.values.byName(serialized['status']! as String);
     final state = QueryState<dynamic>.pending().copyWith(
       status: status,
       fetchStatus: QueryFetchStatus.idle,
-      hasData: serialized['hasData']! as bool,
-      data: serialized['hasData']! as bool
-          ? deserializeData(serialized['data'])
-          : null,
+      hasData: hasData,
+      data: hasData ? deserializeData(serialized['data']) : null,
       dataUpdatedAt: updatedAt,
       error: serialized.containsKey('error')
           ? deserializeData(serialized['error'])
           : null,
-      errorUpdatedAt: serialized['errorUpdatedAt'] == null
-          ? null
-          : DateTime.fromMillisecondsSinceEpoch(
-              serialized['errorUpdatedAt']! as int,
-            ),
+      errorUpdatedAt: errorUpdatedAt,
       dataUpdateCount: serialized['dataUpdateCount']! as int,
       errorUpdateCount: serialized['errorUpdateCount']! as int,
       fetchFailureCount: serialized['fetchFailureCount']! as int,
@@ -273,6 +294,16 @@ void hydrate(
       ),
     );
   }
+}
+
+DateTime? _translateServerTime(
+  DateTime? value, {
+  required DateTime dehydratedAt,
+  required DateTime now,
+}) {
+  if (value == null) return null;
+  final age = dehydratedAt.difference(value);
+  return age.isNegative ? now : now.subtract(age);
 }
 
 Object? _identity(Object? value) => value;

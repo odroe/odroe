@@ -286,8 +286,19 @@ final class _MutationBuilderState<TData, TVariables, TOptimistic>
     _connect(widget.client ?? QueryClientProvider.of(context));
   }
 
-  void _connect(QueryClient client) {
-    if (identical(client, _client) && _observer != null) return;
+  @override
+  void didUpdateWidget(
+    MutationBuilder<TData, TVariables, TOptimistic> oldWidget,
+  ) {
+    super.didUpdateWidget(oldWidget);
+    _connect(
+      widget.client ?? QueryClientProvider.of(context),
+      force: !identical(oldWidget.options, widget.options),
+    );
+  }
+
+  void _connect(QueryClient client, {bool force = false}) {
+    if (!force && identical(client, _client) && _observer != null) return;
     _remove?.call();
     _observer?.dispose();
     _client = client;
@@ -351,8 +362,20 @@ final class _InfiniteQueryBuilderState<TPage, TPageParam>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final client = widget.client ?? QueryClientProvider.of(context);
-    if (identical(client, _client) && _observer != null) return;
+    _connect(widget.client ?? QueryClientProvider.of(context));
+  }
+
+  @override
+  void didUpdateWidget(InfiniteQueryBuilder<TPage, TPageParam> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _connect(
+      widget.client ?? QueryClientProvider.of(context),
+      force: !identical(oldWidget.options, widget.options),
+    );
+  }
+
+  void _connect(QueryClient client, {bool force = false}) {
+    if (!force && identical(client, _client) && _observer != null) return;
     _remove?.call();
     _observer?.dispose();
     _client = client;

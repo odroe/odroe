@@ -68,7 +68,7 @@ final class QueryPersistence {
   QueryDispose? _removeQueries;
   QueryDispose? _removeMutations;
   Timer? _writeTimer;
-  Future<void>? _saving;
+  Future<void> _saveTail = Future<void>.value();
   bool _disposed = false;
 
   Future<void> restoreAndListen() async {
@@ -109,26 +109,29 @@ final class QueryPersistence {
     if (_disposed) return;
     _writeTimer?.cancel();
     _writeTimer = client.scheduler.timer(writeDelay, () {
-      _saving = save();
+      unawaited(save().then<void>((_) {}, onError: (_) {}));
     });
   }
 
-  Future<void> save() async {
-    if (_disposed) return;
-    await persister.save(
-      PersistedQueryClient(
-        timestamp: client.scheduler.now(),
-        buster: buster,
-        state: dehydrate(client, serializeData: serializeData),
-      ),
+  Future<void> save() {
+    if (_disposed) return Future<void>.value();
+    final snapshot = PersistedQueryClient(
+      timestamp: client.scheduler.now(),
+      buster: buster,
+      state: dehydrate(client, serializeData: serializeData),
     );
+    final previous = _saveTail.then<void>((_) {}, onError: (_) {});
+    final operation = previous.then<void>((_) async {
+      await persister.save(snapshot);
+    });
+    _saveTail = operation;
+    return operation;
   }
 
   Future<void> flush() async {
     _writeTimer?.cancel();
     _writeTimer = null;
     await save();
-    await _saving;
   }
 
   void dispose() {

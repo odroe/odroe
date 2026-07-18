@@ -358,70 +358,58 @@ final class Mutation<TData, TVariables, TOptimistic> {
           submittedAt: client.scheduler.now(),
         ),
       );
-      optimistic = await options.onMutate?.call(variables, context);
-      if (optimistic != state.optimistic) {
-        _setState(_copyState(optimistic: optimistic));
+      try {
+        optimistic = await options.onMutate?.call(variables, context);
+        if (optimistic != state.optimistic) {
+          _setState(_copyState(optimistic: optimistic));
+        }
+      } on Object catch (error, stackTrace) {
+        _setState(
+          _errorState(
+            variables: variables,
+            optimistic: optimistic,
+            error: error,
+            stackTrace: stackTrace,
+            failureCount: 1,
+          ),
+        );
+        Error.throwWithStackTrace(error, stackTrace);
       }
     }
 
     var failureCount = state.failureCount;
-    try {
-      while (true) {
-        if (!cache.canRun(this) ||
-            (options.networkMode == QueryNetworkMode.online &&
-                !client.onlineManager.isOnline)) {
-          _setState(_copyState(isPaused: true));
-          await cache.waitUntilRunnable(client, this);
-        }
-        if (state.isPaused) _setState(_copyState(isPaused: false));
-        try {
-          final data = await options.mutation(variables, context);
-          await cache.onSuccess?.call(
-            data,
-            variables,
-            optimistic,
-            this,
-            context,
-          );
-          await options.onSuccess?.call(data, variables, optimistic, context);
-          await options.onSettled?.call(
-            data,
-            null,
-            variables,
-            optimistic,
-            context,
-          );
+    while (true) {
+      if (!cache.canRun(this) ||
+          (options.networkMode == QueryNetworkMode.online &&
+              !client.onlineManager.isOnline)) {
+        _setState(_copyState(isPaused: true));
+        await cache.waitUntilRunnable(client, this);
+      }
+      if (state.isPaused) _setState(_copyState(isPaused: false));
+
+      late final TData data;
+      try {
+        data = await options.mutation(variables, context);
+      } on Object catch (error, stackTrace) {
+        failureCount++;
+        if (options.retry.shouldRetry(failureCount, error)) {
           _setState(
-            MutationState<TData, TVariables, TOptimistic>(
-              status: MutationStatus.success,
-              data: data,
-              error: null,
-              errorStackTrace: null,
-              failureCount: 0,
-              failureReason: null,
-              isPaused: false,
-              variables: variables,
-              optimistic: optimistic,
-              submittedAt: state.submittedAt,
-            ),
+            _copyState(failureCount: failureCount, failureReason: error),
           );
-          return data;
-        } on Object catch (error, stackTrace) {
-          failureCount++;
-          if (options.retry.shouldRetry(failureCount, error)) {
-            _setState(
-              _copyState(failureCount: failureCount, failureReason: error),
-            );
-            await Future<void>.delayed(
-              options.retryDelay(failureCount - 1, error),
-            );
-            if (options.networkMode != QueryNetworkMode.always &&
-                !client.onlineManager.isOnline) {
-              _setState(_copyState(isPaused: true));
-              await cache.waitUntilRunnable(client, this);
-            }
-            continue;
+          await Future<void>.delayed(
+            options.retryDelay(failureCount - 1, error),
+          );
+          if (options.networkMode != QueryNetworkMode.always &&
+              !client.onlineManager.isOnline) {
+            _setState(_copyState(isPaused: true));
+            await cache.waitUntilRunnable(client, this);
           }
+          continue;
+        }
+
+        Object? callbackError;
+        StackTrace? callbackStackTrace;
+        try {
           await cache.onError?.call(
             error,
             stackTrace,
@@ -444,27 +432,84 @@ final class Mutation<TData, TVariables, TOptimistic> {
             optimistic,
             context,
           );
-          _setState(
-            MutationState<TData, TVariables, TOptimistic>(
-              status: MutationStatus.error,
-              data: null,
-              error: error,
-              errorStackTrace: stackTrace,
-              failureCount: failureCount,
-              failureReason: error,
-              isPaused: false,
-              variables: variables,
-              optimistic: optimistic,
-              submittedAt: state.submittedAt,
-            ),
-          );
-          Error.throwWithStackTrace(error, stackTrace);
+        } on Object catch (failure, failureStackTrace) {
+          callbackError = failure;
+          callbackStackTrace = failureStackTrace;
         }
+        _setState(
+          _errorState(
+            variables: variables,
+            optimistic: optimistic,
+            error: error,
+            stackTrace: stackTrace,
+            failureCount: failureCount,
+          ),
+        );
+        if (callbackError != null) {
+          Error.throwWithStackTrace(callbackError, callbackStackTrace!);
+        }
+        Error.throwWithStackTrace(error, stackTrace);
       }
-    } finally {
-      cache.notify(MutationCacheEvent(MutationCacheEventType.updated, this));
+
+      try {
+        await cache.onSuccess?.call(data, variables, optimistic, this, context);
+        await options.onSuccess?.call(data, variables, optimistic, context);
+        await options.onSettled?.call(
+          data,
+          null,
+          variables,
+          optimistic,
+          context,
+        );
+      } on Object catch (error, stackTrace) {
+        _setState(
+          _errorState(
+            variables: variables,
+            optimistic: optimistic,
+            error: error,
+            stackTrace: stackTrace,
+            failureCount: 1,
+          ),
+        );
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+
+      _setState(
+        MutationState<TData, TVariables, TOptimistic>(
+          status: MutationStatus.success,
+          data: data,
+          error: null,
+          errorStackTrace: null,
+          failureCount: 0,
+          failureReason: null,
+          isPaused: false,
+          variables: variables,
+          optimistic: optimistic,
+          submittedAt: state.submittedAt,
+        ),
+      );
+      return data;
     }
   }
+
+  MutationState<TData, TVariables, TOptimistic> _errorState({
+    required TVariables variables,
+    required TOptimistic? optimistic,
+    required Object error,
+    required StackTrace stackTrace,
+    required int failureCount,
+  }) => MutationState<TData, TVariables, TOptimistic>(
+    status: MutationStatus.error,
+    data: null,
+    error: error,
+    errorStackTrace: stackTrace,
+    failureCount: failureCount,
+    failureReason: error,
+    isPaused: false,
+    variables: variables,
+    optimistic: optimistic,
+    submittedAt: state.submittedAt,
+  );
 
   MutationState<TData, TVariables, TOptimistic> _copyState({
     bool? isPaused,

@@ -69,6 +69,37 @@ void main() {
   });
 
   test(
+    'mutation callback failures leave terminal state and release scope',
+    () async {
+      final client = QueryClient();
+      final first = client.mutationCache.build(
+        client,
+        MutationOptions<int, int, void>(
+          scope: 'writes',
+          mutation: (value, _) => value,
+          onSuccess: (_, _, _, _) => throw StateError('callback failed'),
+        ),
+      );
+      var secondCalls = 0;
+      final second = client.mutationCache.build(
+        client,
+        MutationOptions<int, int, void>(
+          scope: 'writes',
+          mutation: (value, _) {
+            secondCalls++;
+            return value;
+          },
+        ),
+      );
+
+      await expectLater(first.execute(1), throwsStateError);
+      expect(first.state.status, MutationStatus.error);
+      expect(await second.execute(2), 2);
+      expect(secondCalls, 1);
+    },
+  );
+
+  test(
     'infinite query shares ordinary cache and refetches pages in order',
     () async {
       final client = QueryClient();

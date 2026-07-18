@@ -42,13 +42,16 @@ final class QueryResult<T> {
 
 /// Reactive lifecycle around one [Query] cache entry.
 final class QueryObserver<T> implements QueryObserverHandle {
-  QueryObserver(this.client, QueryOptions<T> options) : _options = options {
+  QueryObserver(this.client, QueryOptions<T> options)
+    : _options = options,
+      _resolved = client.resolve(options) {
     _query = client.query(options);
     _result = _createResult();
   }
 
   final QueryClient client;
   QueryOptions<T> _options;
+  ResolvedQueryOptions<T> _resolved;
   late Query<T> _query;
   late QueryResult<T> _result;
   final Set<void Function(QueryResult<T>)> _listeners =
@@ -61,7 +64,10 @@ final class QueryObserver<T> implements QueryObserverHandle {
   QueryResult<T> get current => _listeners.isEmpty ? _createResult() : _result;
 
   @override
-  bool get enabled => _query.options.enabled;
+  bool get enabled => _resolved.enabled;
+
+  @override
+  bool get isStatic => _resolved.freshness is QueryStaticData;
 
   QueryDispose subscribe(void Function(QueryResult<T> result) listener) {
     if (_disposed) throw StateError('QueryObserver is disposed.');
@@ -73,7 +79,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
       if (_shouldFetchOnMount()) {
         unawaited(
           _query
-              .fetch(cancelRefetch: false)
+              .fetch(options: _resolved, cancelRefetch: false)
               .then<void>((_) {}, onError: (_) {}),
         );
       }
@@ -92,6 +98,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
     if (_disposed) throw StateError('QueryObserver is disposed.');
     final oldQuery = _query;
     _options = value;
+    _resolved = client.resolve(value);
     _query = client.query(value);
     if (!identical(oldQuery, _query) && _listeners.isNotEmpty) {
       oldQuery.removeObserver(this);
@@ -101,14 +108,16 @@ final class QueryObserver<T> implements QueryObserverHandle {
     _updateTimers();
     if (_listeners.isNotEmpty && _shouldFetchOnMount()) {
       unawaited(
-        _query.fetch(cancelRefetch: false).then<void>((_) {}, onError: (_) {}),
+        _query
+            .fetch(options: _resolved, cancelRefetch: false)
+            .then<void>((_) {}, onError: (_) {}),
       );
     }
   }
 
   Future<QueryResult<T>> refetch({bool cancelRefetch = true}) async {
     try {
-      await _query.fetch(cancelRefetch: cancelRefetch);
+      await _query.fetch(options: _resolved, cancelRefetch: cancelRefetch);
     } on Object {
       // The returned result carries the error state.
     }
@@ -116,23 +125,32 @@ final class QueryObserver<T> implements QueryObserverHandle {
   }
 
   @override
-  bool shouldRefetchOnFocus() => _shouldRefetch(_query.options.refetchOnFocus);
+  bool shouldRefetchOnFocus() => _shouldRefetch(_resolved.refetchOnFocus);
 
   @override
   bool shouldRefetchOnReconnect() =>
-      _shouldRefetch(_query.options.refetchOnReconnect);
+      _shouldRefetch(_resolved.refetchOnReconnect);
+
+  @override
+  void fetchForSignal() {
+    unawaited(
+      _query
+          .fetch(options: _resolved, cancelRefetch: false)
+          .then<void>((_) {}, onError: (_) {}),
+    );
+  }
 
   bool _shouldFetchOnMount() {
     if (!enabled) return false;
     if (!_query.state.hasData) return true;
-    return _shouldRefetch(_query.options.refetchOnMount);
+    return _shouldRefetch(_resolved.refetchOnMount);
   }
 
   bool _shouldRefetch(QueryRefetchPolicy policy) {
-    if (!enabled || _query.isStatic) return false;
+    if (!enabled || _resolved.freshness is QueryStaticData) return false;
     return switch (policy) {
       QueryRefetchPolicy.never => false,
-      QueryRefetchPolicy.stale => _query.isStale(),
+      QueryRefetchPolicy.stale => _query.isStale(_resolved.freshness),
       QueryRefetchPolicy.always => true,
     };
   }
@@ -143,8 +161,10 @@ final class QueryObserver<T> implements QueryObserverHandle {
     _updateTimers();
   }
 
-  QueryResult<T> _createResult() =>
-      QueryResult<T>(state: _query.state, isStale: _query.isStale());
+  QueryResult<T> _createResult() => QueryResult<T>(
+    state: _query.state,
+    isStale: _query.isStale(_resolved.freshness),
+  );
 
   void _updateResult() {
     final next = _createResult();
@@ -162,8 +182,8 @@ final class QueryObserver<T> implements QueryObserverHandle {
     _refetchTimer = null;
     if (_listeners.isEmpty || client.options.environment.isServer) return;
 
-    final freshness = _query.options.freshness;
-    if (!_query.isStale() && freshness is QueryStaleAfter) {
+    final freshness = _resolved.freshness;
+    if (!_query.isStale(freshness) && freshness is QueryStaleAfter) {
       final updatedAt = _query.state.dataUpdatedAt!;
       final elapsed = client.scheduler.now().difference(updatedAt);
       final remaining =
@@ -171,7 +191,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
       _staleTimer = client.scheduler.timer(remaining, _updateResult);
     }
 
-    final interval = _query.options.refetchInterval;
+    final interval = _resolved.refetchInterval;
     if (enabled && interval != null && interval > Duration.zero) {
       _refetchTimer = client.scheduler.timer(interval, _poll);
     }
@@ -179,8 +199,10 @@ final class QueryObserver<T> implements QueryObserverHandle {
 
   void _poll() {
     if (_listeners.isEmpty || !enabled) return;
-    if (_query.options.refetchInBackground || client.focusManager.isFocused) {
-      unawaited(_query.fetch().then<void>((_) {}, onError: (_) {}));
+    if (_resolved.refetchInBackground || client.focusManager.isFocused) {
+      unawaited(
+        _query.fetch(options: _resolved).then<void>((_) {}, onError: (_) {}),
+      );
     }
     _updateTimers();
   }

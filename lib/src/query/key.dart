@@ -105,6 +105,7 @@ Object? structurallyShare(Object? previous, Object? next, [int depth = 0]) {
   if (identical(previous, next) || previous == next) return previous;
   if (depth > 500) return next;
   if (previous is List && next is List) {
+    final shared = List<dynamic>.of(next);
     var equal = previous.length == next.length;
     for (var index = 0; index < next.length; index++) {
       final value = structurallyShare(
@@ -112,23 +113,27 @@ Object? structurallyShare(Object? previous, Object? next, [int depth = 0]) {
         next[index],
         depth + 1,
       );
-      equal = equal && identical(value, previous[index]);
+      shared[index] = value;
+      equal =
+          equal && index < previous.length && identical(value, previous[index]);
     }
-    return equal ? previous : next;
+    return equal ? previous : shared;
   }
   if (previous is Map && next is Map) {
     if (previous.keys.any((key) => key is! String) ||
         next.keys.any((key) => key is! String)) {
       return next;
     }
+    final shared = <String, Object?>{};
     var equal = previous.length == next.length;
     for (final entry in next.entries) {
       final key = entry.key as String;
       final value = structurallyShare(previous[key], entry.value, depth + 1);
+      shared[key] = value;
       equal =
           equal && previous.containsKey(key) && identical(value, previous[key]);
     }
-    return equal ? previous : next;
+    return equal ? previous : shared;
   }
   return next;
 }

@@ -34,6 +34,50 @@ void main() {
   });
 
   group('QueryClient', () {
+    test('same-key observers keep their own fetch options', () async {
+      final focus = QueryFocusManager(focused: true);
+      final client = QueryClient(focusManager: focus)..mount();
+      addTearDown(client.unmount);
+      var neverCalls = 0;
+      var alwaysCalls = 0;
+      final never = client.observe(
+        QueryOptions<int>(
+          key: QueryKey('shared-observers'),
+          policy: const QueryPolicy(
+            freshness: QueryFreshness.never(),
+            refetchOnFocus: QueryRefetchPolicy.never,
+          ),
+          query: (_) => ++neverCalls,
+        ),
+      );
+      final always = client.observe(
+        QueryOptions<int>(
+          key: QueryKey('shared-observers'),
+          policy: const QueryPolicy(
+            freshness: QueryFreshness.never(),
+            refetchOnFocus: QueryRefetchPolicy.always,
+          ),
+          query: (_) => ++alwaysCalls,
+        ),
+      );
+      final removeNever = never.subscribe((_) {});
+      await Future<void>.delayed(Duration.zero);
+      final removeAlways = always.subscribe((_) {});
+      await Future<void>.delayed(Duration.zero);
+
+      focus
+        ..isFocused = false
+        ..isFocused = true;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(neverCalls, 1);
+      expect(alwaysCalls, 1);
+      removeNever();
+      removeAlways();
+      never.dispose();
+      always.dispose();
+    });
+
     test('deduplicates concurrent requests and respects freshness', () async {
       final gate = Completer<int>();
       var calls = 0;

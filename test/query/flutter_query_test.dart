@@ -72,4 +72,79 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     client.clear();
   });
+
+  testWidgets('MutationBuilder uses replacement options', (tester) async {
+    final client = QueryClient();
+    late Future<int> Function(int) mutate;
+
+    Widget app(MutationOptions<int, int, void> options) => QueryClientProvider(
+      client: client,
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: MutationBuilder<int, int, void>(
+          options: options,
+          builder: (context, state, run, reset) {
+            mutate = run;
+            return Text(state.status.name);
+          },
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      app(
+        MutationOptions<int, int, void>(
+          gcTime: Duration.zero,
+          mutation: (value, _) => value + 1,
+        ),
+      ),
+    );
+    expect(await mutate(1), 2);
+
+    await tester.pumpWidget(
+      app(
+        MutationOptions<int, int, void>(
+          gcTime: Duration.zero,
+          mutation: (value, _) => value + 10,
+        ),
+      ),
+    );
+    expect(await mutate(1), 11);
+  });
+
+  testWidgets('InfiniteQueryBuilder uses replacement options', (tester) async {
+    final client = QueryClient();
+
+    Widget app(InfiniteQueryOptions<int, int> options) => QueryClientProvider(
+      client: client,
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: InfiniteQueryBuilder<int, int>(
+          options: options,
+          builder: (context, result, next, previous) => Text(
+            result.query.hasData
+                ? '${result.query.requireData.pages.single}'
+                : 'loading',
+          ),
+        ),
+      ),
+    );
+
+    InfiniteQueryOptions<int, int> options(String key, int value) =>
+        InfiniteQueryOptions<int, int>(
+          key: QueryKey(key),
+          policy: const QueryPolicy(gcTime: Duration.zero),
+          initialPageParam: 0,
+          query: (_) => value,
+          getNextPageParam: (_, _, _, _) => null,
+        );
+
+    await tester.pumpWidget(app(options('first-infinite', 1)));
+    await tester.pump();
+    expect(find.text('1'), findsOneWidget);
+
+    await tester.pumpWidget(app(options('second-infinite', 2)));
+    await tester.pump();
+    expect(find.text('2'), findsOneWidget);
+  });
 }

@@ -12,8 +12,10 @@ import 'state.dart';
 /// Internal contract implemented by reactive query observers.
 abstract interface class QueryObserverHandle {
   bool get enabled;
+  bool get isStatic;
   bool shouldRefetchOnFocus();
   bool shouldRefetchOnReconnect();
+  void fetchForSignal();
   void onQueryUpdate();
 }
 
@@ -48,11 +50,13 @@ final class Query<T> {
   bool get isFetching => _inFlight != null;
   bool get isActive => _observers.any((observer) => observer.enabled);
   bool get isDisabled => _observers.isNotEmpty ? !isActive : !options.enabled;
-  bool get isStatic => options.freshness is QueryStaticData;
+  bool get isStatic => _observers.isEmpty
+      ? options.freshness is QueryStaticData
+      : _observers.every((observer) => observer.isStatic);
 
-  bool isStale([DateTime? now]) {
+  bool isStale([QueryFreshness? freshness, DateTime? now]) {
     if (!state.hasData || state.isInvalidated) return true;
-    return switch (options.freshness) {
+    return switch (freshness ?? options.freshness) {
       QueryStaticData() || QueryNeverStale() => false,
       QueryStaleAfter(:final duration) =>
         (now ?? client.scheduler.now()).difference(state.dataUpdatedAt!) >=
@@ -97,12 +101,25 @@ final class Query<T> {
     if (_observers.isEmpty && !isFetching) cache.remove(this);
   }
 
-  T setData(T value, {DateTime? updatedAt, bool manual = true}) {
-    final merged = options.merge != null
-        ? options.merge!(state.hasData ? state.data : null, value)
-        : options.structuralSharing
-        ? structurallyShare(state.hasData ? state.data : null, value) as T
-        : value;
+  T setData(
+    T value, {
+    DateTime? updatedAt,
+    bool manual = true,
+    ResolvedQueryOptions<T>? resolved,
+  }) {
+    final dataOptions = resolved ?? options;
+    final T merged;
+    if (dataOptions.merge case final merge?) {
+      merged = merge(state.hasData ? state.data : null, value);
+    } else if (dataOptions.structuralSharing) {
+      final shared = structurallyShare(
+        state.hasData ? state.data : null,
+        value,
+      );
+      merged = shared is T ? shared : value;
+    } else {
+      merged = value;
+    }
     _setState(
       state.copyWith(
         status: QueryStatus.success,
@@ -136,6 +153,7 @@ final class Query<T> {
   }
 
   Future<T> fetch({
+    ResolvedQueryOptions<T>? options,
     bool cancelRefetch = true,
     QueryFetchMeta? meta,
     Future<T>? initialFuture,
@@ -146,7 +164,8 @@ final class Query<T> {
       cancel(silent: true, revert: true);
     }
 
-    final query = options.query;
+    final fetchOptions = options ?? this.options;
+    final query = fetchOptions.query;
     if (query == null && initialFuture == null) {
       return Future<T>.error(
         StateError('No query function is registered for ${key.canonical}.'),
@@ -157,7 +176,7 @@ final class Query<T> {
     final previous = state;
     final cancellation = QueryCancellationController();
     _cancellation = cancellation;
-    final canStart = _canStart();
+    final canStart = _canStart(fetchOptions);
     _setState(
       state.copyWith(
         fetchStatus: canStart
@@ -176,6 +195,7 @@ final class Query<T> {
           fetchId: fetchId,
           previous: previous,
           cancellation: cancellation,
+          options: fetchOptions,
           meta: meta,
           initialFuture: initialFuture,
         ).whenComplete(() {
@@ -193,6 +213,7 @@ final class Query<T> {
     required int fetchId,
     required QueryState<T> previous,
     required QueryCancellationController cancellation,
+    required ResolvedQueryOptions<T> options,
     required QueryFetchMeta? meta,
     required Future<T>? initialFuture,
   }) async {
@@ -200,10 +221,10 @@ final class Query<T> {
     var firstAttempt = true;
     try {
       while (true) {
-        if (!_canStart() &&
+        if (!_canStart(options) &&
             !(firstAttempt &&
                 options.networkMode == QueryNetworkMode.offlineFirst)) {
-          await _waitForRuntime(cancellation, fetchId);
+          await _waitForRuntime(cancellation, fetchId, options);
         }
         if (fetchId == _fetchId &&
             state.fetchStatus != QueryFetchStatus.fetching) {
@@ -228,7 +249,9 @@ final class Query<T> {
             operation,
             cancellation.whenCancelled.then<T>((reason) => throw reason),
           ]);
-          if (fetchId == _fetchId) setData(result, manual: false);
+          if (fetchId == _fetchId) {
+            setData(result, manual: false, resolved: options);
+          }
           return result;
         } on QueryCancelledException {
           rethrow;
@@ -265,7 +288,9 @@ final class Query<T> {
             options.retryDelay(failureCount - 1, error),
             cancellation,
           );
-          if (!_canContinue()) await _waitForRuntime(cancellation, fetchId);
+          if (!_canContinue(options)) {
+            await _waitForRuntime(cancellation, fetchId, options);
+          }
         }
         firstAttempt = false;
       }
@@ -283,11 +308,11 @@ final class Query<T> {
     }
   }
 
-  bool _canStart() =>
+  bool _canStart(ResolvedQueryOptions<T> options) =>
       options.networkMode != QueryNetworkMode.online ||
       client.onlineManager.isOnline;
 
-  bool _canContinue() =>
+  bool _canContinue(ResolvedQueryOptions<T> options) =>
       client.focusManager.isFocused &&
       (options.networkMode == QueryNetworkMode.always ||
           client.onlineManager.isOnline);
@@ -315,14 +340,15 @@ final class Query<T> {
   Future<void> _waitForRuntime(
     QueryCancellationController cancellation,
     int fetchId,
+    ResolvedQueryOptions<T> options,
   ) async {
     if (fetchId == _fetchId && state.fetchStatus != QueryFetchStatus.paused) {
       _setState(state.copyWith(fetchStatus: QueryFetchStatus.paused));
     }
-    if (_canContinue()) return;
+    if (_canContinue(options)) return;
     final ready = Completer<void>();
     void check(_) {
-      if (_canContinue() && !ready.isCompleted) ready.complete();
+      if (_canContinue(options) && !ready.isCompleted) ready.complete();
     }
 
     final removeFocus = client.focusManager.subscribe(check);
@@ -353,7 +379,7 @@ final class Query<T> {
   void onFocus() {
     for (final observer in _observers) {
       if (observer.shouldRefetchOnFocus()) {
-        unawaited(fetch().then<void>((_) {}, onError: (_) {}));
+        observer.fetchForSignal();
         return;
       }
     }
@@ -362,7 +388,7 @@ final class Query<T> {
   void onReconnect() {
     for (final observer in _observers) {
       if (observer.shouldRefetchOnReconnect()) {
-        unawaited(fetch().then<void>((_) {}, onError: (_) {}));
+        observer.fetchForSignal();
         return;
       }
     }
