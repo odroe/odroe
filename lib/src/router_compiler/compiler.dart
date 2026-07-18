@@ -46,6 +46,8 @@ final class FileRouteOutput {
     required this.serverSource,
     required this.diagnostics,
     required this.routeCount,
+    required this.staticRoutes,
+    required this.hasFlutter,
     this.changed = false,
   });
 
@@ -60,6 +62,12 @@ final class FileRouteOutput {
 
   /// Number of route nodes in the generated tree.
   final int routeCount;
+
+  /// Static terminal locations that can be prerendered without input data.
+  final List<String> staticRoutes;
+
+  /// Whether the file-route tree contains any Flutter page or shell.
+  final bool hasFlutter;
 
   /// Whether [FileRouteCompiler.write] changed the output file.
   final bool changed;
@@ -127,6 +135,8 @@ final class FileRouteCompiler {
         serverSource: '',
         diagnostics: List<FileRouteDiagnostic>.unmodifiable(diagnostics),
         routeCount: 0,
+        staticRoutes: const <String>[],
+        hasFlutter: false,
       );
     }
 
@@ -161,6 +171,10 @@ final class FileRouteCompiler {
       serverSource: serverSource,
       diagnostics: List<FileRouteDiagnostic>.unmodifiable(diagnostics),
       routeCount: nodes.length,
+      staticRoutes: _staticRoutes(nodes),
+      hasFlutter: nodes.any(
+        (node) => node.pageFile != null || node.shellFile != null,
+      ),
     );
   }
 
@@ -188,6 +202,8 @@ final class FileRouteCompiler {
       serverSource: output.serverSource,
       diagnostics: output.diagnostics,
       routeCount: output.routeCount,
+      staticRoutes: output.staticRoutes,
+      hasFlutter: output.hasFlutter,
       changed: true,
     );
   }
@@ -397,6 +413,7 @@ final class FileRouteCompiler {
         : const <String>{};
     final declaresParams = argumentNames.contains('params');
     final declaresSearch = argumentNames.contains('search');
+    final declaresDocument = argumentNames.contains('document');
     if (declaresParams && params == null) {
       _error(
         diagnostics,
@@ -439,6 +456,7 @@ final class FileRouteCompiler {
       searchSchema: searchSchema,
       declaresParams: declaresParams,
       declaresSearch: declaresSearch,
+      declaresDocument: declaresDocument,
     );
   }
 
@@ -782,7 +800,7 @@ final class FileRouteCompiler {
         );
       }
 
-      if (node.pageFile == null) continue;
+      if (!node.isPageTerminal) continue;
       final pattern = node.effectivePattern;
       final samePattern = terminalPatterns[pattern];
       if (samePattern == null) {
@@ -930,13 +948,19 @@ final class FileRouteCompiler {
       )
       ..writeln('  StartSerializer? serializer,')
       ..writeln('  StartRenderer? renderer,')
+      ..writeln('  StartFailureRenderer? failureRenderer,')
       ..writeln('  StartOptions options = const StartOptions(),')
       ..writeln('}) => StartApplication(')
       ..writeln('  routes: serverRouteTree,')
       ..writeln('  functions: serverFunctions,')
       ..writeln('  middleware: middleware,')
       ..writeln('  serializer: serializer,')
-      ..writeln('  renderer: renderer,')
+      ..writeln(
+        nodes.any((node) => node.pageFile != null || node.shellFile != null)
+            ? "  renderer: renderer ?? const StartDocumentRenderer(flutterBootstrap: '/flutter_bootstrap.js', baseHref: '/').call,"
+            : '  renderer: renderer,',
+      )
+      ..writeln('  failureRenderer: failureRenderer,')
       ..writeln('  options: options,')
       ..writeln(');');
     return DartFormatter(
@@ -953,7 +977,8 @@ final class FileRouteCompiler {
     buffer
       ..writeln('final ${node.serverVariable} = $base.compiled(')
       ..writeln('  path: ${jsonEncode(node.path)},')
-      ..writeln('  terminal: ${node.pageFile != null || node.serverTerminal},');
+      ..writeln('  terminal: ${node.isPageTerminal || node.serverTerminal},')
+      ..writeln('  hasFlutterPage: ${node.pageFile != null},');
     final contract = node.contract;
     if (contract?.paramsSchema ?? false) {
       _writeParamsCodec(buffer, node, contract!.params!);
@@ -987,7 +1012,7 @@ final class FileRouteCompiler {
     buffer
       ..writeln('final ${node.variable} = $base.compiled(')
       ..writeln('  path: ${jsonEncode(node.path)},')
-      ..writeln('  terminal: ${node.pageFile != null},');
+      ..writeln('  terminal: ${node.isPageTerminal},');
     final contract = node.contract;
     if (contract?.paramsSchema ?? false) {
       _writeParamsCodec(buffer, node, contract!.params!);
@@ -1359,6 +1384,14 @@ final class FileRouteCompiler {
     }
   }
 
+  List<String> _staticRoutes(List<_RouteNode> nodes) =>
+      List<String>.unmodifiable(
+        nodes
+            .where((node) => node.isPageTerminal)
+            .map((node) => node.staticLocation)
+            .nonNulls,
+      );
+
   String _segmentPath(String name) {
     if (name.startsWith('(') && name.endsWith(')')) return '';
     return name;
@@ -1613,6 +1646,19 @@ final class _RouteNode {
       serverFile != null ||
       children.isNotEmpty;
 
+  bool get isPageTerminal =>
+      pageFile != null || (contract?.declaresDocument ?? false);
+
+  String? get staticLocation {
+    final parts = <String>[];
+    for (final node in lineage) {
+      final part = node.path;
+      if (part.startsWith('[')) return null;
+      if (part.isNotEmpty && part != '/') parts.add(part);
+    }
+    return parts.isEmpty ? '/' : '/${parts.join('/')}';
+  }
+
   String get key => segments.isEmpty
       ? 'Root'
       : segments.map(_identifierPart).map(_upperFirst).join();
@@ -1659,7 +1705,11 @@ final class _RouteNode {
       .toList(growable: false);
 
   Iterable<_Import> imports(String from) sync* {
-    if (routeFile case final file?) {
+    final needsDefinition =
+        pageFile == null && shellFile == null ||
+        contract?.params != null ||
+        contract?.search != null;
+    if (routeFile case final file? when needsDefinition) {
       yield _Import(_importUri(file, from), routeAlias);
     }
     if (pageFile case final file?) {
@@ -1861,6 +1911,7 @@ final class _RouteContract {
     required this.searchSchema,
     required this.declaresParams,
     required this.declaresSearch,
+    required this.declaresDocument,
   });
 
   final _RecordContract? params;
@@ -1869,6 +1920,7 @@ final class _RouteContract {
   final bool searchSchema;
   final bool declaresParams;
   final bool declaresSearch;
+  final bool declaresDocument;
 }
 
 final class _RecordContract {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import '../document/document.dart';
 import '../query/client.dart';
 import 'codec.dart';
 import 'pattern.dart';
@@ -194,6 +195,44 @@ final class RouteMatches {
       result[entry.key] = entry.value;
     }
     return UnmodifiableMapView<Object, RouteLoadResult>(result);
+  }
+
+  /// Builds semantic documents for the active branch in root-to-leaf order.
+  Future<List<RouteDocument>> buildDocuments(
+    Map<Object, RouteLoadResult> loads,
+  ) async {
+    final scope = RouteDocumentScope.from(
+      _matches.map((match) {
+        final load = loads[match.route.identity];
+        if (load == null || !load.hasData) {
+          throw StateError(
+            'Every matched route must have successful loader data before '
+            'building its document.',
+          );
+        }
+        return (
+          route: match.route,
+          params: match.params,
+          search: match.search,
+          data: load.data,
+        );
+      }),
+    );
+    final values = await Future.wait<RouteDocument?>(
+      _matches.where((match) => match.route.hasDocument).map((match) {
+        final load = loads[match.route.identity]!;
+        return Future<RouteDocument?>.sync(
+          () => match.route.buildDocumentObject(
+            match.params,
+            match.search,
+            load.data,
+            location,
+            scope,
+          ),
+        );
+      }),
+    );
+    return List<RouteDocument>.unmodifiable(values.nonNulls);
   }
 
   /// Returns the typed match belonging to [route].

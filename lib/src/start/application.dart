@@ -3,6 +3,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../document/document.dart';
+import '../document/node.dart';
+import '../document/renderer.dart';
 import '../query/client.dart';
 import '../query/hydration.dart';
 import '../query/managers.dart';
@@ -19,6 +22,8 @@ import 'server_route.dart';
 typedef StartHandler = Future<StartResponse> Function(StartRequest request);
 typedef StartRenderer =
     FutureOr<StartResponse> Function(StartRenderContext context);
+typedef StartFailureRenderer =
+    FutureOr<StartResponse> Function(StartFailureContext context);
 
 /// Input for HTML, JSON, or custom first-screen renderers.
 final class StartRenderContext {
@@ -37,6 +42,27 @@ final class StartRenderContext {
   final QueryClient query;
   final DehydratedState dehydrated;
   final StartSerializer serializer;
+}
+
+/// Input for a framework-level HTML failure document.
+final class StartFailureContext {
+  const StartFailureContext({
+    required this.request,
+    required this.status,
+    required this.title,
+    required this.message,
+    required this.error,
+    required this.stackTrace,
+    required this.exposeDetails,
+  });
+
+  final StartRequestContext request;
+  final int status;
+  final String title;
+  final String message;
+  final Object? error;
+  final StackTrace? stackTrace;
+  final bool exposeDetails;
 }
 
 /// Runtime options shared by generated and manually assembled Start apps.
@@ -63,6 +89,7 @@ final class StartApplication {
     Iterable<StartMiddleware> middleware = const <StartMiddleware>[],
     StartSerializer? serializer,
     StartRenderer? renderer,
+    StartFailureRenderer? failureRenderer,
     this.options = const StartOptions(),
   }) : routes = List<AnyAppRoute>.unmodifiable(routes),
        functions = Map<String, AnyServerFunction>.unmodifiable(
@@ -73,7 +100,9 @@ final class StartApplication {
        ),
        middleware = List<StartMiddleware>.unmodifiable(middleware),
        serializer = serializer ?? StartSerializer(),
-       renderer = renderer ?? const StartHandoffRenderer().call {
+       renderer = renderer ?? const StartDocumentRenderer().call,
+       failureRenderer =
+           failureRenderer ?? const StartFailureDocumentRenderer().call {
     _matcher = RouteMatcher(this.routes);
   }
 
@@ -82,6 +111,7 @@ final class StartApplication {
   final List<StartMiddleware> middleware;
   final StartSerializer serializer;
   final StartRenderer renderer;
+  final StartFailureRenderer failureRenderer;
   final StartOptions options;
   late final RouteMatcher _matcher;
 
@@ -134,32 +164,90 @@ final class StartApplication {
       );
     } on StartNotFound catch (notFound) {
       query.clear();
-      return StartResponse.json(<String, Object?>{
-        'type': 'notFound',
-        'message': notFound.message,
-      }, status: 404);
+      return _failure(
+        context,
+        status: 404,
+        title: 'Page not found',
+        message: notFound.message,
+        error: notFound,
+      );
     } on StartHttpException catch (error) {
       query.clear();
-      return StartResponse.json(
-        <String, Object?>{'type': 'error', 'message': error.message},
+      return _failure(
+        context,
         status: error.status,
+        title: 'Request failed',
+        message: error.message,
+        error: error,
         headers: error.headers,
       );
     } on StartPayloadTooLargeException catch (error) {
       query.clear();
-      return StartResponse.json(<String, Object?>{
-        'type': 'error',
-        'message': error.toString(),
-      }, status: 413);
+      return _failure(
+        context,
+        status: 413,
+        title: 'Payload too large',
+        message: error.toString(),
+        error: error,
+      );
     } on Object catch (error, stackTrace) {
       query.clear();
-      return StartResponse.json(<String, Object?>{
-        'type': 'error',
-        'message': options.exposeErrors ? '$error' : 'Internal server error.',
-        if (options.exposeErrors) 'stack': '$stackTrace',
-        'errorType': error.runtimeType.toString(),
-      }, status: 500);
+      return _failure(
+        context,
+        status: 500,
+        title: 'Internal server error',
+        message: options.exposeErrors ? '$error' : 'Internal server error.',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
+  }
+
+  Future<StartResponse> _failure(
+    StartRequestContext context, {
+    required int status,
+    required String title,
+    required String message,
+    Object? error,
+    StackTrace? stackTrace,
+    StartHeaders? headers,
+  }) async {
+    final accept =
+        context.request.headers.value('accept')?.toLowerCase() ?? '*/*';
+    final acceptsHtml =
+        context.type == StartHandlerType.router &&
+        (!accept.contains('application/json') || accept.contains('text/html'));
+    if (acceptsHtml) {
+      final response = await failureRenderer(
+        StartFailureContext(
+          request: context,
+          status: status,
+          title: title,
+          message: message,
+          error: error,
+          stackTrace: stackTrace,
+          exposeDetails: options.exposeErrors,
+        ),
+      );
+      return headers == null
+          ? response
+          : StartResponse(
+              status: response.status,
+              reason: response.reason,
+              headers: response.headers.copy()..addAll(headers),
+              body: response.body,
+            );
+    }
+    return StartResponse.json(
+      <String, Object?>{
+        'type': status == 404 ? 'notFound' : 'error',
+        'message': message,
+        if (options.exposeErrors && stackTrace != null) 'stack': '$stackTrace',
+        if (error != null) 'errorType': error.runtimeType.toString(),
+      },
+      status: status,
+      headers: headers,
+    );
   }
 
   String? _rpcId(String path) {
@@ -315,7 +403,11 @@ final class StartApplication {
   ) {
     if (request.method == StartMethod.head) {
       query.clear();
-      return response;
+      return StartResponse(
+        status: response.status,
+        reason: response.reason,
+        headers: response.headers,
+      );
     }
     Stream<List<int>> body() async* {
       try {
@@ -336,44 +428,67 @@ final class StartApplication {
   }
 }
 
-/// Default first-screen handoff for Flutter web and JSON clients.
-final class StartHandoffRenderer {
-  const StartHandoffRenderer({this.flutterBootstrap = '/flutter_bootstrap.js'});
+/// Default semantic HTML renderer and optional Flutter first-screen handoff.
+final class StartDocumentRenderer {
+  /// Creates the renderer. A null [flutterBootstrap] produces pure HTML.
+  const StartDocumentRenderer({this.flutterBootstrap, this.baseHref});
 
-  final String flutterBootstrap;
+  /// Flutter bootstrap asset included for hybrid document + Flutter apps.
+  final String? flutterBootstrap;
 
-  StartResponse call(StartRenderContext context) {
-    final payload = <String, Object?>{
-      'version': 1,
-      'location': context.matches.location.toString(),
-      'loads': context.matches.routes
-          .map((route) => context.loads[route.identity]!)
-          .map((result) => _encodeLoad(result, context.serializer))
-          .toList(growable: false),
-      'query': context.dehydrated.toJson(),
-    };
-    final accept = context.request.request.headers.value('accept') ?? '*/*';
-    final pending = _pendingFrames(context);
-    final hasPending = context.dehydrated.queries.any(
-      (query) => query.pending != null,
-    );
+  /// Base URL used by Flutter to resolve its generated assets.
+  final String? baseHref;
+
+  Future<StartResponse> call(StartRenderContext context) async {
+    final accept =
+        context.request.request.headers.value('accept')?.toLowerCase() ?? '*/*';
     if (accept.contains('application/json') && !accept.contains('text/html')) {
+      final payload = _payload(context);
+      final hasPending = context.dehydrated.queries.any(
+        (query) => query.pending != null,
+      );
       if (!hasPending) return StartResponse.json(payload);
       return StartResponse(
         headers: StartHeaders.single(<String, String>{
           'content-type': 'application/x-ndjson; charset=utf-8',
         }),
-        body: _jsonHandoff(payload, pending),
+        body: _jsonHandoff(payload, _pendingFrames(context)),
       );
     }
-    final encoded = _escapeScript(jsonEncode(payload));
+    final documents = await context.matches.buildDocuments(context.loads);
+    final document = resolveDocument(documents);
+    final bootstrap = context.matches.routes.last.hasFlutterPage
+        ? flutterBootstrap
+        : null;
+    if (bootstrap == null) {
+      return StartResponse.html(
+        '${renderDocumentStart(document)}</body></html>',
+      );
+    }
+    final encoded = _escapeScript(jsonEncode(_payload(context)));
     return StartResponse(
       headers: StartHeaders.single(<String, String>{
         'content-type': 'text/html; charset=utf-8',
       }),
-      body: _htmlHandoff(encoded, pending),
+      body: _htmlHandoff(
+        renderDocumentStart(document, baseHref: baseHref),
+        encoded,
+        bootstrap,
+        _pendingFrames(context),
+      ),
     );
   }
+
+  Map<String, Object?> _payload(StartRenderContext context) =>
+      <String, Object?>{
+        'version': 1,
+        'location': context.matches.location.toString(),
+        'loads': context.matches.routes
+            .map((route) => context.loads[route.identity]!)
+            .map((result) => _encodeLoad(result, context.serializer))
+            .toList(growable: false),
+        'query': context.dehydrated.toJson(),
+      };
 
   Map<String, Object?> _encodeLoad(
     RouteLoadResult result,
@@ -398,14 +513,14 @@ final class StartHandoffRenderer {
   }
 
   Stream<List<int>> _htmlHandoff(
+    String document,
     String initial,
+    String bootstrap,
     Stream<Map<String, Object?>> pending,
   ) async* {
     yield utf8.encode(
-      '<!doctype html><html><head><meta charset="utf-8">'
-      '<meta name="viewport" content="width=device-width,initial-scale=1">'
-      '</head><body><script id="__odroe_state__" type="application/json">'
-      '$initial</script><script src="${htmlEscape.convert(flutterBootstrap)}" '
+      '$document<script id="__odroe_state__" type="application/json">'
+      '$initial</script><script src="${htmlEscape.convert(bootstrap)}" '
       'async></script>',
     );
     await for (final frame in pending) {
@@ -483,6 +598,38 @@ final class StartHandoffRenderer {
       );
     }
     return controller.stream;
+  }
+}
+
+/// Default semantic 4xx/5xx HTML renderer.
+final class StartFailureDocumentRenderer {
+  const StartFailureDocumentRenderer();
+
+  StartResponse call(StartFailureContext context) {
+    final details = context.exposeDetails && context.stackTrace != null
+        ? '${context.error}\n${context.stackTrace}'
+        : null;
+    final document = resolveDocument(<RouteDocument>[
+      RouteDocument(
+        title: context.title,
+        meta: const <DocumentMeta>[
+          DocumentMeta.name('robots', 'noindex, nofollow'),
+        ],
+        body: HtmlElement(
+          'main',
+          children: <HtmlNode>[
+            HtmlElement('h1', children: <HtmlNode>[HtmlText(context.title)]),
+            HtmlElement('p', children: <HtmlNode>[HtmlText(context.message)]),
+            if (details != null)
+              HtmlElement('pre', children: <HtmlNode>[HtmlText(details)]),
+          ],
+        ),
+      ),
+    ]);
+    return StartResponse.html(
+      '${renderDocumentStart(document)}</body></html>',
+      status: context.status,
+    );
   }
 }
 

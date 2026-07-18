@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:odroe/router.dart';
 
 import '../routes.dart';
+import 'route.dart' as definition;
 
-final route = pageRoute(
+final route = definition.route.page(
   build: (context) => Center(
     child: FilledButton(
       onPressed: () => context.router.go(

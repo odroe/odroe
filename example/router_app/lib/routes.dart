@@ -7,6 +7,7 @@ import 'routes/page.dart' as _rootPage;
 import 'routes/shell.dart' as _rootShell;
 import 'routes/(account)/settings/page.dart' as _accountSettingsPage;
 import 'routes/(marketing)/pricing/page.dart' as _marketingPricingPage;
+import 'routes/about/route.dart' as _aboutDefinition;
 import 'routes/docs/[...slug]/route.dart' as _docsRestSlugDefinition;
 import 'routes/docs/[...slug]/page.dart' as _docsRestSlugPage;
 import 'routes/posts/route.dart' as _postsDefinition;
@@ -90,6 +91,11 @@ final _routeDocs = AppRoute<NoParams, NoSearch, NoData>().compiled(
   children: <AnyAppRoute>[_routeDocsRestSlug],
 );
 
+final _routeAbout = _aboutDefinition.route.compiled(
+  path: "about",
+  terminal: true,
+);
+
 final _routeMarketingPricing = _marketingPricingPage.route.compiled(
   path: "pricing",
   terminal: true,
@@ -120,6 +126,7 @@ final _routeRoot = _rootShell.route
       children: <AnyAppRoute>[
         _routeAccount,
         _routeMarketing,
+        _routeAbout,
         _routeDocs,
         _routePosts,
       ],
@@ -135,6 +142,8 @@ final class AppRoutes {
   final AppAccountRoutes account = const AppAccountRoutes();
 
   final AppMarketingRoutes marketing = const AppMarketingRoutes();
+
+  final AppAboutRoutes about = const AppAboutRoutes();
 
   final AppDocsRoutes docs = const AppDocsRoutes();
 
@@ -179,6 +188,10 @@ final class AppMarketingPricingRoutes {
         .then(_routeMarketingPricing.ref())
         .destination;
   }
+}
+
+final class AppAboutRoutes {
+  const AppAboutRoutes();
 }
 
 final class AppDocsRoutes {

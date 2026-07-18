@@ -185,7 +185,17 @@ JSON 客户端在没有 pending Query 时收到普通 JSON；存在 pending Quer
 
 `runOdroeApp` 在浏览器启动时读取并移除 initial state，把服务端 loader data 直接交给第一次 Flutter navigation，随后持续消费流式 frame。`StartHandoffClient.apply(frame)` 也可独立使用，并通过跨 server/client 时钟换算与更新时间仲裁，避免迟到的服务端错误或旧数据覆盖客户端新状态。
 
-这条链路当前是 HTML shell + 数据 handoff + Flutter 接管，不是 Flutter widget tree 的 HTML renderer。可见内容 SSR、面向 SEO/GEO 的 document 输出与 SSG 构建命令仍是后续独立能力；在它们落地前不应把当前 handoff 称为完整 SSR/SSG。
+同一次请求也会执行匹配链上的 `RouteDocument` builders，合并 title、description、canonical、meta、link、JSON-LD 与语义 body。它不把 Flutter widget tree 翻译成 DOM：Document 是纯 HTML route 的正式 UI，也是混合 Flutter route 面向 SEO/GEO 的可读补充。只有当前终点实际存在 `page.dart` 时才会注入 handoff、Flutter bootstrap 与用于嵌套地址资源解析的 base URL；同一应用中的纯 Document route 仍保持纯 HTML。Flutter 第一帧后隐藏辅助 DOM，首屏 loader/Query 不会重复请求。
+
+## SSG
+
+```sh
+dart run odroe build -- web --release
+```
+
+构建顺序固定为：生成 route targets → 编译 Start server → Flutter Web build → 启动真实 Start artifact → 并发请求静态 route → 抓取站内链接发现动态 route → 写入 `build/web/<route>/index.html`。任一路由失败会令构建失败；站外 URL、query、路径穿越和超长输出路径不会写盘。
+
+纯 Document 应用没有 Flutter page/shell，直接运行 `dart run odroe build` 即可生成 HTML。`public/` 会复制到静态输出。需要只构建 server 或关闭 prerender 时，可显式使用 `--server-only` 或 `--no-prerender`。
 
 ## 宿主与部署
 
@@ -197,4 +207,4 @@ StartRequest -> Future<StartResponse>
 
 `package:odroe/start_io.dart` 提供开箱即用的 Dart IO adapter。生成的 bootstrap 默认从 `build/web` 提供 Flutter Web 产物，也可用 `ODROE_WEB_ROOT` 改写目录；稳定文件使用 revalidation，只有带内容 hash 的文件使用 immutable cache。Relic、Cloudflare/Dart runtime、测试内存宿主或未来提取的基础设施只需转换 request/response，不应改变 Router、Query、RPC 或用户文件结构。
 
-默认生成的 `createStartApplication()` 可传入全局 middleware、serializer、renderer 和 options。需要自定义部署生命周期时，直接导入 `routes.server.dart` 并把 `app.handler` 交给自己的 adapter。
+默认生成的 `createStartApplication()` 可传入全局 middleware、serializer、renderer、failure renderer 和 options。需要自定义部署生命周期时，直接导入 `routes.server.dart` 并把 `app.handler` 交给自己的 adapter。

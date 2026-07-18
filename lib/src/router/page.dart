@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import '../document/document.dart';
 import '../query/client.dart';
 import 'codec.dart';
 import 'match.dart';
@@ -235,6 +236,12 @@ final class PageRouteFragment<P, S, D>
   bool get hasPathCodec => definition.hasPathCodec;
 
   @override
+  bool get hasDocument => definition.hasDocument;
+
+  @override
+  bool get hasFlutterPage => true;
+
+  @override
   String? get path => definition.path;
 
   @override
@@ -253,6 +260,15 @@ final class PageRouteFragment<P, S, D>
     RouteLoadScope scope,
     QueryClient query,
   ) => definition.loadObject(params, search, location, scope, query);
+
+  @override
+  FutureOr<RouteDocument?> buildDocumentObject(
+    Object? params,
+    Object? search,
+    Object? data,
+    Uri location,
+    RouteDocumentScope scope,
+  ) => definition.buildDocumentObject(params, search, data, location, scope);
 
   @override
   List<String> encodePath(Object? params) => definition.encodePath(params);
@@ -447,6 +463,12 @@ final class ShellRouteFragment<P, S, D>
   bool get hasPathCodec => definition.hasPathCodec;
 
   @override
+  bool get hasDocument => definition.hasDocument;
+
+  @override
+  bool get hasFlutterPage => indexPage != null;
+
+  @override
   String? get path => definition.path;
 
   @override
@@ -465,6 +487,15 @@ final class ShellRouteFragment<P, S, D>
     RouteLoadScope scope,
     QueryClient query,
   ) => definition.loadObject(params, search, location, scope, query);
+
+  @override
+  FutureOr<RouteDocument?> buildDocumentObject(
+    Object? params,
+    Object? search,
+    Object? data,
+    Uri location,
+    RouteDocumentScope scope,
+  ) => definition.buildDocumentObject(params, search, data, location, scope);
 
   @override
   List<String> encodePath(Object? params) => definition.encodePath(params);

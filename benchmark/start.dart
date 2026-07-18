@@ -4,7 +4,28 @@ import 'package:odroe/start.dart';
 
 Future<void> main() async {
   final app = StartApplication(
-    routes: <AnyAppRoute>[AppRoute<NoParams, NoSearch, NoData>(path: '/')],
+    routes: <AnyAppRoute>[
+      AppRoute<NoParams, NoSearch, NoData>(
+        path: '/',
+        document: (_) => const RouteDocument(
+          language: 'en',
+          title: 'Odroe',
+          description: 'Flutter full-stack framework.',
+          body: HtmlElement(
+            'main',
+            children: <HtmlNode>[
+              HtmlElement('h1', children: <HtmlNode>[HtmlText('Odroe')]),
+              HtmlElement(
+                'p',
+                children: <HtmlNode>[
+                  HtmlText('Semantic HTML with a typed route contract.'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
     functions: <String, AnyServerFunction>{
       'increment': ServerFunction<int, int>(
         handler: (context) => context.data + 1,
@@ -44,6 +65,23 @@ Future<void> main() async {
   }
   route.stop();
   _print('Route + JSON handoff', route.elapsed, 2000);
+
+  final document = Stopwatch()..start();
+  for (var index = 0; index < 2000; index++) {
+    final response = await app.handle(
+      StartRequest.bytes(
+        method: StartMethod.get,
+        uri: Uri.parse('http://localhost/'),
+        headers: StartHeaders.single(<String, String>{'accept': 'text/html'}),
+      ),
+    );
+    final html = await response.readText();
+    if (!html.contains('<h1>Odroe</h1>')) {
+      throw StateError('Unexpected document.');
+    }
+  }
+  document.stop();
+  _print('Route + semantic HTML', document.elapsed, 2000);
 }
 
 void _print(String name, Duration elapsed, int iterations) {

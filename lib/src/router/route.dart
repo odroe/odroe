@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 
+import '../document/document.dart';
 import '../query/client.dart';
 import 'codec.dart';
 import 'pattern.dart';
@@ -8,6 +9,10 @@ import 'pattern.dart';
 /// A route loader.
 typedef RouteLoader<P, S, D> =
     FutureOr<D> Function(RouteLoadContext<P, S> context);
+
+/// Builds the semantic document contribution owned by one matched route.
+typedef RouteDocumentBuilder<P, S, D> =
+    FutureOr<RouteDocument?> Function(RouteDocumentContext<P, S, D> context);
 
 /// Typed params and search belonging to one active route.
 final class RouteValues<P, S> {
@@ -88,6 +93,104 @@ final class RouteLoadContext<P, S> {
   ) => _scope.match(route);
 }
 
+/// Typed values and loader data belonging to one active route document.
+final class RouteDocumentValues<P, S, D> {
+  const RouteDocumentValues._({
+    required this.params,
+    required this.search,
+    required this.data,
+  });
+
+  /// Path parameters owned by the route.
+  final P params;
+
+  /// Search state owned by the route.
+  final S search;
+
+  /// Loader data owned by the route.
+  final D data;
+}
+
+/// Read-only document lookup for every route in an active matched branch.
+final class RouteDocumentScope {
+  /// Creates infrastructure scope from erased matched-route values.
+  RouteDocumentScope.from(
+    Iterable<
+      ({AnyAppRoute route, Object? params, Object? search, Object? data})
+    >
+    values,
+  ) : _values = _buildValues(values);
+
+  final Map<Object, ({Object? params, Object? search, Object? data})> _values;
+
+  static Map<Object, ({Object? params, Object? search, Object? data})>
+  _buildValues(
+    Iterable<
+      ({AnyAppRoute route, Object? params, Object? search, Object? data})
+    >
+    values,
+  ) {
+    final result =
+        HashMap<
+          Object,
+          ({Object? params, Object? search, Object? data})
+        >.identity();
+    for (final value in values) {
+      result[value.route.identity] = (
+        params: value.params,
+        search: value.search,
+        data: value.data,
+      );
+    }
+    return UnmodifiableMapView<
+      Object,
+      ({Object? params, Object? search, Object? data})
+    >(result);
+  }
+
+  /// Returns typed values for an active ancestor, current, or child route.
+  RouteDocumentValues<P, S, D>? match<P, S, D>(AppRoute<P, S, D> route) {
+    final value = _values[route.identity];
+    if (value == null) return null;
+    return RouteDocumentValues<P, S, D>._(
+      params: value.params as P,
+      search: value.search as S,
+      data: value.data as D,
+    );
+  }
+}
+
+/// Typed input passed to a route's semantic document builder.
+final class RouteDocumentContext<P, S, D> {
+  /// Creates document builder input.
+  const RouteDocumentContext({
+    required this.params,
+    required this.search,
+    required this.data,
+    required this.location,
+    required RouteDocumentScope scope,
+  }) : _scope = scope;
+
+  /// Parameters owned by the route.
+  final P params;
+
+  /// Search state owned by the route.
+  final S search;
+
+  /// Loader data owned by the route.
+  final D data;
+
+  /// The complete matched location.
+  final Uri location;
+
+  final RouteDocumentScope _scope;
+
+  /// Returns typed values for any route in the active matched branch.
+  RouteDocumentValues<MatchP, MatchS, MatchD>? match<MatchP, MatchS, MatchD>(
+    AppRoute<MatchP, MatchS, MatchD> route,
+  ) => _scope.match(route);
+}
+
 /// An immutable navigation target.
 final class Destination {
   const Destination._({required this.route, required this.uri});
@@ -140,6 +243,12 @@ abstract class AnyAppRoute {
   /// Whether dynamic path values have a typed codec.
   bool get hasPathCodec;
 
+  /// Whether this route contributes a semantic HTML document.
+  bool get hasDocument;
+
+  /// Whether this route can render a terminal Flutter page.
+  bool get hasFlutterPage;
+
   /// The parsed path pattern.
   RoutePattern get compiledPattern;
 
@@ -156,6 +265,15 @@ abstract class AnyAppRoute {
     Uri location,
     RouteLoadScope scope,
     QueryClient query,
+  );
+
+  /// Builds this route's document through an erased route-tree boundary.
+  FutureOr<RouteDocument?> buildDocumentObject(
+    Object? params,
+    Object? search,
+    Object? data,
+    Uri location,
+    RouteDocumentScope scope,
   );
 
   /// Encodes this route's local path through an erased generated boundary.
@@ -257,6 +375,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     PathParams<P>? params,
     SearchParams<S>? search,
     RouteLoader<P, S, D>? load,
+    RouteDocumentBuilder<P, S, D>? document,
     bool terminal = true,
     Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
   }) => AppRoute<P, S, D>._(
@@ -264,7 +383,9 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     params: params,
     search: search,
     load: load,
+    document: document,
     terminal: terminal,
+    hasFlutterPage: false,
     children: children,
     identity: Object(),
   );
@@ -274,10 +395,13 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     required this.params,
     required this.search,
     required this.load,
+    required this.document,
     required this.terminal,
+    required bool hasFlutterPage,
     required Iterable<AnyAppRoute> children,
     required this.identity,
   }) : children = List<AnyAppRoute>.unmodifiable(children),
+       _hasFlutterPage = hasFlutterPage,
        _pattern = path == null ? null : RoutePattern.parse(path);
 
   @override
@@ -292,11 +416,22 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
   /// The route loader, when it runs in the current application.
   final RouteLoader<P, S, D>? load;
 
+  /// Semantic HTML produced for SSR, SSG, SEO, and GEO.
+  final RouteDocumentBuilder<P, S, D>? document;
+
   @override
   final bool terminal;
 
   @override
   bool get hasPathCodec => params != null;
+
+  @override
+  bool get hasDocument => document != null;
+
+  @override
+  bool get hasFlutterPage => _hasFlutterPage;
+
+  final bool _hasFlutterPage;
 
   @override
   final List<AnyAppRoute> children;
@@ -318,7 +453,9 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
         params: params,
         search: search,
         load: load,
+        document: document,
         terminal: terminal,
+        hasFlutterPage: _hasFlutterPage,
         children: children,
         identity: identity,
       );
@@ -329,13 +466,16 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     PathParams<P>? params,
     SearchParams<S>? search,
     required bool terminal,
+    bool? hasFlutterPage,
     Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
   }) => AppRoute<P, S, D>._(
     path: path,
     params: params ?? this.params,
     search: search ?? this.search,
     load: load,
+    document: document,
     terminal: terminal,
+    hasFlutterPage: hasFlutterPage ?? _hasFlutterPage,
     children: children,
     identity: identity,
   );
@@ -384,6 +524,27 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
         search: search as S,
         location: location,
         query: query,
+        scope: scope,
+      ),
+    );
+  }
+
+  @override
+  FutureOr<RouteDocument?> buildDocumentObject(
+    Object? params,
+    Object? search,
+    Object? data,
+    Uri location,
+    RouteDocumentScope scope,
+  ) {
+    final builder = document;
+    if (builder == null) return null;
+    return builder(
+      RouteDocumentContext<P, S, D>(
+        params: params as P,
+        search: search as S,
+        data: data as D,
+        location: location,
         scope: scope,
       ),
     );

@@ -39,7 +39,18 @@ void main() {
     final output = compiler.compile();
 
     expect(output.diagnostics, isEmpty);
-    expect(output.routeCount, 9);
+    expect(output.routeCount, 10);
+    expect(output.hasFlutter, isTrue);
+    expect(
+      output.staticRoutes,
+      unorderedEquals(<String>[
+        '/',
+        '/about',
+        '/posts',
+        '/pricing',
+        '/settings',
+      ]),
+    );
     expect(output.source, compiler.outputFile.readAsStringSync());
     expect(output.serverSource, compiler.serverOutputFile.readAsStringSync());
     expect(
@@ -50,6 +61,8 @@ void main() {
       output.serverSource,
       contains("import 'routes/posts/[postId]/server.dart'"),
     );
+    expect(output.serverSource, contains("baseHref: '/'"));
+    expect(output.serverSource, contains('hasFlutterPage: true'));
   });
 
   test('generated references preserve inherited params and typed search', () {

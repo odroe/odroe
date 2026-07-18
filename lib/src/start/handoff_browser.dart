@@ -8,3 +8,5 @@ Map<String, Object?>? readBrowserHandoff() => platform.readBrowserHandoff();
 
 Stream<Map<String, Object?>> browserHandoffFrames() =>
     platform.browserHandoffFrames();
+
+void hideBrowserDocument() => platform.hideBrowserDocument();

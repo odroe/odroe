@@ -3,7 +3,10 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:odroe/router_compiler.dart';
-import 'package:path/path.dart' as p;
+
+import 'build.dart';
+import 'development.dart';
+import 'project.dart';
 
 /// Runs the Odroe command-line product and returns a process exit code.
 Future<int> runOdroe(
@@ -44,6 +47,21 @@ Future<int> runOdroe(
       'server-artifact',
       defaultsTo: 'build/odroe/server',
       help: 'Server executable path relative to the project.',
+    )
+    ..addFlag(
+      'prerender',
+      defaultsTo: true,
+      help: 'Generate static HTML for web and document-only builds.',
+    )
+    ..addOption(
+      'prerender-output',
+      defaultsTo: 'build/web',
+      help: 'Static output directory relative to the project.',
+    )
+    ..addOption(
+      'prerender-concurrency',
+      defaultsTo: '${Platform.numberOfProcessors}',
+      help: 'Maximum parallel prerender requests.',
     );
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
@@ -76,14 +94,14 @@ Future<int> runOdroe(
   }
 
   try {
-    final project = _Project.from(command);
+    final project = CliProject.from(command);
     return switch (command.name) {
-      'generate' => _generate(project, out, err) ? 0 : 1,
+      'generate' => generateRoutes(project, out, err) == null ? 1 : 0,
       'routes' =>
         command.flag('watch')
             ? await _watchRoutes(project, out, err)
-            : (_generate(project, out, err) ? 0 : 1),
-      'dev' => await _dev(
+            : (generateRoutes(project, out, err) == null ? 1 : 0),
+      'dev' => await runDevelopment(
         project,
         host: command.option('host')!,
         port: _port(command.option('port')!),
@@ -92,11 +110,17 @@ Future<int> runOdroe(
         out: out,
         err: err,
       ),
-      'build' => await _build(
+      'build' => await runBuild(
         project,
         serverOnly: command.flag('server-only'),
         buildServer: command.flag('server'),
         serverArtifact: command.option('server-artifact')!,
+        prerender: command.flag('prerender'),
+        prerenderOutput: command.option('prerender-output')!,
+        prerenderConcurrency: _positiveInt(
+          command.option('prerender-concurrency')!,
+          'prerender-concurrency',
+        ),
         flutterArguments: command.rest,
         out: out,
         err: err,
@@ -165,32 +189,21 @@ int _port(String value) {
   return parsed;
 }
 
-bool _generate(_Project project, StringSink out, StringSink err) {
-  try {
-    final result = project.compiler.write();
-    project.writeBootstrap();
-    out.writeln(
-      result.changed
-          ? 'Generated ${project.compiler.outputFile.path} and '
-                '${project.compiler.serverOutputFile.path} '
-                '(${result.routeCount} routes).'
-          : 'Generated routes are current (${result.routeCount} routes).',
-    );
-    return true;
-  } on FileRouteCompilationException catch (error) {
-    for (final diagnostic in error.diagnostics) {
-      err.writeln(diagnostic);
-    }
-    return false;
+int _positiveInt(String value, String name) {
+  final parsed = int.tryParse(value);
+  if (parsed == null || parsed <= 0) {
+    throw FormatException('Invalid $name: $value');
   }
+  return parsed;
 }
 
 Future<int> _watchRoutes(
-  _Project project,
+  CliProject project,
   StringSink out,
   StringSink err,
 ) async {
-  if (!_generate(project, out, err)) return 1;
+  final generated = generateRoutes(project, out, err);
+  if (generated == null) return 1;
   if (!project.compiler.routesDirectory.existsSync()) {
     err.writeln('${project.compiler.routesDirectory.path} does not exist.');
     return 1;
@@ -204,292 +217,11 @@ Future<int> _watchRoutes(
     debounce?.cancel();
     debounce = Timer(
       const Duration(milliseconds: 100),
-      () => _generate(project, out, err),
+      () => generateRoutes(project, out, err),
     );
   }
   return 0;
 }
-
-Future<int> _dev(
-  _Project project, {
-  required String host,
-  required int port,
-  required bool serverOnly,
-  required List<String> flutterArguments,
-  required StringSink out,
-  required StringSink err,
-}) async {
-  if (!_generate(project, out, err)) return 1;
-  final environment = <String, String>{
-    ...Platform.environment,
-    'ODROE_HOST': host,
-    'ODROE_PORT': '$port',
-  };
-  Process server = await _start(
-    Platform.resolvedExecutable,
-    <String>['run', project.bootstrap.path],
-    project: project,
-    environment: environment,
-  );
-  Process? flutter;
-  if (!serverOnly) {
-    try {
-      flutter = await _start('flutter', <String>[
-        'run',
-        ...flutterArguments,
-      ], project: project);
-    } on Object {
-      server.kill(ProcessSignal.sigterm);
-      await server.exitCode;
-      rethrow;
-    }
-  }
-
-  final done = Completer<int>();
-  var stopping = false;
-  var restarting = false;
-  void observeServer(Process process) {
-    process.exitCode.then((code) {
-      if (!stopping && !restarting && !done.isCompleted) done.complete(code);
-    });
-  }
-
-  observeServer(server);
-  flutter?.exitCode.then((code) {
-    if (!stopping && !done.isCompleted) done.complete(code);
-  });
-
-  Timer? debounce;
-  var serverRestartNeeded = false;
-  var restartQueued = false;
-  Future<void> restart() async {
-    if (stopping) return;
-    if (restarting) {
-      restartQueued = true;
-      return;
-    }
-    restarting = true;
-    try {
-      do {
-        restartQueued = false;
-        final shouldRestartServer = serverRestartNeeded;
-        serverRestartNeeded = false;
-        final generated = _generate(project, out, err);
-        if (!generated || !shouldRestartServer) continue;
-
-        server.kill(ProcessSignal.sigterm);
-        await server.exitCode;
-        if (stopping) break;
-        server = await _start(
-          Platform.resolvedExecutable,
-          <String>['run', project.bootstrap.path],
-          project: project,
-          environment: environment,
-        );
-        observeServer(server);
-      } while (restartQueued && !stopping);
-    } finally {
-      restarting = false;
-    }
-  }
-
-  final changes = project.libDirectory.watch(recursive: true).listen((event) {
-    if (!event.path.endsWith('.dart')) return;
-    if (p.equals(event.path, project.compiler.outputFile.path) ||
-        p.equals(event.path, project.compiler.serverOutputFile.path)) {
-      return;
-    }
-    final name = p.basename(event.path);
-    final flutterOnlyModification =
-        event.type == FileSystemEvent.modify &&
-        (name == 'page.dart' || name == 'shell.dart');
-    serverRestartNeeded |= !flutterOnlyModification;
-    debounce?.cancel();
-    debounce = Timer(const Duration(milliseconds: 120), () {
-      unawaited(
-        restart().catchError((Object error, StackTrace stackTrace) {
-          err.writeln(error);
-          if (!done.isCompleted) done.complete(1);
-        }),
-      );
-    });
-  });
-
-  final signals = <StreamSubscription<ProcessSignal>>[];
-  void stop(ProcessSignal _) {
-    if (done.isCompleted) return;
-    stopping = true;
-    done.complete(0);
-  }
-
-  if (!Platform.isWindows) {
-    signals.add(ProcessSignal.sigint.watch().listen(stop));
-    signals.add(ProcessSignal.sigterm.watch().listen(stop));
-  }
-  final result = await done.future;
-  stopping = true;
-  debounce?.cancel();
-  await changes.cancel();
-  for (final signal in signals) {
-    await signal.cancel();
-  }
-  server.kill(ProcessSignal.sigterm);
-  flutter?.kill(ProcessSignal.sigterm);
-  await Future.wait<void>(<Future<void>>[
-    server.exitCode.then<void>((_) {}),
-    if (flutter != null) flutter.exitCode.then<void>((_) {}),
-  ]);
-  return result;
-}
-
-Future<int> _build(
-  _Project project, {
-  required bool serverOnly,
-  required bool buildServer,
-  required String serverArtifact,
-  required List<String> flutterArguments,
-  required StringSink out,
-  required StringSink err,
-}) async {
-  if (!_generate(project, out, err)) return 1;
-  if (serverOnly && !buildServer) {
-    err.writeln('--server-only cannot be combined with --no-server.');
-    return 64;
-  }
-  if (!serverOnly && flutterArguments.isEmpty) {
-    err.writeln(
-      'Choose a Flutter build target, for example: '
-      'dart run odroe build apk or dart run odroe build web.',
-    );
-    return 64;
-  }
-  if (buildServer) {
-    final artifact = File(p.join(project.root.path, serverArtifact));
-    artifact.parent.createSync(recursive: true);
-    final process = await _start(Platform.resolvedExecutable, <String>[
-      'compile',
-      'exe',
-      project.bootstrap.path,
-      '-o',
-      artifact.path,
-    ], project: project);
-    final code = await process.exitCode;
-    if (code != 0) return code;
-  }
-  if (serverOnly) return 0;
-  final flutter = await _start('flutter', <String>[
-    'build',
-    ...flutterArguments,
-  ], project: project);
-  return flutter.exitCode;
-}
-
-Future<Process> _start(
-  String executable,
-  List<String> arguments, {
-  required _Project project,
-  Map<String, String>? environment,
-}) => Process.start(
-  executable,
-  arguments,
-  workingDirectory: project.root.path,
-  environment: environment,
-  mode: ProcessStartMode.inheritStdio,
-);
-
-final class _Project {
-  _Project._({
-    required this.root,
-    required this.packageName,
-    required this.compiler,
-  });
-
-  factory _Project.from(ArgResults arguments) {
-    final root = Directory(arguments.option('project')!).absolute;
-    final pubspec = File(p.join(root.path, 'pubspec.yaml'));
-    if (!pubspec.existsSync()) {
-      throw FileSystemException('pubspec.yaml does not exist.', pubspec.path);
-    }
-    final match = RegExp(
-      r'^name:\s*([A-Za-z_][A-Za-z0-9_]*)\s*$',
-      multiLine: true,
-    ).firstMatch(pubspec.readAsStringSync());
-    if (match == null) {
-      throw FormatException('pubspec.yaml must declare a valid package name.');
-    }
-    return _Project._(
-      root: root,
-      packageName: match.group(1)!,
-      compiler: FileRouteCompiler(
-        projectRoot: root,
-        routesPath: arguments.option('routes')!,
-        outputPath: arguments.option('output')!,
-        serverOutputPath: arguments.option('server-output')!,
-      ),
-    );
-  }
-
-  final Directory root;
-  final String packageName;
-  final FileRouteCompiler compiler;
-
-  Directory get libDirectory => Directory(p.join(root.path, 'lib'));
-  File get bootstrap =>
-      File(p.join(root.path, '.dart_tool', 'odroe', 'server.dart'));
-
-  void writeBootstrap() {
-    final source = _bootstrapSource(packageName);
-    bootstrap.parent.createSync(recursive: true);
-    if (bootstrap.existsSync() && bootstrap.readAsStringSync() == source) {
-      return;
-    }
-    final temporary = File('${bootstrap.path}.tmp');
-    try {
-      temporary.writeAsStringSync(source);
-      temporary.renameSync(bootstrap.path);
-    } finally {
-      if (temporary.existsSync()) temporary.deleteSync();
-    }
-  }
-}
-
-String _bootstrapSource(String packageName) =>
-    '''
-// Generated by Odroe. Do not edit.
-import 'dart:async';
-import 'dart:io';
-
-import 'package:odroe/start_io.dart';
-import 'package:$packageName/routes.server.dart';
-
-Future<void> main() async {
-  final host = Platform.environment['ODROE_HOST'] ?? '127.0.0.1';
-  final port = int.parse(Platform.environment['ODROE_PORT'] ?? '3000');
-  final server = await StartIoServer.bind(
-    createStartApplication().handler,
-    address: host,
-    port: port,
-    publicDirectory: Directory(
-      Platform.environment['ODROE_WEB_ROOT'] ?? 'build/web',
-    ),
-  );
-  stdout.writeln(
-    'Odroe Start listening on http://\${server.address.host}:\${server.port}',
-  );
-  if (!Platform.isWindows) {
-    final stopping = Completer<void>();
-    void stop(ProcessSignal _) {
-      if (!stopping.isCompleted) stopping.complete();
-    }
-    final interrupt = ProcessSignal.sigint.watch().listen(stop);
-    final terminate = ProcessSignal.sigterm.watch().listen(stop);
-    await stopping.future;
-    await interrupt.cancel();
-    await terminate.cancel();
-    await server.close(force: true);
-  }
-}
-''';
 
 String _usage(ArgParser parser) =>
     'Usage: dart run odroe <command> [arguments]\n\n'

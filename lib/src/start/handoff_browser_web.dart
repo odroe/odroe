@@ -50,3 +50,7 @@ Stream<Map<String, Object?>> browserHandoffFrames() {
   );
   return controller.stream;
 }
+
+void hideBrowserDocument() {
+  document.querySelector('#__odroe_document__')?.attributes['hidden'] = '';
+}

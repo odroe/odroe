@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../query/client.dart';
+import 'external_navigation.dart';
 import 'match.dart';
 import 'page.dart';
 import 'route.dart';
@@ -106,16 +107,32 @@ final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
 
   @override
   void go(Destination destination) {
+    if (_openDocument(destination, replace: false)) return;
     _provider.navigate(destination.uri, _NavigationOperation.go);
   }
 
   @override
-  Future<T?> push<T>(Destination destination) =>
-      _provider.push<T>(destination.uri);
+  Future<T?> push<T>(Destination destination) {
+    if (_openDocument(destination, replace: false)) {
+      return SynchronousFuture<T?>(null);
+    }
+    return _provider.push<T>(destination.uri);
+  }
 
   @override
   void replace(Destination destination) {
+    if (_openDocument(destination, replace: true)) return;
     _provider.navigate(destination.uri, _NavigationOperation.replace);
+  }
+
+  bool _openDocument(Destination destination, {required bool replace}) {
+    final route = destination.route;
+    if (route.hasFlutterPage || !route.hasDocument) return false;
+    if (navigateExternal(destination.uri, replace: replace)) return true;
+    throw StateError(
+      'Route ${destination.uri} has a document but no Flutter page on this '
+      'platform.',
+    );
   }
 
   /// Releases listeners owned by this router.

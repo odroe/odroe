@@ -4,3 +4,5 @@ Map<String, Object?>? readBrowserHandoff() => null;
 
 Stream<Map<String, Object?>> browserHandoffFrames() =>
     const Stream<Map<String, Object?>>.empty();
+
+void hideBrowserDocument() {}

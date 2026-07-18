@@ -103,10 +103,16 @@ void main() {
   });
 
   test('HTML handoff escapes script terminators case-insensitively', () async {
-    final route = AppRoute<NoParams, NoSearch, String>(
-      path: '/',
-    ).server(load: (_) => '</SCRIPT><p>unsafe</p>');
-    final app = StartApplication(routes: <AnyAppRoute>[route]);
+    final route = AppRoute<NoParams, NoSearch, String>()
+        .compiled(path: '/', terminal: true, hasFlutterPage: true)
+        .server(load: (_) => '</SCRIPT><p>unsafe</p>');
+    final app = StartApplication(
+      routes: <AnyAppRoute>[route],
+      renderer: const StartDocumentRenderer(
+        flutterBootstrap: '/flutter_bootstrap.js',
+        baseHref: '/',
+      ).call,
+    );
 
     final response = await app.handle(
       StartRequest.bytes(
@@ -119,6 +125,35 @@ void main() {
 
     expect(html, isNot(contains('</SCRIPT>')));
     expect(html, contains(r'<\/script>'));
+    expect(html, contains('<base href="/">'));
+  });
+
+  test('hybrid renderer leaves document-only routes as pure HTML', () async {
+    final route = AppRoute<NoParams, NoSearch, NoData>(
+      path: '/',
+      document: (_) => const RouteDocument(title: 'Document only'),
+    );
+    final app = StartApplication(
+      routes: <AnyAppRoute>[route],
+      renderer: const StartDocumentRenderer(
+        flutterBootstrap: '/flutter_bootstrap.js',
+        baseHref: '/',
+      ).call,
+    );
+
+    final response = await app.handle(
+      StartRequest.bytes(
+        method: StartMethod.get,
+        uri: Uri.parse('http://localhost/'),
+        headers: StartHeaders.single(<String, String>{'accept': 'text/html'}),
+      ),
+    );
+    final html = await response.readText();
+
+    expect(html, contains('<title>Document only</title>'));
+    expect(html, isNot(contains('<base')));
+    expect(html, isNot(contains('__odroe_state__')));
+    expect(html, isNot(contains('flutter_bootstrap.js')));
   });
 
   test('pending Query state streams after the initial handoff', () async {
@@ -138,7 +173,7 @@ void main() {
       renderer: (context) {
         expect(context.dehydrated.queries, hasLength(1));
         expect(context.dehydrated.queries.single.pending, isNotNull);
-        return const StartHandoffRenderer().call(context);
+        return const StartDocumentRenderer().call(context);
       },
     );
     final response = await app.handle(
@@ -212,4 +247,41 @@ void main() {
     expect(state.error, 'Query failed.');
     expect(await lines.moveNext(), isFalse);
   });
+
+  test(
+    'HTML navigation receives semantic 404 and safe 500 documents',
+    () async {
+      final route = AppRoute<NoParams, NoSearch, NoData>(
+        path: '/',
+        load: (_) => throw StateError('private failure'),
+      );
+      final app = StartApplication(routes: <AnyAppRoute>[route]);
+      final headers = StartHeaders.single(<String, String>{
+        'accept': 'text/html',
+      });
+
+      final missing = await app.handle(
+        StartRequest.bytes(
+          method: StartMethod.get,
+          uri: Uri.parse('http://localhost/missing'),
+        ),
+      );
+      final missingHtml = await missing.readText();
+      expect(missing.status, 404);
+      expect(missingHtml, contains('<title>Page not found</title>'));
+      expect(missingHtml, contains('noindex, nofollow'));
+
+      final failed = await app.handle(
+        StartRequest.bytes(
+          method: StartMethod.get,
+          uri: Uri.parse('http://localhost/'),
+          headers: headers,
+        ),
+      );
+      final failedHtml = await failed.readText();
+      expect(failed.status, 500);
+      expect(failedHtml, contains('<title>Internal server error</title>'));
+      expect(failedHtml, isNot(contains('private failure')));
+    },
+  );
 }

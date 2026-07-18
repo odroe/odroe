@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import '../document/document.dart';
 import '../query/client.dart';
 import '../router/codec.dart';
 import '../router/match.dart';
@@ -72,6 +73,12 @@ final class ServerRouteFragment<P, S, D>
   bool get hasPathCodec => definition.hasPathCodec;
 
   @override
+  bool get hasDocument => definition.hasDocument;
+
+  @override
+  bool get hasFlutterPage => definition.hasFlutterPage;
+
+  @override
   Object get identity => definition.identity;
 
   @override
@@ -110,6 +117,15 @@ final class ServerRouteFragment<P, S, D>
       ),
     );
   }
+
+  @override
+  FutureOr<RouteDocument?> buildDocumentObject(
+    Object? params,
+    Object? search,
+    Object? data,
+    Uri location,
+    RouteDocumentScope scope,
+  ) => definition.buildDocumentObject(params, search, data, location, scope);
 
   @override
   List<String> encodePath(Object? params) => definition.encodePath(params);
@@ -161,6 +177,7 @@ final class ServerRouteFragment<P, S, D>
     PathParams<P>? params,
     SearchParams<S>? search,
     required bool terminal,
+    bool hasFlutterPage = false,
     Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
   }) => ServerRouteFragment<P, S, D>._(
     definition: definition.compiled(
@@ -168,6 +185,7 @@ final class ServerRouteFragment<P, S, D>
       params: params,
       search: search,
       terminal: terminal,
+      hasFlutterPage: hasFlutterPage,
       children: children,
     ),
     load: load,

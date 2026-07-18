@@ -105,4 +105,5 @@ void runOdroeApp({
     serializer: serializer,
   );
   runApp(QueryClientProvider(client: app.query, child: builder(app)));
+  WidgetsBinding.instance.addPostFrameCallback((_) => hideBrowserDocument());
 }

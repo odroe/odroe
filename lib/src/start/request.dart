@@ -61,6 +61,12 @@ final class StartHeaders {
 
   void remove(String name) => _values.remove(name.toLowerCase());
 
+  void addAll(StartHeaders other) {
+    for (final entry in other._values.entries) {
+      _values[entry.key] = List<String>.of(entry.value);
+    }
+  }
+
   bool contains(String name) => _values.containsKey(name.toLowerCase());
 
   Map<String, List<String>> toMap() => Map<String, List<String>>.unmodifiable(
@@ -162,6 +168,17 @@ final class StartResponse {
     utf8.encode(text),
     status: status,
     contentType: contentType,
+    headers: headers,
+  );
+
+  factory StartResponse.html(
+    String html, {
+    int status = 200,
+    StartHeaders? headers,
+  }) => StartResponse.text(
+    html,
+    status: status,
+    contentType: 'text/html; charset=utf-8',
     headers: headers,
   );
 

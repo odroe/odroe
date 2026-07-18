@@ -2,6 +2,8 @@
 // ignore_for_file: type=lint
 
 import 'package:odroe/start.dart';
+import 'routes/route.dart' as _rootDefinition;
+import 'routes/about/route.dart' as _aboutDefinition;
 import 'routes/docs/[...slug]/route.dart' as _docsRestSlugDefinition;
 import 'routes/posts/route.dart' as _postsDefinition;
 import 'routes/posts/[postId]/route.dart' as _postsPostIdDefinition;
@@ -10,6 +12,7 @@ import 'routes/posts/[postId]/server.dart' as _postsPostIdServer;
 final _serverRoutePostsPostId = _postsPostIdServer.route.compiled(
   path: "[postId]",
   terminal: true,
+  hasFlutterPage: true,
   params: PathParams<_postsPostIdDefinition.Params>.codec(
     decode: (input) => (postId: input.requiredInt('postId')),
     encode: (value, output) {
@@ -47,6 +50,7 @@ final _serverRoutePostsPostId = _postsPostIdServer.route.compiled(
 final _serverRoutePosts = _postsDefinition.route.compiled(
   path: "posts",
   terminal: true,
+  hasFlutterPage: true,
   search: SearchParams<_postsDefinition.Search>.codec(
     keys: const <String>{"sort"},
     defaults: _postsDefinition.route.search!.defaults,
@@ -69,6 +73,7 @@ final _serverRoutePosts = _postsDefinition.route.compiled(
 final _serverRouteDocsRestSlug = _docsRestSlugDefinition.route.compiled(
   path: "[...slug]",
   terminal: true,
+  hasFlutterPage: true,
   params: PathParams<_docsRestSlugDefinition.Params>.codec(
     decode: (input) => (slug: input.segments('slug')),
     encode: (value, output) {
@@ -80,33 +85,44 @@ final _serverRouteDocsRestSlug = _docsRestSlugDefinition.route.compiled(
 final _serverRouteDocs = AppRoute<NoParams, NoSearch, NoData>().compiled(
   path: "docs",
   terminal: false,
+  hasFlutterPage: false,
   children: <AnyAppRoute>[_serverRouteDocsRestSlug],
 );
 
+final _serverRouteAbout = _aboutDefinition.route.compiled(
+  path: "about",
+  terminal: true,
+  hasFlutterPage: false,
+);
+
 final _serverRouteMarketingPricing = AppRoute<NoParams, NoSearch, NoData>()
-    .compiled(path: "pricing", terminal: true);
+    .compiled(path: "pricing", terminal: true, hasFlutterPage: true);
 
 final _serverRouteMarketing = AppRoute<NoParams, NoSearch, NoData>().compiled(
   path: "",
   terminal: false,
+  hasFlutterPage: false,
   children: <AnyAppRoute>[_serverRouteMarketingPricing],
 );
 
 final _serverRouteAccountSettings = AppRoute<NoParams, NoSearch, NoData>()
-    .compiled(path: "settings", terminal: true);
+    .compiled(path: "settings", terminal: true, hasFlutterPage: true);
 
 final _serverRouteAccount = AppRoute<NoParams, NoSearch, NoData>().compiled(
   path: "",
   terminal: false,
+  hasFlutterPage: false,
   children: <AnyAppRoute>[_serverRouteAccountSettings],
 );
 
-final _serverRouteRoot = AppRoute<NoParams, NoSearch, NoData>().compiled(
+final _serverRouteRoot = _rootDefinition.route.compiled(
   path: "/",
   terminal: true,
+  hasFlutterPage: true,
   children: <AnyAppRoute>[
     _serverRouteAccount,
     _serverRouteMarketing,
+    _serverRouteAbout,
     _serverRouteDocs,
     _serverRoutePosts,
   ],
@@ -139,12 +155,19 @@ StartApplication createStartApplication({
   Iterable<StartMiddleware> middleware = const <StartMiddleware>[],
   StartSerializer? serializer,
   StartRenderer? renderer,
+  StartFailureRenderer? failureRenderer,
   StartOptions options = const StartOptions(),
 }) => StartApplication(
   routes: serverRouteTree,
   functions: serverFunctions,
   middleware: middleware,
   serializer: serializer,
-  renderer: renderer,
+  renderer:
+      renderer ??
+      const StartDocumentRenderer(
+        flutterBootstrap: '/flutter_bootstrap.js',
+        baseHref: '/',
+      ).call,
+  failureRenderer: failureRenderer,
   options: options,
 );

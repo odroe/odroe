@@ -19,6 +19,7 @@ final class StartIoServer {
     int backlog = 0,
     bool shared = false,
     Directory? publicDirectory,
+    File? developmentProxyOriginFile,
   }) async {
     final server = await HttpServer.bind(
       address ?? InternetAddress.loopbackIPv4,
@@ -33,6 +34,9 @@ final class StartIoServer {
         publicDirectory == null
             ? null
             : _PublicDirectory(publicDirectory.absolute),
+        developmentProxyOriginFile == null
+            ? null
+            : _DevelopmentProxy(developmentProxyOriginFile.absolute),
       ),
     );
     return server;
@@ -42,9 +46,16 @@ final class StartIoServer {
     HttpServer server,
     StartHandler handler,
     _PublicDirectory? publicDirectory,
+    _DevelopmentProxy? developmentProxy,
   ) async {
-    await for (final incoming in server) {
-      unawaited(_handle(incoming, handler, publicDirectory));
+    try {
+      await for (final incoming in server) {
+        unawaited(
+          _handle(incoming, handler, publicDirectory, developmentProxy),
+        );
+      }
+    } finally {
+      developmentProxy?.close();
     }
   }
 
@@ -52,8 +63,10 @@ final class StartIoServer {
     HttpRequest incoming,
     StartHandler handler,
     _PublicDirectory? publicDirectory,
+    _DevelopmentProxy? developmentProxy,
   ) async {
     try {
+      if (await developmentProxy?.serve(incoming) ?? false) return;
       if (await _serveAsset(incoming, publicDirectory)) return;
       final headers = <String, Iterable<String>>{};
       incoming.headers.forEach((name, values) => headers[name] = values);
@@ -172,3 +185,123 @@ final class _PublicDirectory {
     return _resolved = await directory.resolveSymbolicLinks();
   }
 }
+
+final class _DevelopmentProxy {
+  _DevelopmentProxy(this.originFile);
+
+  final File originFile;
+  final HttpClient _client = HttpClient();
+  Uri? _origin;
+
+  void close() => _client.close(force: true);
+
+  Future<bool> serve(HttpRequest request) async {
+    if (!_matches(request)) return false;
+    final origin = await _resolveOrigin();
+    if (origin == null) return false;
+    final target = origin.replace(
+      path: request.requestedUri.path,
+      query: request.requestedUri.hasQuery ? request.requestedUri.query : null,
+    );
+    final outgoing = await _client.openUrl(request.method, target);
+    request.headers.forEach((name, values) {
+      if (_requestHopHeaders.contains(name.toLowerCase())) return;
+      outgoing.headers.removeAll(name);
+      for (final value in values) {
+        outgoing.headers.add(name, value);
+      }
+    });
+    if (request.method != 'GET' && request.method != 'HEAD') {
+      await outgoing.addStream(request);
+    }
+    final response = await outgoing.close();
+    request.response.statusCode = response.statusCode;
+    response.headers.forEach((name, values) {
+      if (_responseHopHeaders.contains(name.toLowerCase())) return;
+      request.response.headers.removeAll(name);
+      for (final value in values) {
+        request.response.headers.add(name, value);
+      }
+    });
+    if (request.method != 'HEAD') {
+      await request.response.addStream(response);
+    } else {
+      await response.drain<void>();
+    }
+    return true;
+  }
+
+  bool _matches(HttpRequest request) {
+    final path = request.requestedUri.path;
+    final first = request.requestedUri.pathSegments.firstOrNull ?? '';
+    if (request.requestedUri.pathSegments.any(
+      (segment) => segment.startsWith(r'$'),
+    )) {
+      return true;
+    }
+    if (request.method != 'GET' && request.method != 'HEAD') return false;
+    if (_developmentFiles.contains(path) ||
+        _developmentPrefixes.contains(first) ||
+        first.startsWith(r'$')) {
+      return true;
+    }
+    return _developmentExtensions.contains(p.extension(path).toLowerCase());
+  }
+
+  Future<Uri?> _resolveOrigin() async {
+    final cached = _origin;
+    if (cached != null) return cached;
+    for (var attempt = 0; attempt < 200; attempt++) {
+      if (originFile.existsSync()) {
+        final source = originFile.readAsStringSync().trim();
+        final value = Uri.tryParse(source);
+        if (value != null && value.hasScheme && value.host.isNotEmpty) {
+          return _origin = value;
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return null;
+  }
+}
+
+const Set<String> _developmentFiles = <String>{
+  '/flutter_bootstrap.js',
+  '/flutter.js',
+  '/favicon.ico',
+  '/favicon.png',
+  '/main.dart.js',
+  '/manifest.json',
+  '/version.json',
+};
+const Set<String> _developmentPrefixes = <String>{
+  'assets',
+  'canvaskit',
+  'icons',
+  'packages',
+  'skwasm',
+};
+const Set<String> _developmentExtensions = <String>{
+  '.dart.js',
+  '.js',
+  '.map',
+  '.mjs',
+  '.otf',
+  '.ttf',
+  '.wasm',
+  '.woff',
+  '.woff2',
+};
+const Set<String> _requestHopHeaders = <String>{
+  'connection',
+  'content-length',
+  'host',
+  'transfer-encoding',
+  'upgrade',
+};
+const Set<String> _responseHopHeaders = <String>{
+  'connection',
+  'content-length',
+  'transfer-encoding',
+  'upgrade',
+};
