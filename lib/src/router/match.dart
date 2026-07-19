@@ -15,11 +15,11 @@ final class RouteMatch<P, S, D> {
     required this.search,
     required this.searchError,
     required this.location,
-    required RouteLoadScope scope,
-  }) : _scope = scope;
+    required RouteBranch branch,
+  }) : _branch = branch;
 
   /// The matched route definition.
-  final AppRoute<P, S, D> route;
+  final TypedRoute<P, S, D> route;
 
   /// Path parameters owned by the route.
   final P params;
@@ -33,7 +33,7 @@ final class RouteMatch<P, S, D> {
   /// The complete matched location.
   final Uri location;
 
-  final RouteLoadScope _scope;
+  final RouteBranch _branch;
 
   /// Runs the route loader.
   Future<D> load({QueryClient? query}) async {
@@ -41,15 +41,15 @@ final class RouteMatch<P, S, D> {
       params,
       search,
       location,
-      _scope,
+      _branch,
       query ?? QueryClient(),
     );
     return value as D;
   }
 }
 
-final class _ErasedMatch {
-  const _ErasedMatch({
+final class _MatchedNode {
+  const _MatchedNode({
     required this.route,
     required this.params,
     required this.search,
@@ -58,7 +58,7 @@ final class _ErasedMatch {
     required this.pathEnd,
   });
 
-  final AnyAppRoute route;
+  final RouteNode route;
   final Object? params;
   final Object? search;
   final Set<String> searchKeys;
@@ -91,10 +91,17 @@ final class RouteLoadResult {
 final class RouteMatches {
   RouteMatches._(this.sourceLocation, this._matches)
     : location = _canonicalize(sourceLocation, _matches),
-      _scope = RouteLoadScope.from(
+      routes = List<RouteNode>.unmodifiable(
+        _matches.map((match) => match.route),
+      ),
+      _branch = RouteBranch.from(
         _matches.map(
-          (match) =>
-              (route: match.route, params: match.params, search: match.search),
+          (match) => (
+            route: match.route,
+            params: match.params,
+            search: match.search,
+            data: null,
+          ),
         ),
       );
 
@@ -104,10 +111,13 @@ final class RouteMatches {
   /// The canonical location rebuilt from typed params and search state.
   final Uri location;
 
-  final List<_ErasedMatch> _matches;
-  final RouteLoadScope _scope;
+  /// Matched route definitions from root to leaf.
+  final List<RouteNode> routes;
 
-  static Uri _canonicalize(Uri source, List<_ErasedMatch> matches) {
+  final List<_MatchedNode> _matches;
+  final RouteBranch _branch;
+
+  static Uri _canonicalize(Uri source, List<_MatchedNode> matches) {
     final segments = <String>[];
     final claimedSearchKeys = <String>{};
     for (final match in matches) {
@@ -138,10 +148,6 @@ final class RouteMatches {
           );
   }
 
-  /// Matched route definitions from root to leaf.
-  List<AnyAppRoute> get routes =>
-      List<AnyAppRoute>.unmodifiable(_matches.map((match) => match.route));
-
   /// The closest terminal ancestor location, if one exists.
   Uri? get parentLocation {
     for (var index = _matches.length - 2; index >= 0; index--) {
@@ -168,32 +174,26 @@ final class RouteMatches {
   /// Runs every matched route loader in parallel.
   Future<Map<Object, RouteLoadResult>> loadAll({QueryClient? query}) async {
     final queryClient = query ?? QueryClient();
-    final entries = await Future.wait(
+    final result = HashMap<Object, RouteLoadResult>.identity();
+    await Future.wait<void>(
       _matches.map((match) async {
         try {
           final data = await match.route.loadObject(
             match.params,
             match.search,
             location,
-            _scope,
+            _branch,
             queryClient,
           );
-          return MapEntry<Object, RouteLoadResult>(
-            match.route.identity,
-            RouteLoadResult.data(data),
-          );
+          result[match.route.identity] = RouteLoadResult.data(data);
         } on Object catch (error, stackTrace) {
-          return MapEntry<Object, RouteLoadResult>(
-            match.route.identity,
-            RouteLoadResult.error(error, stackTrace),
+          result[match.route.identity] = RouteLoadResult.error(
+            error,
+            stackTrace,
           );
         }
       }),
     );
-    final result = HashMap<Object, RouteLoadResult>.identity();
-    for (final entry in entries) {
-      result[entry.key] = entry.value;
-    }
     return UnmodifiableMapView<Object, RouteLoadResult>(result);
   }
 
@@ -201,7 +201,7 @@ final class RouteMatches {
   Future<List<RouteDocument>> buildDocuments(
     Map<Object, RouteLoadResult> loads,
   ) async {
-    final scope = RouteDocumentScope.from(
+    final branch = RouteBranch.from(
       _matches.map((match) {
         final load = loads[match.route.identity];
         if (load == null || !load.hasData) {
@@ -227,7 +227,7 @@ final class RouteMatches {
             match.search,
             load.data,
             location,
-            scope,
+            branch,
           ),
         );
       }),
@@ -236,7 +236,7 @@ final class RouteMatches {
   }
 
   /// Returns the typed match belonging to [route].
-  RouteMatch<P, S, D>? match<P, S, D>(AppRoute<P, S, D> route) {
+  RouteMatch<P, S, D>? match<P, S, D>(TypedRoute<P, S, D> route) {
     for (final value in _matches) {
       if (identical(value.route.identity, route.identity)) {
         return RouteMatch<P, S, D>._(
@@ -245,7 +245,7 @@ final class RouteMatches {
           search: value.search as S,
           searchError: value.searchError,
           location: location,
-          scope: _scope,
+          branch: _branch,
         );
       }
     }
@@ -253,7 +253,7 @@ final class RouteMatches {
   }
 
   /// Returns the typed leaf match.
-  RouteMatch<P, S, D> leaf<P, S, D>(AppRoute<P, S, D> route) {
+  RouteMatch<P, S, D> leaf<P, S, D>(TypedRoute<P, S, D> route) {
     final value = match(route);
     if (value == null ||
         !identical(_matches.last.route.identity, route.identity)) {
@@ -266,14 +266,14 @@ final class RouteMatches {
 /// Matches locations against an immutable route tree.
 final class RouteMatcher {
   /// Creates a matcher and validates route patterns eagerly.
-  RouteMatcher(Iterable<AnyAppRoute> routes)
-    : _routes = _sort(List<AnyAppRoute>.unmodifiable(routes)) {
+  RouteMatcher(Iterable<RouteNode> routes)
+    : _routes = _sort(List<RouteNode>.unmodifiable(routes)) {
     _prepare(_routes, HashSet<Object>.identity());
   }
 
-  final List<AnyAppRoute> _routes;
-  final Map<Object, List<AnyAppRoute>> _children =
-      HashMap<Object, List<AnyAppRoute>>.identity();
+  final List<RouteNode> _routes;
+  final Map<Object, List<RouteNode>> _children =
+      HashMap<Object, List<RouteNode>>.identity();
 
   /// Matches [location], returning `null` when no complete branch matches.
   RouteMatches? match(Uri location) {
@@ -286,23 +286,26 @@ final class RouteMatcher {
     }
     final segments = location.pathSegments;
     final query = location.queryParametersAll;
-    final result = _matchLevel(
+    final matches = <_MatchedNode>[];
+    final matched = _matchLevel(
       routes: _routes,
       segments: segments,
       query: query,
       index: 0,
-      claimedSearchKeys: const <String>{},
+      claimedSearchKeys: <String>{},
+      matches: matches,
     );
-    if (result == null) return null;
-    return RouteMatches._(location, List<_ErasedMatch>.unmodifiable(result));
+    if (!matched) return null;
+    return RouteMatches._(location, List<_MatchedNode>.unmodifiable(matches));
   }
 
-  List<_ErasedMatch>? _matchLevel({
-    required List<AnyAppRoute> routes,
+  bool _matchLevel({
+    required List<RouteNode> routes,
     required List<String> segments,
     required Map<String, List<String>> query,
     required int index,
     required Set<String> claimedSearchKeys,
+    required List<_MatchedNode> matches,
   }) {
     for (final route in routes) {
       final patternMatch = route.compiledPattern.match(segments, index);
@@ -316,14 +319,18 @@ final class RouteMatcher {
       }
       final search = route.decodeQuery(query);
 
-      final overlap = claimedSearchKeys.intersection(search.keys);
-      if (overlap.isNotEmpty) {
+      Set<String>? overlap;
+      for (final key in search.keys) {
+        if (claimedSearchKeys.contains(key)) {
+          (overlap ??= <String>{}).add(key);
+        }
+      }
+      if (overlap != null) {
         throw StateError(
           'Search parameters $overlap are owned by more than one active route.',
         );
       }
-      final nextClaimedKeys = <String>{...claimedSearchKeys, ...search.keys};
-      final current = _ErasedMatch(
+      final current = _MatchedNode(
         route: route,
         params: params,
         search: search.value,
@@ -331,26 +338,34 @@ final class RouteMatcher {
         searchError: search.error,
         pathEnd: patternMatch.nextIndex,
       );
+      claimedSearchKeys.addAll(search.keys);
+      matches.add(current);
 
       if (patternMatch.nextIndex == segments.length && route.terminal) {
-        return <_ErasedMatch>[current];
+        return true;
       }
 
-      final childResult = _matchLevel(
+      final childMatched = _matchLevel(
         routes: _children[route.identity]!,
         segments: segments,
         query: query,
         index: patternMatch.nextIndex,
-        claimedSearchKeys: nextClaimedKeys,
+        claimedSearchKeys: claimedSearchKeys,
+        matches: matches,
       );
-      if (childResult != null) {
-        return <_ErasedMatch>[current, ...childResult];
+      if (childMatched) {
+        return true;
+      }
+
+      matches.removeLast();
+      for (final key in search.keys) {
+        claimedSearchKeys.remove(key);
       }
     }
-    return null;
+    return false;
   }
 
-  static List<AnyAppRoute> _sort(Iterable<AnyAppRoute> routes) {
+  static List<RouteNode> _sort(Iterable<RouteNode> routes) {
     final result = routes.toList(growable: false);
     result.sort(
       (left, right) =>
@@ -359,7 +374,7 @@ final class RouteMatcher {
     return result;
   }
 
-  void _prepare(List<AnyAppRoute> routes, Set<Object> identities) {
+  void _prepare(List<RouteNode> routes, Set<Object> identities) {
     for (final route in routes) {
       if (!identities.add(route.identity)) {
         throw StateError(

@@ -33,8 +33,7 @@ final class QueryCache {
 
   Query<dynamic>? getAny(String canonicalKey) => _queries[canonicalKey];
 
-  List<Query<dynamic>> get all =>
-      List<Query<dynamic>>.unmodifiable(_queries.values);
+  Iterable<Query<dynamic>> get all => _queries.values;
 
   void add(Query<dynamic> query) {
     if (_queries.putIfAbsent(query.key.canonical, () => query) == query) {

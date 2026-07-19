@@ -88,7 +88,7 @@ Infinite query 使用普通 query 状态机和一个 behavior：
 - 默认只 dehydrate 成功 query 和暂停 mutation。
 - hydration 不得用旧数据覆盖客户端更新的数据。
 - 恢复普通状态时强制 `fetchStatus: idle`，避免永远卡在 fetching。
-- 正在进行的 query 可以携带 pending channel，供 Start streaming 接续。
+- 正在进行的 query 可以携带 pending channel，供 Odroe 首屏流接续。
 - 服务端每个请求必须创建独立 QueryClient，禁止跨用户共享缓存。
 
 ### Persistence 是可替换边界
@@ -103,14 +103,14 @@ Infinite query 使用普通 query 状态机和一个 behavior：
 
 ## Odroe API 决策
 
-- `package:odroe/query_core.dart`：纯 Dart 状态机、client、observer、mutation、infinite、hydration、persistence。
-- `package:odroe/query.dart`：在 core 之上增加 Flutter provider、builder 和 selector。
+- `package:odroe/query.dart`：平台中立的状态机、client、observer、mutation、infinite、hydration、persistence。
+- `package:odroe/query_flutter.dart`：导出 `query.dart`，并增加 Flutter provider、builder 和 selector。
 - `QueryKey` 由字符串 namespace 和 JSON-like parts 组成；Map key 顺序不影响 identity，List 顺序影响 identity；不接受无法稳定编码的对象。
 - `QueryOptions<T>` 是可复用、强类型的 query contract；Flutter widget 不是 query 定义位置。
 - cancellation 使用 Odroe 自己的 `QueryCancelToken`，不绑定 HTTP client。
 - focus、online、clock、timer 都是可替换基础设施；默认不引入 connectivity 等平台插件。
 - QueryClient 支持全局 defaults 和按 key prefix 的 defaults，但不会制造第二套配置 DSL。
-- Start loader 使用请求级 QueryClient 预取，并通过同一 hydration format 交给 Flutter。
+- Odroe server loader 使用请求级 QueryClient 预取，并通过同一 hydration format 交给 Flutter。
 
 ## 明确不做
 
@@ -118,5 +118,4 @@ Infinite query 使用普通 query 状态机和一个 behavior：
 - 不以 `Map<String, dynamic>` 作为公开 query 定义 API。
 - 不为 SQLite 或任何数据库提供特权路径。
 - 不复制 React hooks、Proxy property tracking 或 JS 的 `undefined` 偶然语义。
-- 不用 code generation 才能创建普通 query；文件编译只负责 Start/Router 边界。
-
+- 不用 code generation 才能创建普通 query；文件编译只负责 server/client 与 Router 边界。

@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/widgets.dart' hide PageRoute;
+import 'package:flutter/widgets.dart' as flutter show PageRoute;
 
 import '../document/document.dart';
 import '../query/client.dart';
@@ -51,7 +52,7 @@ class RouteState<P, S> {
 
   /// Returns a typed active ancestor or current route match.
   RouteMatch<ParentP, ParentS, ParentD>? match<ParentP, ParentS, ParentD>(
-    AppRoute<ParentP, ParentS, ParentD> route,
+    TypedRoute<ParentP, ParentS, ParentD> route,
   ) => _matches.match(route);
 }
 
@@ -159,41 +160,9 @@ typedef RouteErrorBuilder<P, S> =
 typedef RouteNotFoundBuilder<P, S> =
     Widget Function(RouteContext<P, S> context);
 
-/// A route definition carrying Flutter page behavior.
-abstract class PageBoundRoute implements AnyAppRoute {
-  /// Builds this route's page for one navigation snapshot.
-  Page<Object?> buildPage({
-    required BuildContext context,
-    required RouteNavigator router,
-    required RouteMatches matches,
-    required RouteLoadResult? loadResult,
-    required Object? pageScope,
-    required PopInvokedWithResultCallback<Object?> onPopInvoked,
-  });
-}
-
-/// A route definition carrying a nested Flutter navigator.
-abstract class ShellBoundRoute implements AnyAppRoute {
-  /// Optional page rendered at the shell route's own location.
-  PageBoundRoute? get indexPage;
-
-  /// Builds the shell page around [pages].
-  Page<Object?> buildShellPage({
-    required BuildContext context,
-    required RouteNavigator router,
-    required RouteMatches matches,
-    required RouteLoadResult? loadResult,
-    required Object? pageScope,
-    required List<Page<Object?>> pages,
-    required PopInvokedWithResultCallback<Object?> onPopInvoked,
-    required DidRemovePageCallback onDidRemovePage,
-  });
-}
-
-/// The page fragment attached to an [AppRoute].
-final class PageRouteFragment<P, S, D>
-    implements PageBoundRoute, TypedAppRoute<P, S, D> {
-  PageRouteFragment._({
+/// A typed route with Flutter page behavior.
+final class PageRoute<P, S, D> implements TypedRoute<P, S, D> {
+  PageRoute._({
     required this.definition,
     required this.build,
     required this.page,
@@ -202,7 +171,7 @@ final class PageRouteFragment<P, S, D>
     required this.notFound,
   }) : assert((build == null) != (page == null));
 
-  /// The client-safe route definition supplying this fragment's types.
+  /// The client-safe route definition supplying this route's types.
   final AppRoute<P, S, D> definition;
 
   /// The default widget builder.
@@ -221,7 +190,7 @@ final class PageRouteFragment<P, S, D>
   final RouteNotFoundBuilder<P, S>? notFound;
 
   @override
-  List<AnyAppRoute> get children => definition.children;
+  List<RouteNode> get children => definition.children;
 
   @override
   RoutePattern get compiledPattern => definition.compiledPattern;
@@ -257,9 +226,9 @@ final class PageRouteFragment<P, S, D>
     Object? params,
     Object? search,
     Uri location,
-    RouteLoadScope scope,
+    RouteBranch branch,
     QueryClient query,
-  ) => definition.loadObject(params, search, location, scope, query);
+  ) => definition.loadObject(params, search, location, branch, query);
 
   @override
   FutureOr<RouteDocument?> buildDocumentObject(
@@ -267,8 +236,8 @@ final class PageRouteFragment<P, S, D>
     Object? search,
     Object? data,
     Uri location,
-    RouteDocumentScope scope,
-  ) => definition.buildDocumentObject(params, search, data, location, scope);
+    RouteBranch branch,
+  ) => definition.buildDocumentObject(params, search, data, location, branch);
 
   @override
   List<String> encodePath(Object? params) => definition.encodePath(params);
@@ -278,8 +247,8 @@ final class PageRouteFragment<P, S, D>
       definition.encodeQuery(search);
 
   /// Returns a copy with [children] attached to the route definition.
-  PageRouteFragment<P, S, D> withChildren(Iterable<AnyAppRoute> children) =>
-      PageRouteFragment<P, S, D>._(
+  PageRoute<P, S, D> withChildren(Iterable<RouteNode> children) =>
+      PageRoute<P, S, D>._(
         definition: definition.withChildren(children),
         build: build,
         page: page,
@@ -288,14 +257,14 @@ final class PageRouteFragment<P, S, D>
         notFound: notFound,
       );
 
-  /// Binds generated file-route configuration to this page fragment.
-  PageRouteFragment<P, S, D> compiled({
+  /// Binds generated file-route configuration to this page route.
+  PageRoute<P, S, D> compiled({
     required String path,
     PathParams<P>? params,
     SearchParams<S>? search,
     required bool terminal,
-    Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
-  }) => PageRouteFragment<P, S, D>._(
+    Iterable<RouteNode> children = const <RouteNode>[],
+  }) => PageRoute<P, S, D>._(
     definition: definition.compiled(
       path: path,
       params: params,
@@ -310,7 +279,7 @@ final class PageRouteFragment<P, S, D>
     notFound: notFound,
   );
 
-  @override
+  /// Builds this route's Flutter page for one navigation snapshot.
   Page<Object?> buildPage({
     required BuildContext context,
     required RouteNavigator router,
@@ -319,9 +288,9 @@ final class PageRouteFragment<P, S, D>
     required Object? pageScope,
     required PopInvokedWithResultCallback<Object?> onPopInvoked,
   }) {
-    final match = matches.match(definition);
+    final match = matches.match(this);
     if (match == null) {
-      throw StateError('Page fragment is not part of the active route branch.');
+      throw StateError('Page route is not part of the active route branch.');
     }
     RouteContext<P, S> routeContext(BuildContext buildContext) =>
         RouteContext<P, S>(
@@ -417,10 +386,9 @@ final class PageRouteFragment<P, S, D>
 typedef RouteShellBuilder<P, S, D> =
     Widget Function(RoutePageContext<P, S, D> context, Widget navigator);
 
-/// A shell fragment attached to an [AppRoute].
-final class ShellRouteFragment<P, S, D>
-    implements ShellBoundRoute, TypedAppRoute<P, S, D> {
-  ShellRouteFragment._({
+/// A typed route carrying a nested Flutter navigator.
+final class ShellRoute<P, S, D> implements TypedRoute<P, S, D> {
+  ShellRoute._({
     required this.definition,
     required this.build,
     required this.pending,
@@ -429,7 +397,7 @@ final class ShellRouteFragment<P, S, D>
     required this.indexPage,
   });
 
-  /// The client-safe route definition supplying this fragment's types.
+  /// The client-safe route definition supplying this route's types.
   final AppRoute<P, S, D> definition;
 
   /// The ready shell builder.
@@ -444,11 +412,11 @@ final class ShellRouteFragment<P, S, D>
   /// The matched not-found builder.
   final RouteNotFoundBuilder<P, S>? notFound;
 
-  @override
-  final PageRouteFragment<P, S, D>? indexPage;
+  /// The optional page rendered at the shell route's own location.
+  final PageRoute<P, S, D>? indexPage;
 
   @override
-  List<AnyAppRoute> get children => definition.children;
+  List<RouteNode> get children => definition.children;
 
   @override
   RoutePattern get compiledPattern => definition.compiledPattern;
@@ -484,9 +452,9 @@ final class ShellRouteFragment<P, S, D>
     Object? params,
     Object? search,
     Uri location,
-    RouteLoadScope scope,
+    RouteBranch branch,
     QueryClient query,
-  ) => definition.loadObject(params, search, location, scope, query);
+  ) => definition.loadObject(params, search, location, branch, query);
 
   @override
   FutureOr<RouteDocument?> buildDocumentObject(
@@ -494,8 +462,8 @@ final class ShellRouteFragment<P, S, D>
     Object? search,
     Object? data,
     Uri location,
-    RouteDocumentScope scope,
-  ) => definition.buildDocumentObject(params, search, data, location, scope);
+    RouteBranch branch,
+  ) => definition.buildDocumentObject(params, search, data, location, branch);
 
   @override
   List<String> encodePath(Object? params) => definition.encodePath(params);
@@ -505,14 +473,14 @@ final class ShellRouteFragment<P, S, D>
       definition.encodeQuery(search);
 
   /// Attaches the page rendered at this shell's own location.
-  ShellRouteFragment<P, S, D> withPage(PageRouteFragment<P, S, D> page) =>
-      ShellRouteFragment<P, S, D>._(
+  ShellRoute<P, S, D> withPage(PageRoute<P, S, D> page) =>
+      ShellRoute<P, S, D>._(
         definition: definition,
         build: build,
         pending: pending,
         error: error,
         notFound: notFound,
-        indexPage: PageRouteFragment<P, S, D>._(
+        indexPage: PageRoute<P, S, D>._(
           definition: definition,
           build: page.build,
           page: page.page,
@@ -522,13 +490,13 @@ final class ShellRouteFragment<P, S, D>
         ),
       );
 
-  /// Binds generated file-route configuration to this shell fragment.
-  ShellRouteFragment<P, S, D> compiled({
+  /// Binds generated file-route configuration to this shell route.
+  ShellRoute<P, S, D> compiled({
     required String path,
     PathParams<P>? params,
     SearchParams<S>? search,
     required bool terminal,
-    Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
+    Iterable<RouteNode> children = const <RouteNode>[],
   }) {
     final compiledDefinition = definition.compiled(
       path: path,
@@ -538,7 +506,7 @@ final class ShellRouteFragment<P, S, D>
       children: children,
     );
     final page = indexPage;
-    return ShellRouteFragment<P, S, D>._(
+    return ShellRoute<P, S, D>._(
       definition: compiledDefinition,
       build: build,
       pending: pending,
@@ -546,7 +514,7 @@ final class ShellRouteFragment<P, S, D>
       notFound: notFound,
       indexPage: page == null
           ? null
-          : PageRouteFragment<P, S, D>._(
+          : PageRoute<P, S, D>._(
               definition: compiledDefinition,
               build: page.build,
               page: page.page,
@@ -557,7 +525,7 @@ final class ShellRouteFragment<P, S, D>
     );
   }
 
-  @override
+  /// Builds this route's nested Flutter navigator page.
   Page<Object?> buildShellPage({
     required BuildContext context,
     required RouteNavigator router,
@@ -568,11 +536,9 @@ final class ShellRouteFragment<P, S, D>
     required PopInvokedWithResultCallback<Object?> onPopInvoked,
     required DidRemovePageCallback onDidRemovePage,
   }) {
-    final match = matches.match(definition);
+    final match = matches.match(this);
     if (match == null) {
-      throw StateError(
-        'Shell fragment is not part of the active route branch.',
-      );
+      throw StateError('Shell route is not part of the active route branch.');
     }
     RouteContext<P, S> routeContext(BuildContext buildContext) =>
         RouteContext<P, S>(
@@ -631,8 +597,8 @@ final class ShellRouteFragment<P, S, D>
 
 /// Attaches Flutter page behavior to a route definition.
 extension AppRoutePage<P, S, D> on AppRoute<P, S, D> {
-  /// Creates a page fragment.
-  PageRouteFragment<P, S, D> page({
+  /// Creates a Flutter page route.
+  PageRoute<P, S, D> page({
     RouteWidgetBuilder<P, S, D>? build,
     RoutePageBuilder<P, S, D>? page,
     RoutePendingBuilder<P, S>? pending,
@@ -642,7 +608,7 @@ extension AppRoutePage<P, S, D> on AppRoute<P, S, D> {
     if ((build == null) == (page == null)) {
       throw ArgumentError('Provide exactly one of build or page.');
     }
-    return PageRouteFragment<P, S, D>._(
+    return PageRoute<P, S, D>._(
       definition: this,
       build: build,
       page: page,
@@ -655,13 +621,13 @@ extension AppRoutePage<P, S, D> on AppRoute<P, S, D> {
 
 /// Attaches a nested Flutter navigator to a route definition.
 extension AppRouteShell<P, S, D> on AppRoute<P, S, D> {
-  /// Creates a shell fragment.
-  ShellRouteFragment<P, S, D> shell({
+  /// Creates a Flutter shell route.
+  ShellRoute<P, S, D> shell({
     required RouteShellBuilder<P, S, D> build,
     RoutePendingBuilder<P, S>? pending,
     RouteErrorBuilder<P, S>? error,
     RouteNotFoundBuilder<P, S>? notFound,
-  }) => ShellRouteFragment<P, S, D>._(
+  }) => ShellRoute<P, S, D>._(
     definition: this,
     build: build,
     pending: pending,
@@ -672,7 +638,7 @@ extension AppRouteShell<P, S, D> on AppRoute<P, S, D> {
 }
 
 /// Creates a static page route without a separate route contract file.
-PageRouteFragment<NoParams, NoSearch, NoData> pageRoute({
+PageRoute<NoParams, NoSearch, NoData> pageRoute({
   required RouteWidgetBuilder<NoParams, NoSearch, NoData> build,
   RoutePendingBuilder<NoParams, NoSearch>? pending,
   RouteErrorBuilder<NoParams, NoSearch>? error,
@@ -685,7 +651,7 @@ PageRouteFragment<NoParams, NoSearch, NoData> pageRoute({
 );
 
 /// Creates a static shell route without a separate route contract file.
-ShellRouteFragment<NoParams, NoSearch, NoData> shellRoute({
+ShellRoute<NoParams, NoSearch, NoData> shellRoute({
   required RouteShellBuilder<NoParams, NoSearch, NoData> build,
   RoutePendingBuilder<NoParams, NoSearch>? pending,
   RouteErrorBuilder<NoParams, NoSearch>? error,
@@ -730,7 +696,7 @@ final class _WidgetPage extends Page<Object?> {
   Route<Object?> createRoute(BuildContext context) => _WidgetPageRoute(this);
 }
 
-final class _WidgetPageRoute extends PageRoute<Object?> {
+final class _WidgetPageRoute extends flutter.PageRoute<Object?> {
   _WidgetPageRoute(_WidgetPage page) : super(settings: page);
 
   @override

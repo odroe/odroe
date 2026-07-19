@@ -1,4 +1,4 @@
-import 'package:odroe/query_core.dart';
+import 'package:odroe/query.dart';
 
 Future<void> main() async {
   final client = QueryClient();
@@ -36,6 +36,7 @@ Future<void> main() async {
   }
   stopwatch.stop();
   _print('3-way fetch deduplication', stopwatch.elapsed, 10000);
+  client.clear();
 }
 
 void _run(String name, int iterations, void Function() operation) {

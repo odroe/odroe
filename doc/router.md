@@ -23,7 +23,7 @@ lib/routes/
 │   └── [postId]/
 │       ├── route.dart           /posts/:postId 的契约
 │       ├── page.dart            /posts/:postId 的 Flutter 页面
-│       └── server.dart          服务端 fragment
+│       └── server.dart          服务端 route
 ├── docs/
 │   └── [...slug]/               /docs/*slug
 └── (account)/                   不进入 URL 的分组
@@ -42,7 +42,7 @@ lib/routes/
 
 多个非终止 route group 可以位于同一级。会造成相同终止 URL 的 group 会被诊断为冲突。
 
-## 四种 fragment
+## 四类 route 文件
 
 ### `route.dart`
 
@@ -50,7 +50,7 @@ lib/routes/
 
 每个 `route.dart` 必须导出顶层 `route`，并直接初始化 `AppRoute<Params, Search, Data>`。动态目录必须声明命名 record `Params`；拥有 search 的 route 必须声明命名 record `Search`。
 
-共享契约从 `package:odroe/router_core.dart` 导入。该入口不依赖 Flutter UI，因此同一个 `route.dart` 可被客户端 page 和 Dart VM server 同时引用。
+共享契约从 `package:odroe/route.dart` 导入。该入口不依赖 Flutter UI，因此同一个 `route.dart` 可被客户端 page 和 Dart VM server 同时引用。
 
 ### `page.dart`
 
@@ -103,7 +103,7 @@ final route = shellRoute(
 声明服务端实现，且必须复用同目录的 `route.dart`：
 
 ```dart
-import 'package:odroe/start.dart';
+import 'package:odroe/server.dart';
 
 import 'route.dart' as definition;
 
@@ -112,7 +112,7 @@ final route = definition.route.server(
 );
 ```
 
-`server.dart` 不会进入客户端 `lib/routes.dart`。编译器把它写入独立的 `lib/routes.server.dart`，并把其中的 Server Function 转成 client-safe typed ref。loader、middleware、公开 HTTP handler 和 RPC 都复用同一个 route identity；完整协议见 [Start 文档](start.md)。
+`server.dart` 不会进入客户端 `lib/routes.dart`。编译器把它写入独立的 `lib/routes.server.dart`，并把其中的 Server Function 转成 client-safe typed ref。loader、middleware、公开 HTTP handler 和 RPC 都复用同一个 route identity；完整协议见 [Server、RPC、SSR/SSG](server.md)。
 
 Loader 可以强类型读取 active ancestor 的 params/search，父子 loader 仍然并行：
 
@@ -201,11 +201,11 @@ dart run odroe generate
 dart run odroe dev
 ```
 
-默认读取 `lib/routes/`，输出格式化后的 `lib/routes.dart` 和 `lib/routes.server.dart`。也可设置 `--project`、`--routes`、`--output`、`--server-output`。`routes` 子命令仍可用于只生成 Router，但正常应用开发使用 `generate/dev/build`。
+默认读取 `lib/routes/`，输出格式化后的 `lib/routes.dart` 和 `lib/routes.server.dart`。也可设置 `--project`、`--routes`、`--output`、`--server-output`；持续监听时使用 `generate --watch`。
 
 生成文件只包含：
 
-- 一个普通 `List<AnyAppRoute> routeTree`；
+- 一个普通 `List<RouteNode> routeTree`；
 - 一个分层、强类型、绝对地址的 `routes` facade；
 - `PathParams.schema()` / `SearchParams.schema()` 对应的双向 codec。
 
@@ -262,4 +262,4 @@ final destination = organization
 
 `RouteRefPath` 使用与文件路由完全相同的双向 codec，并在合并 search 时检查 ownership 冲突。
 
-`package:odroe/router_core.dart` 只公开纯 Dart 的 params、search、matcher、loader contract、`RouteRef` 与 `Destination`；`package:odroe/router.dart` 在 core 之上公开 Flutter 的 page、shell 与 `OdroeRouter`。`start.dart` 只依赖 core，因此服务端不会传递导入 `dart:ui`。
+`package:odroe/route.dart` 公开平台中立的 params、search、matcher、loader contract、`RouteRef` 与 `Destination`；`package:odroe/router.dart` 导出 `route.dart`，并增加 Flutter page、shell 与 `OdroeRouter`。route `server.dart` 使用 `package:odroe/server.dart`，需要共享 route 类型时同时导入 `package:odroe/route.dart`，不会把 Flutter UI 带入服务端。

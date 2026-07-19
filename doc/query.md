@@ -1,20 +1,20 @@
 # Query
 
-Odroe Query 管理异步 server state。它可独立用于 Dart，也与 Flutter、Router 和 Start 使用同一份状态机。
+Odroe Query 管理异步 server state。它可独立用于 Dart，也与 Flutter、Router 和 Odroe server 使用同一份状态机。
 
 性能基准可直接运行 `dart run benchmark/query.dart`；它覆盖 hot cache read、稳定 key 编码和三路并发请求去重，不引入 benchmark framework 依赖。
 
 ## 入口
 
-- `package:odroe/query_core.dart`：纯 Dart client、cache、observer、mutation、infinite query、hydration 和 persistence。
-- `package:odroe/query.dart`：在 core 之上增加 Flutter provider、builder 和 selector。
+- `package:odroe/query.dart`：平台中立的 client、cache、observer、mutation、infinite query、hydration 和 persistence。
+- `package:odroe/query_flutter.dart`：导出 `query.dart`，并增加 Flutter provider、builder 和 selector。
 
 ## 定义与读取
 
 Query 定义是普通、可复用的强类型对象。key 的 Map 顺序不影响 identity，List 顺序会影响 identity。
 
 ```dart
-import 'package:odroe/query_core.dart';
+import 'package:odroe/query.dart';
 
 final postQuery = (int postId) => QueryOptions<Post>(
   key: QueryKey('post', [postId]),
@@ -36,6 +36,8 @@ final post = await client.ensureQueryData(postQuery(42));
 ## Flutter
 
 ```dart
+import 'package:odroe/query_flutter.dart';
+
 final client = QueryClient();
 
 void main() => runApp(
@@ -151,7 +153,7 @@ final feed = InfiniteQueryOptions<FeedPage, String>(
 
 `InfiniteQueryObserver` 和 `InfiniteQueryBuilder` 提供 next/previous controls。后台 refetch 从当前最早页开始顺序刷新；`maxPages` 同时限制内存和之后的 refetch 成本。
 
-## Router 与 Start
+## Router 与服务端
 
 每个 matched branch 的 loader 共享同一个 QueryClient，因此父子 loader 请求相同 key 时只访问一次数据源：
 
@@ -161,7 +163,7 @@ final route = AppRoute<Params, Search, Post>(
 );
 ```
 
-`OdroeRouter.query` 是 Flutter Router 使用的 client。Start 为每个 HTTP request 创建独立 client，执行 loaders 后 `dehydrate`，Flutter 通过同一格式 `hydrate`，不会泄漏其他请求的数据。
+`OdroeRouter.query` 是 Flutter Router 使用的 client。Odroe server 为每个 HTTP request 创建独立 client，执行 loaders 后 `dehydrate`，Flutter 通过同一格式 `hydrate`，不会泄漏其他请求的数据。
 
 Hydration 以 snapshot 的 `dehydratedAt` 计算状态年龄，而不是直接比较两台机器的墙上时钟；迟到的无数据错误也不会清掉客户端已有内容。这样首屏流式 Query 与用户随后触发的客户端刷新可以安全竞争。
 

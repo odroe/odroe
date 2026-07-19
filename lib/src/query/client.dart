@@ -144,10 +144,9 @@ final class QueryClient {
   }
 
   Query<T> query<T>(QueryOptions<T> options) {
-    final resolved = resolve(options);
     final existing = queryCache.get<T>(options.key.canonical);
     if (existing != null) {
-      existing.setOptions(resolved);
+      existing.setOptions(options);
       return existing;
     }
     final untyped = queryCache.getAny(options.key.canonical);
@@ -155,10 +154,12 @@ final class QueryClient {
         ? null
         : _castQueryState<T>(untyped.state);
     if (untyped != null) queryCache.remove(untyped);
+    final resolved = resolve(options);
     final created = Query<T>(
       client: this,
       cache: queryCache,
       options: resolved,
+      sourceOptions: options,
       state: restoredState,
     );
     queryCache.add(created);

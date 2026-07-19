@@ -8,7 +8,15 @@ final class QueryKey {
     if (namespace.isEmpty) {
       throw ArgumentError.value(namespace, 'namespace', 'Must not be empty.');
     }
-    _canonical = _encode(<Object?>[namespace, ...this.parts]);
+    _encodedParts = List<String>.generate(
+      this.parts.length,
+      (index) => _encode(this.parts[index]),
+      growable: false,
+    );
+    final encodedNamespace = jsonEncode(namespace);
+    _canonical = _encodedParts.isEmpty
+        ? '[$encodedNamespace]'
+        : '[$encodedNamespace,${_encodedParts.join(',')}]';
   }
 
   /// Restores a key from its JSON representation.
@@ -26,6 +34,7 @@ final class QueryKey {
   final List<Object?> parts;
 
   late final String _canonical;
+  late final List<String> _encodedParts;
 
   /// Stable canonical form used by caches and persistence.
   String get canonical => _canonical;
@@ -35,8 +44,8 @@ final class QueryKey {
     if (namespace != prefix.namespace || parts.length < prefix.parts.length) {
       return false;
     }
-    for (var index = 0; index < prefix.parts.length; index++) {
-      if (_encode(parts[index]) != _encode(prefix.parts[index])) return false;
+    for (var index = 0; index < prefix._encodedParts.length; index++) {
+      if (_encodedParts[index] != prefix._encodedParts[index]) return false;
     }
     return true;
   }

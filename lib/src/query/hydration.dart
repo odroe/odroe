@@ -26,7 +26,7 @@ final class DehydratedQuery {
   final DateTime dehydratedAt;
   final Map<String, Object?> meta;
 
-  /// Used by Start streaming; deliberately omitted from [toJson].
+  /// Used by server streaming; deliberately omitted from [toJson].
   final Future<Object?>? pending;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -81,7 +81,7 @@ final class DehydratedMutation {
       );
 }
 
-/// Transport-neutral Query snapshot shared by Start and persistence.
+/// Transport-neutral Query snapshot shared by handoff and persistence.
 final class DehydratedState {
   const DehydratedState({required this.queries, required this.mutations});
 
@@ -114,7 +114,7 @@ final class DehydratedState {
       );
 }
 
-/// Creates a snapshot suitable for Start handoff or persistence.
+/// Creates a snapshot suitable for server handoff or persistence.
 DehydratedState dehydrate(
   QueryClient client, {
   QuerySerializeData serializeData = _identity,

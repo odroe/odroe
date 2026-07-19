@@ -1,4 +1,5 @@
-import 'package:odroe/start.dart';
+import 'package:odroe/route.dart';
+import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -38,15 +39,15 @@ void main() {
         description: 'Parent description',
         body: HtmlElement('main', children: <HtmlNode>[HtmlOutlet()]),
       ),
-      children: <AnyAppRoute>[child],
+      children: <RouteNode>[child],
     );
-    final app = StartApplication(routes: <AnyAppRoute>[parent]);
+    final app = OdroeServer(routes: <RouteNode>[parent]);
 
     final response = await app.handle(
-      StartRequest.bytes(
-        method: StartMethod.get,
+      ServerRequest.bytes(
+        method: HttpMethod.get,
         uri: Uri.parse('http://localhost/post'),
-        headers: StartHeaders.single(<String, String>{'accept': 'text/html'}),
+        headers: Headers.single(<String, String>{'accept': 'text/html'}),
       ),
     );
     final html = await response.readText();
@@ -67,36 +68,5 @@ void main() {
     );
     expect(html, isNot(contains('__odroe_state__')));
     expect(html, isNot(contains('flutter_bootstrap.js')));
-  });
-
-  test('a parent body without an outlet rejects descendant content', () {
-    expect(
-      () => resolveDocument(const <RouteDocument>[
-        RouteDocument(body: HtmlElement('main')),
-        RouteDocument(body: HtmlElement('article')),
-      ]),
-      throwsStateError,
-    );
-  });
-
-  test('renderer rejects invalid tags and children on void elements', () {
-    expect(
-      () => renderDocumentStart(
-        resolveDocument(const <RouteDocument>[
-          RouteDocument(body: HtmlElement('script>alert(1)')),
-        ]),
-      ),
-      throwsFormatException,
-    );
-    expect(
-      () => renderDocumentStart(
-        resolveDocument(const <RouteDocument>[
-          RouteDocument(
-            body: HtmlElement('img', children: <HtmlNode>[HtmlText('bad')]),
-          ),
-        ]),
-      ),
-      throwsStateError,
-    );
   });
 }

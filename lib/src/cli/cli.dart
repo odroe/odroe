@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:odroe/router_compiler.dart';
+import 'package:odroe/src/router_compiler/compiler.dart';
 
 import 'build.dart';
 import 'development.dart';
@@ -16,8 +16,7 @@ Future<int> runOdroe(
 }) async {
   final out = output ?? stdout;
   final err = errors ?? stderr;
-  final shared = _generationParser();
-  final routes = _generationParser()
+  final generate = _generationParser()
     ..addFlag(
       'watch',
       abbr: 'w',
@@ -30,18 +29,18 @@ Future<int> runOdroe(
     ..addFlag(
       'server-only',
       negatable: false,
-      help: 'Run Start without starting flutter run.',
+      help: 'Run the Odroe server without starting flutter run.',
     );
   final build = _generationParser()
     ..addFlag(
       'server-only',
       negatable: false,
-      help: 'Build only the Start server.',
+      help: 'Build only the Odroe server.',
     )
     ..addFlag(
       'server',
       defaultsTo: true,
-      help: 'Build the Start server artifact.',
+      help: 'Build the Odroe server artifact.',
     )
     ..addOption(
       'server-artifact',
@@ -65,8 +64,7 @@ Future<int> runOdroe(
     );
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
-    ..addCommand('generate', shared)
-    ..addCommand('routes', routes)
+    ..addCommand('generate', generate)
     ..addCommand('dev', dev)
     ..addCommand('build', build);
 
@@ -87,7 +85,7 @@ Future<int> runOdroe(
     out.writeln(
       _commandUsage(
         command.name!,
-        _parserFor(command.name!, shared, routes, dev, build),
+        _parserFor(command.name!, generate, dev, build),
       ),
     );
     return 0;
@@ -96,8 +94,7 @@ Future<int> runOdroe(
   try {
     final project = CliProject.from(command);
     return switch (command.name) {
-      'generate' => generateRoutes(project, out, err) == null ? 1 : 0,
-      'routes' =>
+      'generate' =>
         command.flag('watch')
             ? await _watchRoutes(project, out, err)
             : (generateRoutes(project, out, err) == null ? 1 : 0),
@@ -170,12 +167,10 @@ ArgParser _generationParser() => ArgParser()
 ArgParser _parserFor(
   String name,
   ArgParser generate,
-  ArgParser routes,
   ArgParser dev,
   ArgParser build,
 ) => switch (name) {
   'generate' => generate,
-  'routes' => routes,
   'dev' => dev,
   'build' => build,
   _ => ArgParser(),
@@ -227,9 +222,8 @@ String _usage(ArgParser parser) =>
     'Usage: dart run odroe <command> [arguments]\n\n'
     'Commands:\n'
     '  generate  Generate client and server route targets.\n'
-    '  dev       Watch source, run Start, and run Flutter.\n'
-    '  build     Build a chosen Flutter target and Start server.\n'
-    '  routes    Generate routes only, optionally watching.\n\n'
+    '  dev       Watch source, run Odroe, and run Flutter.\n'
+    '  build     Build a Flutter target and the Odroe server.\n'
     '${parser.usage}\n\n'
     'Flutter arguments and options follow --. A build target without options '
     'may be passed directly, for example: odroe build apk.';

@@ -25,8 +25,10 @@ final class Query<T> {
     required this.client,
     required this.cache,
     required ResolvedQueryOptions<T> options,
+    QueryOptions<T>? sourceOptions,
     QueryState<T>? state,
   }) : options = options,
+       _sourceOptions = sourceOptions,
        state = state ?? _initialState(options) {
     _initialStateValue = this.state;
     scheduleGc();
@@ -37,6 +39,7 @@ final class Query<T> {
   ResolvedQueryOptions<T> options;
   QueryState<T> state;
 
+  QueryOptions<T>? _sourceOptions;
   late QueryState<T> _initialStateValue;
   final Set<QueryObserverHandle> _observers = <QueryObserverHandle>{};
   Timer? _gcTimer;
@@ -64,8 +67,10 @@ final class Query<T> {
     };
   }
 
-  void setOptions(ResolvedQueryOptions<T> value) {
-    options = value;
+  void setOptions(QueryOptions<T> value) {
+    if (identical(_sourceOptions, value)) return;
+    _sourceOptions = value;
+    options = client.resolve(value);
     scheduleGc();
   }
 

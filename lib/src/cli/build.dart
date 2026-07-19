@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:odroe/start_io.dart';
+import 'package:odroe/server_io.dart';
 import 'package:path/path.dart' as p;
 
 import 'project.dart';
@@ -42,7 +42,7 @@ Future<int> runBuild(
       !serverOnly &&
       (!generated.hasFlutter || flutterTarget == 'web');
   if (shouldPrerender && !buildServer) {
-    err.writeln('Prerendering requires the Start server artifact.');
+    err.writeln('Prerendering requires the Odroe server artifact.');
     return 64;
   }
   late final File artifact;
@@ -156,7 +156,7 @@ Future<int> _prerenderBuild(
     process.exitCode.then((code) {
       if (!ready.isCompleted) {
         ready.completeError(
-          StateError('Start server exited with code $code before listening.'),
+          StateError('Odroe server exited with code $code before listening.'),
         );
       }
     }),
@@ -164,30 +164,22 @@ Future<int> _prerenderBuild(
 
   try {
     final origin = await ready.future.timeout(const Duration(seconds: 20));
-    final result = await StartPrerenderer().render(
+    final rendered = await Prerenderer().render(
       origin: origin,
       routes: routes,
       output: outputDirectory,
-      options: StartPrerenderOptions(
-        concurrency: concurrency,
-        crawlLinks: true,
-        failOnError: true,
-      ),
+      concurrency: concurrency,
+      crawlLinks: true,
     );
-    for (final route in result.routes) {
+    for (final route in rendered) {
       final relative = p.relative(route.file.path, from: project.root.path);
       out.writeln(
         'Prerendered ${route.route} -> $relative '
         '(${route.elapsed.inMilliseconds}ms)',
       );
     }
-    out.writeln('Prerendered ${result.routes.length} routes.');
+    out.writeln('Prerendered ${rendered.length} routes.');
     return 0;
-  } on StartPrerenderException catch (error) {
-    for (final failure in error.failures) {
-      err.writeln('Failed ${failure.route}: ${failure.error}');
-    }
-    return 1;
   } on Object catch (error) {
     err.writeln(error);
     return 1;

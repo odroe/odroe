@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/widgets.dart' hide PageRoute;
 
 import '../query/client.dart';
 import 'external_navigation.dart';
@@ -18,7 +18,7 @@ typedef RouterErrorBuilder =
 
 /// Server-rendered loader data consumed by the first Flutter navigation.
 final class RouterInitialState {
-  /// Creates the initial route state produced by the Start server.
+  /// Creates the initial route state produced by the Odroe server.
   const RouterInitialState({required this.location, required this.loads});
 
   /// The canonical location that produced [loads].
@@ -32,7 +32,7 @@ final class RouterInitialState {
 final class OdroeRouter extends RouterConfig<Object> implements RouteNavigator {
   /// Creates a router from manually assembled or generated routes.
   factory OdroeRouter({
-    required Iterable<AnyAppRoute> routes,
+    required Iterable<RouteNode> routes,
     Uri? initialLocation,
     WidgetBuilder? loading,
     WidgetBuilder? notFound,
@@ -519,12 +519,12 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
     final matches = snapshot.matches!;
     var routes = matches.routes;
     if (pushed) {
-      final shellIndex = routes.indexWhere((route) => route is ShellBoundRoute);
+      final shellIndex = routes.indexWhere((route) => route is ShellRoute);
       if (shellIndex >= 0) {
         routes = routes.sublist(shellIndex);
       } else {
-        final page = routes.whereType<PageBoundRoute>().lastOrNull;
-        routes = page == null ? const <AnyAppRoute>[] : <AnyAppRoute>[page];
+        final page = routes.whereType<PageRoute>().lastOrNull;
+        routes = page == null ? const <RouteNode>[] : <RouteNode>[page];
       }
     }
     final pages = _buildMatchedPages(context, record, matches, routes);
@@ -533,7 +533,7 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
         key: ValueKey<Object>(record.pageScope),
         child:
             _notFound?.call(context) ??
-            ErrorWidget('Matched route has no page fragment.'),
+            ErrorWidget('Matched route has no Flutter page.'),
       );
       _pageOwners[page] = record;
       yield page;
@@ -547,12 +547,12 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
     BuildContext context,
     _NavigationRecord record,
     RouteMatches matches,
-    List<AnyAppRoute> routes,
+    List<RouteNode> routes,
   ) {
     final pages = <Page<Object?>>[];
     for (var index = 0; index < routes.length; index++) {
       final route = routes[index];
-      if (route is ShellBoundRoute) {
+      if (route is ShellRoute) {
         final nestedPages = <Page<Object?>>[];
         final indexPage = route.indexPage;
         if (indexPage != null) {
@@ -582,7 +582,7 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
         pages.add(page);
         return pages;
       }
-      if (route is PageBoundRoute) {
+      if (route is PageRoute) {
         pages.add(_buildPage(context, record, matches, route));
       }
     }
@@ -593,7 +593,7 @@ final class _OdroeRouterDelegate extends RouterDelegate<Object>
     BuildContext context,
     _NavigationRecord record,
     RouteMatches matches,
-    PageBoundRoute route,
+    PageRoute route,
   ) {
     final page = route.buildPage(
       context: context,

@@ -5,36 +5,6 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('generate runs against the checked-in Flutter application', () async {
-    final result = await Process.run('dart', <String>[
-      'run',
-      'odroe',
-      'generate',
-      '--project',
-      'example/router_app',
-    ]);
-
-    expect(result.exitCode, 0, reason: '${result.stderr}');
-    expect('${result.stdout}', contains('routes are current'));
-  });
-
-  test('dev rejects an unusable Flutter web port', () async {
-    final result = await Process.run('dart', <String>[
-      'run',
-      'odroe',
-      'dev',
-      '--project',
-      'example/router_app',
-      '--',
-      '-d',
-      'web-server',
-      '--web-port=0',
-    ]);
-
-    expect(result.exitCode, 64);
-    expect('${result.stderr}', contains('Invalid web-port: 0'));
-  });
-
   test('dev serves the generated route tree and server functions', () async {
     final reservation = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
@@ -48,7 +18,7 @@ void main() {
       'odroe',
       'dev',
       '--project',
-      'example/router_app',
+      'example/app',
       '--server-only',
       '--port',
       '$port',

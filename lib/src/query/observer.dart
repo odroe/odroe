@@ -42,16 +42,15 @@ final class QueryResult<T> {
 
 /// Reactive lifecycle around one [Query] cache entry.
 final class QueryObserver<T> implements QueryObserverHandle {
-  QueryObserver(this.client, QueryOptions<T> options)
-    : _options = options,
-      _resolved = client.resolve(options) {
+  QueryObserver(this.client, QueryOptions<T> options) : _options = options {
     _query = client.query(options);
+    _resolved = _query.options;
     _result = _createResult();
   }
 
   final QueryClient client;
   QueryOptions<T> _options;
-  ResolvedQueryOptions<T> _resolved;
+  late ResolvedQueryOptions<T> _resolved;
   late Query<T> _query;
   late QueryResult<T> _result;
   final Set<void Function(QueryResult<T>)> _listeners =
@@ -98,8 +97,8 @@ final class QueryObserver<T> implements QueryObserverHandle {
     if (_disposed) throw StateError('QueryObserver is disposed.');
     final oldQuery = _query;
     _options = value;
-    _resolved = client.resolve(value);
     _query = client.query(value);
+    _resolved = _query.options;
     if (!identical(oldQuery, _query) && _listeners.isNotEmpty) {
       oldQuery.removeObserver(this);
       _query.addObserver(this);

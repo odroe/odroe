@@ -55,7 +55,7 @@ ResolvedDocument resolveDocument(Iterable<RouteDocument> documents) {
   final jsonLd = <Object?>[];
   final htmlAttributes = <String, String?>{};
   final bodyAttributes = <String, String?>{};
-  HtmlNode? body;
+  final bodies = <HtmlNode>[];
 
   for (final document in documents) {
     language = document.language ?? language;
@@ -78,20 +78,7 @@ ResolvedDocument resolveDocument(Iterable<RouteDocument> documents) {
     htmlAttributes.addAll(document.htmlAttributes);
     bodyAttributes.addAll(document.bodyAttributes);
 
-    final nextBody = document.body;
-    if (nextBody == null) continue;
-    if (body == null) {
-      body = nextBody;
-      continue;
-    }
-    final inserted = _insertOutlet(body, nextBody);
-    if (identical(inserted, body)) {
-      throw StateError(
-        'A parent route document with descendant body content must contain '
-        'an HtmlOutlet.',
-      );
-    }
-    body = inserted;
+    if (document.body case final body?) bodies.add(body);
   }
 
   return ResolvedDocument._(
@@ -103,21 +90,22 @@ ResolvedDocument resolveDocument(Iterable<RouteDocument> documents) {
     jsonLd: List<Object?>.unmodifiable(jsonLd),
     htmlAttributes: Map<String, String?>.unmodifiable(htmlAttributes),
     bodyAttributes: Map<String, String?>.unmodifiable(bodyAttributes),
-    body: body == null ? null : _removeOutlets(body),
+    body: _composeBodies(bodies),
   );
 }
 
 /// Renders a resolved document's opening HTML, head, and semantic body.
 ///
 /// The returned source intentionally omits the closing body and html tags so
-/// Start can append handoff frames while queries are still resolving.
+/// the server can append handoff frames while queries are still resolving.
 String renderDocumentStart(ResolvedDocument document, {String? baseHref}) {
   final output = StringBuffer('<!doctype html><html');
-  final htmlAttributes = <String, String?>{
-    'lang': ?document.language,
-    ...document.htmlAttributes,
-  };
-  _writeAttributes(output, htmlAttributes);
+  if (!document.htmlAttributes.containsKey('lang')) {
+    if (document.language case final language?) {
+      _writeAttribute(output, 'lang', language);
+    }
+  }
+  _writeAttributes(output, document.htmlAttributes);
   output.write('><head><meta charset="utf-8">');
   output.write(
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -125,7 +113,7 @@ String renderDocumentStart(ResolvedDocument document, {String? baseHref}) {
   final resolvedBaseHref = baseHref ?? document.baseHref;
   if (resolvedBaseHref != null) {
     output.write('<base');
-    _writeAttributes(output, <String, String?>{'href': resolvedBaseHref});
+    _writeAttribute(output, 'href', resolvedBaseHref);
     output.write('>');
   }
   if (document.title case final title?) {
@@ -137,33 +125,38 @@ String renderDocumentStart(ResolvedDocument document, {String? baseHref}) {
   for (final item in document.meta) {
     output.write('<meta');
     if (item.charset case final charset?) {
-      _writeAttributes(output, <String, String?>{'charset': charset});
+      _writeAttribute(output, 'charset', charset);
     } else {
-      _writeAttributes(output, <String, String?>{
-        item.attribute!: item.key,
-        'content': item.content,
-      });
+      _writeAttribute(output, item.attribute!, item.key);
+      _writeAttribute(output, 'content', item.content);
     }
     output.write('>');
   }
   for (final item in document.links) {
     output.write('<link');
-    _writeAttributes(output, <String, String?>{
-      'rel': item.rel,
-      'href': item.href,
-      'hreflang': ?item.hreflang,
-      'media': ?item.media,
-      'type': ?item.type,
-      'as': ?item.as,
-      'crossorigin': ?item.crossorigin,
-    });
+    _writeAttribute(output, 'rel', item.rel);
+    _writeAttribute(output, 'href', item.href);
+    if (item.hreflang case final value?) {
+      _writeAttribute(output, 'hreflang', value);
+    }
+    if (item.media case final value?) {
+      _writeAttribute(output, 'media', value);
+    }
+    if (item.type case final value?) {
+      _writeAttribute(output, 'type', value);
+    }
+    if (item.as case final value?) {
+      _writeAttribute(output, 'as', value);
+    }
+    if (item.crossorigin case final value?) {
+      _writeAttribute(output, 'crossorigin', value);
+    }
     output.write('>');
   }
   for (final value in document.jsonLd) {
-    final encoded = jsonEncode(value).replaceAllMapped(
-      RegExp(r'</script', caseSensitive: false),
-      (_) => r'<\/script',
-    );
+    final encoded = jsonEncode(
+      value,
+    ).replaceAllMapped(_scriptEnd, (_) => r'<\/script');
     output
       ..write('<script type="application/ld+json">')
       ..write(encoded)
@@ -180,6 +173,24 @@ String renderDocumentStart(ResolvedDocument document, {String? baseHref}) {
   return output.toString();
 }
 
+HtmlNode? _composeBodies(List<HtmlNode> bodies) {
+  if (bodies.isEmpty) return null;
+
+  var body = bodies.last;
+  for (var index = bodies.length - 2; index >= 0; index--) {
+    final parent = bodies[index];
+    final composed = _insertOutlet(parent, body);
+    if (identical(composed, parent)) {
+      throw StateError(
+        'A parent route document with descendant body content must contain '
+        'an HtmlOutlet.',
+      );
+    }
+    body = composed;
+  }
+  return body;
+}
+
 HtmlNode _insertOutlet(HtmlNode node, HtmlNode child) {
   if (node is HtmlOutlet) return child;
   if (node is HtmlElement) {
@@ -187,14 +198,12 @@ HtmlNode _insertOutlet(HtmlNode node, HtmlNode child) {
       final current = node.children[index];
       final inserted = _insertOutlet(current, child);
       if (!identical(current, inserted)) {
+        final children = List<HtmlNode>.of(node.children, growable: false);
+        children[index] = inserted;
         return HtmlElement(
           node.tag,
           attributes: node.attributes,
-          children: <HtmlNode>[
-            ...node.children.take(index),
-            inserted,
-            ...node.children.skip(index + 1),
-          ],
+          children: children,
         );
       }
     }
@@ -205,30 +214,11 @@ HtmlNode _insertOutlet(HtmlNode node, HtmlNode child) {
       final current = node.children[index];
       final inserted = _insertOutlet(current, child);
       if (!identical(current, inserted)) {
-        return HtmlFragment(<HtmlNode>[
-          ...node.children.take(index),
-          inserted,
-          ...node.children.skip(index + 1),
-        ]);
+        final children = List<HtmlNode>.of(node.children, growable: false);
+        children[index] = inserted;
+        return HtmlFragment(children);
       }
     }
-  }
-  return node;
-}
-
-HtmlNode _removeOutlets(HtmlNode node) {
-  if (node is HtmlOutlet) return const HtmlFragment(<HtmlNode>[]);
-  if (node is HtmlElement) {
-    return HtmlElement(
-      node.tag,
-      attributes: node.attributes,
-      children: node.children.map(_removeOutlets).toList(growable: false),
-    );
-  }
-  if (node is HtmlFragment) {
-    return HtmlFragment(
-      node.children.map(_removeOutlets).toList(growable: false),
-    );
   }
   return node;
 }
@@ -242,16 +232,10 @@ void _writeNode(StringBuffer output, HtmlNode node) {
         _writeNode(output, child);
       }
     case HtmlElement(:final tag, :final attributes, :final children):
-      if (!_tag.hasMatch(tag)) {
-        throw FormatException('Invalid HTML tag: $tag');
-      }
       output.write('<$tag');
       _writeAttributes(output, attributes);
       output.write('>');
       final voidElement = _voidElements.contains(tag.toLowerCase());
-      if (voidElement && children.isNotEmpty) {
-        throw StateError('Void HTML element <$tag> cannot have children.');
-      }
       if (!voidElement) {
         for (final child in children) {
           _writeNode(output, child);
@@ -259,24 +243,25 @@ void _writeNode(StringBuffer output, HtmlNode node) {
         output.write('</$tag>');
       }
     case HtmlOutlet():
-      throw StateError('Unresolved HtmlOutlet.');
+      break;
   }
 }
 
 void _writeAttributes(StringBuffer output, Map<String, String?> attributes) {
   for (final entry in attributes.entries) {
-    if (!_attribute.hasMatch(entry.key)) {
-      throw FormatException('Invalid HTML attribute: ${entry.key}');
-    }
+    _writeAttribute(output, entry.key, entry.value);
+  }
+}
+
+void _writeAttribute(StringBuffer output, String name, String? value) {
+  output
+    ..write(' ')
+    ..write(name);
+  if (value != null) {
     output
-      ..write(' ')
-      ..write(entry.key);
-    if (entry.value case final value?) {
-      output
-        ..write('="')
-        ..write(_escapeAttribute(value))
-        ..write('"');
-    }
+      ..write('="')
+      ..write(_escapeAttribute(value))
+      ..write('"');
   }
 }
 
@@ -286,8 +271,7 @@ String _escapeText(String value) =>
 String _escapeAttribute(String value) =>
     const HtmlEscape(HtmlEscapeMode.attribute).convert(value);
 
-final RegExp _tag = RegExp(r'^[A-Za-z][A-Za-z0-9-]*$');
-final RegExp _attribute = RegExp(r'^[A-Za-z_:][A-Za-z0-9_:.-]*$');
+final RegExp _scriptEnd = RegExp(r'</script', caseSensitive: false);
 const Set<String> _voidElements = <String>{
   'area',
   'base',

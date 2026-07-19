@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 
 import '../document/document.dart';
 import '../query/client.dart';
@@ -25,38 +24,63 @@ final class RouteValues<P, S> {
   final S search;
 }
 
-/// Read-only lookup for every route in an active matched branch.
-final class RouteLoadScope {
-  /// Creates infrastructure scope from erased active-route values.
-  RouteLoadScope.from(
-    Iterable<({AnyAppRoute route, Object? params, Object? search})> values,
-  ) : _values = _buildValues(values);
+final class _RouteBranchEntry {
+  const _RouteBranchEntry({
+    required this.route,
+    required this.params,
+    required this.search,
+    required this.data,
+  });
 
-  final Map<Object, ({Object? params, Object? search})> _values;
+  final RouteNode route;
+  final Object? params;
+  final Object? search;
+  final Object? data;
+}
 
-  static Map<Object, ({Object? params, Object? search})> _buildValues(
-    Iterable<({AnyAppRoute route, Object? params, Object? search})> values,
-  ) {
-    final result =
-        HashMap<Object, ({Object? params, Object? search})>.identity();
-    for (final value in values) {
-      result[value.route.identity] = (
-        params: value.params,
-        search: value.search,
-      );
+/// The active route branch shared by loaders and document builders.
+final class RouteBranch {
+  /// Creates branch state from ordered matched route values.
+  RouteBranch.from(
+    Iterable<({RouteNode route, Object? params, Object? search, Object? data})>
+    values,
+  ) : _entries = <_RouteBranchEntry>[
+        for (final value in values)
+          _RouteBranchEntry(
+            route: value.route,
+            params: value.params,
+            search: value.search,
+            data: value.data,
+          ),
+      ];
+
+  final List<_RouteBranchEntry> _entries;
+
+  _RouteBranchEntry? _find(RouteNode route) {
+    for (final entry in _entries) {
+      if (identical(entry.route.identity, route.identity)) return entry;
     }
-    return UnmodifiableMapView<Object, ({Object? params, Object? search})>(
-      result,
-    );
+    return null;
   }
 
-  /// Returns typed values for an active ancestor or current route.
-  RouteValues<P, S>? match<P, S, D>(AppRoute<P, S, D> route) {
-    final value = _values[route.identity];
+  RouteValues<P, S>? _match<P, S, D>(TypedRoute<P, S, D> route) {
+    final value = _find(route);
     if (value == null) return null;
     return RouteValues<P, S>._(
       params: value.params as P,
       search: value.search as S,
+    );
+  }
+
+  RouteDocumentValues<P, S, D>? _matchDocument<P, S, D>(
+    TypedRoute<P, S, D> route,
+  ) {
+    final value = _find(route);
+    if (value == null) return null;
+    return RouteDocumentValues<P, S, D>._(
+      params: value.params as P,
+      search: value.search as S,
+      data: value.data as D,
     );
   }
 }
@@ -69,9 +93,9 @@ final class RouteLoadContext<P, S> {
     required this.search,
     required this.location,
     QueryClient? query,
-    required RouteLoadScope scope,
+    required RouteBranch branch,
   }) : query = query ?? QueryClient(),
-       _scope = scope;
+       _branch = branch;
 
   /// Parameters owned by the route.
   final P params;
@@ -85,12 +109,12 @@ final class RouteLoadContext<P, S> {
   /// Query client shared by every loader in the matched branch.
   final QueryClient query;
 
-  final RouteLoadScope _scope;
+  final RouteBranch _branch;
 
   /// Returns typed values for an active ancestor or current route.
   RouteValues<ParentP, ParentS>? match<ParentP, ParentS, ParentD>(
-    AppRoute<ParentP, ParentS, ParentD> route,
-  ) => _scope.match(route);
+    TypedRoute<ParentP, ParentS, ParentD> route,
+  ) => _branch._match(route);
 }
 
 /// Typed values and loader data belonging to one active route document.
@@ -111,55 +135,6 @@ final class RouteDocumentValues<P, S, D> {
   final D data;
 }
 
-/// Read-only document lookup for every route in an active matched branch.
-final class RouteDocumentScope {
-  /// Creates infrastructure scope from erased matched-route values.
-  RouteDocumentScope.from(
-    Iterable<
-      ({AnyAppRoute route, Object? params, Object? search, Object? data})
-    >
-    values,
-  ) : _values = _buildValues(values);
-
-  final Map<Object, ({Object? params, Object? search, Object? data})> _values;
-
-  static Map<Object, ({Object? params, Object? search, Object? data})>
-  _buildValues(
-    Iterable<
-      ({AnyAppRoute route, Object? params, Object? search, Object? data})
-    >
-    values,
-  ) {
-    final result =
-        HashMap<
-          Object,
-          ({Object? params, Object? search, Object? data})
-        >.identity();
-    for (final value in values) {
-      result[value.route.identity] = (
-        params: value.params,
-        search: value.search,
-        data: value.data,
-      );
-    }
-    return UnmodifiableMapView<
-      Object,
-      ({Object? params, Object? search, Object? data})
-    >(result);
-  }
-
-  /// Returns typed values for an active ancestor, current, or child route.
-  RouteDocumentValues<P, S, D>? match<P, S, D>(AppRoute<P, S, D> route) {
-    final value = _values[route.identity];
-    if (value == null) return null;
-    return RouteDocumentValues<P, S, D>._(
-      params: value.params as P,
-      search: value.search as S,
-      data: value.data as D,
-    );
-  }
-}
-
 /// Typed input passed to a route's semantic document builder.
 final class RouteDocumentContext<P, S, D> {
   /// Creates document builder input.
@@ -168,8 +143,8 @@ final class RouteDocumentContext<P, S, D> {
     required this.search,
     required this.data,
     required this.location,
-    required RouteDocumentScope scope,
-  }) : _scope = scope;
+    required RouteBranch branch,
+  }) : _branch = branch;
 
   /// Parameters owned by the route.
   final P params;
@@ -183,12 +158,12 @@ final class RouteDocumentContext<P, S, D> {
   /// The complete matched location.
   final Uri location;
 
-  final RouteDocumentScope _scope;
+  final RouteBranch _branch;
 
   /// Returns typed values for any route in the active matched branch.
   RouteDocumentValues<MatchP, MatchS, MatchD>? match<MatchP, MatchS, MatchD>(
-    AppRoute<MatchP, MatchS, MatchD> route,
-  ) => _scope.match(route);
+    TypedRoute<MatchP, MatchS, MatchD> route,
+  ) => _branch._matchDocument(route);
 }
 
 /// An immutable navigation target.
@@ -196,7 +171,7 @@ final class Destination {
   const Destination._({required this.route, required this.uri});
 
   /// Creates a destination for a custom or generated route reference.
-  factory Destination.forRoute({required AnyAppRoute route, required Uri uri}) {
+  factory Destination.forRoute({required RouteNode route, required Uri uri}) {
     if (!uri.hasAbsolutePath) {
       throw ArgumentError.value(
         uri,
@@ -208,7 +183,7 @@ final class Destination {
   }
 
   /// The target route.
-  final AnyAppRoute route;
+  final RouteNode route;
 
   /// The canonical target URI.
   final Uri uri;
@@ -226,15 +201,15 @@ final class Destination {
   String toString() => uri.toString();
 }
 
-/// The erased route interface used by route trees.
-abstract class AnyAppRoute {
+/// A node stored in a route tree.
+abstract class RouteNode {
   /// The route's relative or absolute path declaration.
   String? get path;
 
   /// Child routes.
-  List<AnyAppRoute> get children;
+  List<RouteNode> get children;
 
-  /// Stable identity shared by compiled route fragments.
+  /// Stable identity shared by compiled route variants.
   Object get identity;
 
   /// Whether this route can be the final match for a location.
@@ -258,25 +233,25 @@ abstract class AnyAppRoute {
   /// Decodes this route's search state.
   DecodedSearch<Object?> decodeQuery(Map<String, List<String>> values);
 
-  /// Runs this route's loader through an erased route-tree boundary.
+  /// Runs this route's loader through the route-tree boundary.
   FutureOr<Object?> loadObject(
     Object? params,
     Object? search,
     Uri location,
-    RouteLoadScope scope,
+    RouteBranch branch,
     QueryClient query,
   );
 
-  /// Builds this route's document through an erased route-tree boundary.
+  /// Builds this route's document through the route-tree boundary.
   FutureOr<RouteDocument?> buildDocumentObject(
     Object? params,
     Object? search,
     Object? data,
     Uri location,
-    RouteDocumentScope scope,
+    RouteBranch branch,
   );
 
-  /// Encodes this route's local path through an erased generated boundary.
+  /// Encodes this route's local path through the generated boundary.
   List<String> encodePath(Object? params);
 
   /// Encodes this route's local search state.
@@ -284,20 +259,20 @@ abstract class AnyAppRoute {
 }
 
 /// A route whose local params and search types are known at compile time.
-abstract class TypedAppRoute<P, S, D> implements AnyAppRoute {}
+abstract class TypedRoute<P, S, D> implements RouteNode {}
 
-abstract interface class _ErasedRouteRef {
-  AnyAppRoute get erasedRoute;
+abstract interface class _RouteRefSegment {
+  RouteNode get routeNode;
   List<String> buildPath();
   Map<String, List<String>> buildQuery();
 }
 
 /// One strongly typed, locally bound route reference.
-final class RouteRef<P, S, D> implements _ErasedRouteRef {
+final class RouteRef<P, S, D> implements _RouteRefSegment {
   const RouteRef._({required this.route, required this.params, this.search});
 
   /// The referenced route.
-  final TypedAppRoute<P, S, D> route;
+  final TypedRoute<P, S, D> route;
 
   /// Path parameters owned by this route.
   final P params;
@@ -306,7 +281,7 @@ final class RouteRef<P, S, D> implements _ErasedRouteRef {
   final S? search;
 
   @override
-  AnyAppRoute get erasedRoute => route;
+  RouteNode get routeNode => route;
 
   @override
   List<String> buildPath() => route.encodePath(params);
@@ -317,23 +292,23 @@ final class RouteRef<P, S, D> implements _ErasedRouteRef {
   /// Appends [child] to this manual or generated route branch.
   RouteRefPath then<ChildP, ChildS, ChildD>(
     RouteRef<ChildP, ChildS, ChildD> child,
-  ) => RouteRefPath._(<_ErasedRouteRef>[this, child]);
+  ) => RouteRefPath._(<_RouteRefSegment>[this, child]);
 
   /// Builds a destination containing only this route reference.
   Destination get destination =>
-      RouteRefPath._(<_ErasedRouteRef>[this]).destination;
+      RouteRefPath._(<_RouteRefSegment>[this]).destination;
 }
 
 /// An ordered branch of strongly typed route references.
 final class RouteRefPath {
-  RouteRefPath._(List<_ErasedRouteRef> refs)
-    : _refs = List<_ErasedRouteRef>.unmodifiable(refs);
+  RouteRefPath._(List<_RouteRefSegment> refs)
+    : _refs = List<_RouteRefSegment>.unmodifiable(refs);
 
-  final List<_ErasedRouteRef> _refs;
+  final List<_RouteRefSegment> _refs;
 
   /// Appends [child] to this branch.
   RouteRefPath then<P, S, D>(RouteRef<P, S, D> child) =>
-      RouteRefPath._(<_ErasedRouteRef>[..._refs, child]);
+      RouteRefPath._(<_RouteRefSegment>[..._refs, child]);
 
   /// Encodes this complete branch into one canonical destination.
   Destination get destination {
@@ -351,7 +326,7 @@ final class RouteRefPath {
         query[entry.key] = entry.value;
       }
     }
-    final target = _refs.last.erasedRoute;
+    final target = _refs.last.routeNode;
     if (!target.terminal) {
       throw StateError('A destination must end at a terminal route.');
     }
@@ -368,7 +343,7 @@ final class RouteRefPath {
 }
 
 /// A typed route definition shared by manual and file routing.
-final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
+final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
   /// Creates a route definition.
   factory AppRoute({
     String? path,
@@ -377,7 +352,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     RouteLoader<P, S, D>? load,
     RouteDocumentBuilder<P, S, D>? document,
     bool terminal = true,
-    Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
+    Iterable<RouteNode> children = const <RouteNode>[],
   }) => AppRoute<P, S, D>._(
     path: path,
     params: params,
@@ -398,9 +373,9 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     required this.document,
     required this.terminal,
     required bool hasFlutterPage,
-    required Iterable<AnyAppRoute> children,
+    required Iterable<RouteNode> children,
     required this.identity,
-  }) : children = List<AnyAppRoute>.unmodifiable(children),
+  }) : children = List<RouteNode>.unmodifiable(children),
        _hasFlutterPage = hasFlutterPage,
        _pattern = path == null ? null : RoutePattern.parse(path);
 
@@ -434,7 +409,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
   final bool _hasFlutterPage;
 
   @override
-  final List<AnyAppRoute> children;
+  final List<RouteNode> children;
 
   @override
   final Object identity;
@@ -447,7 +422,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
       (throw StateError('A file route must be compiled before use.'));
 
   /// Returns a copy with [children] attached to the same definition.
-  AppRoute<P, S, D> withChildren(Iterable<AnyAppRoute> children) =>
+  AppRoute<P, S, D> withChildren(Iterable<RouteNode> children) =>
       AppRoute<P, S, D>._(
         path: path,
         params: params,
@@ -467,7 +442,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     SearchParams<S>? search,
     required bool terminal,
     bool? hasFlutterPage,
-    Iterable<AnyAppRoute> children = const <AnyAppRoute>[],
+    Iterable<RouteNode> children = const <RouteNode>[],
   }) => AppRoute<P, S, D>._(
     path: path,
     params: params ?? this.params,
@@ -513,7 +488,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     Object? params,
     Object? search,
     Uri location,
-    RouteLoadScope scope,
+    RouteBranch branch,
     QueryClient query,
   ) {
     final loader = load;
@@ -524,7 +499,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
         search: search as S,
         location: location,
         query: query,
-        scope: scope,
+        branch: branch,
       ),
     );
   }
@@ -535,7 +510,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
     Object? search,
     Object? data,
     Uri location,
-    RouteDocumentScope scope,
+    RouteBranch branch,
   ) {
     final builder = document;
     if (builder == null) return null;
@@ -545,7 +520,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
         search: search as S,
         data: data as D,
         location: location,
-        scope: scope,
+        branch: branch,
       ),
     );
   }
@@ -568,7 +543,7 @@ final class AppRoute<P, S, D> implements TypedAppRoute<P, S, D> {
 }
 
 /// Binds params and search to a typed route.
-extension ParameterizedRouteReference<P, S, D> on TypedAppRoute<P, S, D> {
+extension ParameterizedRouteReference<P, S, D> on TypedRoute<P, S, D> {
   /// Creates a local route reference.
   RouteRef<P, S, D> ref({required P params, S? search}) =>
       RouteRef<P, S, D>._(route: this, params: params, search: search);
@@ -579,7 +554,7 @@ extension ParameterizedRouteReference<P, S, D> on TypedAppRoute<P, S, D> {
 }
 
 /// Binds search to a typed route without path parameters.
-extension StaticRouteReference<S, D> on TypedAppRoute<NoParams, S, D> {
+extension StaticRouteReference<S, D> on TypedRoute<NoParams, S, D> {
   /// Creates a local route reference.
   RouteRef<NoParams, S, D> ref({S? search}) => RouteRef<NoParams, S, D>._(
     route: this,

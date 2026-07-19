@@ -3,7 +3,7 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:odroe/router_compiler.dart';
+import 'package:odroe/src/router_compiler/compiler.dart';
 import 'package:path/path.dart' as p;
 
 final class CliProject {
@@ -105,7 +105,7 @@ String _bootstrapSource(String packageName) =>
 import 'dart:async';
 import 'dart:io';
 
-import 'package:odroe/start_io.dart';
+import 'package:odroe/server_io.dart';
 import 'package:$packageName/routes.server.dart';
 
 Future<void> main() async {
@@ -114,8 +114,8 @@ Future<void> main() async {
   final webRoot = Platform.environment['ODROE_WEB_ROOT'];
   final developmentOriginFile =
       Platform.environment['ODROE_FLUTTER_ORIGIN_FILE'];
-  final server = await StartIoServer.bind(
-    createStartApplication().handler,
+  final server = await IoServer.bind(
+    createServer().handler,
     address: host,
     port: port,
     publicDirectory: webRoot == '' ? null : Directory(webRoot ?? 'build/web'),
@@ -124,7 +124,7 @@ Future<void> main() async {
         : File(developmentOriginFile),
   );
   stdout.writeln(
-    'Odroe Start listening on http://\${server.address.host}:\${server.port}',
+    'Odroe listening on http://\${server.address.host}:\${server.port}',
   );
   if (!Platform.isWindows) {
     final stopping = Completer<void>();
