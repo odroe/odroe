@@ -8,6 +8,7 @@ export 'src/query/hydration.dart';
 export 'src/query/infinite.dart';
 export 'src/query/key.dart';
 export 'src/query/managers.dart';
+export 'src/query/module.dart';
 export 'src/query/mutation.dart';
 export 'src/query/observer.dart';
 export 'src/query/options.dart';

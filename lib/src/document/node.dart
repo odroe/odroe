@@ -1,4 +1,4 @@
-/// A node in Odroe's server-rendered semantic HTML tree.
+/// A node in a server-rendered semantic HTML tree.
 sealed class HtmlNode {
   const HtmlNode();
 }

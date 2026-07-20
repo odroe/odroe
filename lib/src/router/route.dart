@@ -1,17 +1,40 @@
-import 'dart:async';
-
-import '../document/document.dart';
-import '../query/client.dart';
 import 'codec.dart';
-import 'pattern.dart';
+import 'path.dart';
 
-/// A route loader.
-typedef RouteLoader<P, S, D> =
-    FutureOr<D> Function(RouteLoadContext<P, S> context);
+/// Descriptive route information shared by every runtime.
+final class RouteMetadata {
+  /// Creates route metadata.
+  const RouteMetadata({
+    this.title,
+    this.description,
+    this.canonical,
+    this.values = const <String, Object?>{},
+  });
 
-/// Builds the semantic document contribution owned by one matched route.
-typedef RouteDocumentBuilder<P, S, D> =
-    FutureOr<RouteDocument?> Function(RouteDocumentContext<P, S, D> context);
+  /// Human-readable title for the route.
+  final String? title;
+
+  /// Human-readable summary for the route.
+  final String? description;
+
+  /// Canonical location, when it differs from the matched location.
+  final String? canonical;
+
+  /// Application-specific metadata.
+  final Map<String, Object?> values;
+}
+
+/// A typed key used by optional packages to extend a route definition.
+final class RouteCapability<T extends Object> {
+  /// Creates a capability key with a diagnostic [name].
+  const RouteCapability(this.name);
+
+  /// The name shown in diagnostics.
+  final String name;
+
+  @override
+  String toString() => 'RouteCapability<$T>($name)';
+}
 
 /// Typed params and search belonging to one active route.
 final class RouteValues<P, S> {
@@ -29,141 +52,50 @@ final class _RouteBranchEntry {
     required this.route,
     required this.params,
     required this.search,
-    required this.data,
   });
 
   final RouteNode route;
   final Object? params;
   final Object? search;
-  final Object? data;
 }
 
-/// The active route branch shared by loaders and document builders.
+/// The matched root-to-leaf route branch.
 final class RouteBranch {
-  /// Creates branch state from ordered matched route values.
+  /// Creates branch state from ordered matched values.
   RouteBranch.from(
-    Iterable<({RouteNode route, Object? params, Object? search, Object? data})>
-    values,
+    Iterable<({RouteNode route, Object? params, Object? search})> values,
   ) : _entries = <_RouteBranchEntry>[
         for (final value in values)
           _RouteBranchEntry(
             route: value.route,
             params: value.params,
             search: value.search,
-            data: value.data,
           ),
       ];
 
   final List<_RouteBranchEntry> _entries;
 
-  _RouteBranchEntry? _find(RouteNode route) {
+  /// Returns untyped values for a route node.
+  RouteValues<Object?, Object?>? values(RouteNode route) {
     for (final entry in _entries) {
-      if (identical(entry.route.identity, route.identity)) return entry;
+      if (!identical(entry.route.identity, route.identity)) continue;
+      return RouteValues<Object?, Object?>._(
+        params: entry.params,
+        search: entry.search,
+      );
     }
     return null;
   }
 
-  RouteValues<P, S>? _match<P, S, D>(TypedRoute<P, S, D> route) {
-    final value = _find(route);
+  /// Returns typed values for an active route.
+  RouteValues<P, S>? match<P, S, D>(TypedRoute<P, S, D> route) {
+    final value = values(route);
     if (value == null) return null;
     return RouteValues<P, S>._(
       params: value.params as P,
       search: value.search as S,
     );
   }
-
-  RouteDocumentValues<P, S, D>? _matchDocument<P, S, D>(
-    TypedRoute<P, S, D> route,
-  ) {
-    final value = _find(route);
-    if (value == null) return null;
-    return RouteDocumentValues<P, S, D>._(
-      params: value.params as P,
-      search: value.search as S,
-      data: value.data as D,
-    );
-  }
-}
-
-/// Typed input passed to a route loader.
-final class RouteLoadContext<P, S> {
-  /// Creates loader input.
-  RouteLoadContext({
-    required this.params,
-    required this.search,
-    required this.location,
-    QueryClient? query,
-    required RouteBranch branch,
-  }) : query = query ?? QueryClient(),
-       _branch = branch;
-
-  /// Parameters owned by the route.
-  final P params;
-
-  /// Search state owned by the route.
-  final S search;
-
-  /// The complete matched location.
-  final Uri location;
-
-  /// Query client shared by every loader in the matched branch.
-  final QueryClient query;
-
-  final RouteBranch _branch;
-
-  /// Returns typed values for an active ancestor or current route.
-  RouteValues<ParentP, ParentS>? match<ParentP, ParentS, ParentD>(
-    TypedRoute<ParentP, ParentS, ParentD> route,
-  ) => _branch._match(route);
-}
-
-/// Typed values and loader data belonging to one active route document.
-final class RouteDocumentValues<P, S, D> {
-  const RouteDocumentValues._({
-    required this.params,
-    required this.search,
-    required this.data,
-  });
-
-  /// Path parameters owned by the route.
-  final P params;
-
-  /// Search state owned by the route.
-  final S search;
-
-  /// Loader data owned by the route.
-  final D data;
-}
-
-/// Typed input passed to a route's semantic document builder.
-final class RouteDocumentContext<P, S, D> {
-  /// Creates document builder input.
-  const RouteDocumentContext({
-    required this.params,
-    required this.search,
-    required this.data,
-    required this.location,
-    required RouteBranch branch,
-  }) : _branch = branch;
-
-  /// Parameters owned by the route.
-  final P params;
-
-  /// Search state owned by the route.
-  final S search;
-
-  /// Loader data owned by the route.
-  final D data;
-
-  /// The complete matched location.
-  final Uri location;
-
-  final RouteBranch _branch;
-
-  /// Returns typed values for any route in the active matched branch.
-  RouteDocumentValues<MatchP, MatchS, MatchD>? match<MatchP, MatchS, MatchD>(
-    TypedRoute<MatchP, MatchS, MatchD> route,
-  ) => _branch._matchDocument(route);
 }
 
 /// An immutable navigation target.
@@ -202,7 +134,7 @@ final class Destination {
 }
 
 /// A node stored in a route tree.
-abstract class RouteNode {
+abstract interface class RouteNode {
   /// The route's relative or absolute path declaration.
   String? get path;
 
@@ -218,38 +150,20 @@ abstract class RouteNode {
   /// Whether dynamic path values have a typed codec.
   bool get hasPathCodec;
 
-  /// Whether this route contributes a semantic HTML document.
-  bool get hasDocument;
+  /// Metadata shared by optional route capabilities.
+  RouteMetadata get metadata;
 
-  /// Whether this route can render a terminal Flutter page.
-  bool get hasFlutterPage;
+  /// The parsed path template.
+  PathTemplate get template;
 
-  /// The parsed path pattern.
-  RoutePattern get compiledPattern;
+  /// Reads an optional capability attached by another package entrypoint.
+  T? capability<T extends Object>(RouteCapability<T> key);
 
   /// Decodes this route's path parameters.
   Object? decodePath(Map<String, List<String>> values);
 
   /// Decodes this route's search state.
   DecodedSearch<Object?> decodeQuery(Map<String, List<String>> values);
-
-  /// Runs this route's loader through the route-tree boundary.
-  FutureOr<Object?> loadObject(
-    Object? params,
-    Object? search,
-    Uri location,
-    RouteBranch branch,
-    QueryClient query,
-  );
-
-  /// Builds this route's document through the route-tree boundary.
-  FutureOr<RouteDocument?> buildDocumentObject(
-    Object? params,
-    Object? search,
-    Object? data,
-    Uri location,
-    RouteBranch branch,
-  );
 
   /// Encodes this route's local path through the generated boundary.
   List<String> encodePath(Object? params);
@@ -258,8 +172,8 @@ abstract class RouteNode {
   Map<String, List<String>> encodeQuery(Object? search);
 }
 
-/// A route whose local params and search types are known at compile time.
-abstract class TypedRoute<P, S, D> implements RouteNode {}
+/// A route whose local params, search, and data types are known.
+abstract interface class TypedRoute<P, S, D> implements RouteNode {}
 
 abstract interface class _RouteRefSegment {
   RouteNode get routeNode;
@@ -349,35 +263,32 @@ final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
     String? path,
     PathParams<P>? params,
     SearchParams<S>? search,
-    RouteLoader<P, S, D>? load,
-    RouteDocumentBuilder<P, S, D>? document,
+    RouteMetadata metadata = const RouteMetadata(),
     bool terminal = true,
     Iterable<RouteNode> children = const <RouteNode>[],
   }) => AppRoute<P, S, D>._(
     path: path,
     params: params,
     search: search,
-    load: load,
-    document: document,
+    metadata: metadata,
     terminal: terminal,
-    hasFlutterPage: false,
     children: children,
     identity: Object(),
+    capabilities: const <Object, Object>{},
   );
 
   AppRoute._({
     required this.path,
     required this.params,
     required this.search,
-    required this.load,
-    required this.document,
+    required this.metadata,
     required this.terminal,
-    required bool hasFlutterPage,
     required Iterable<RouteNode> children,
     required this.identity,
+    required Map<Object, Object> capabilities,
   }) : children = List<RouteNode>.unmodifiable(children),
-       _hasFlutterPage = hasFlutterPage,
-       _pattern = path == null ? null : RoutePattern.parse(path);
+       _capabilities = Map<Object, Object>.unmodifiable(capabilities),
+       _template = path == null ? null : PathTemplate.parse(path);
 
   @override
   final String? path;
@@ -388,11 +299,8 @@ final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
   /// The typed search contract, when the route owns query state.
   final SearchParams<S>? search;
 
-  /// The route loader, when it runs in the current application.
-  final RouteLoader<P, S, D>? load;
-
-  /// Semantic HTML produced for SSR, SSG, SEO, and GEO.
-  final RouteDocumentBuilder<P, S, D>? document;
+  @override
+  final RouteMetadata metadata;
 
   @override
   final bool terminal;
@@ -401,25 +309,37 @@ final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
   bool get hasPathCodec => params != null;
 
   @override
-  bool get hasDocument => document != null;
-
-  @override
-  bool get hasFlutterPage => _hasFlutterPage;
-
-  final bool _hasFlutterPage;
-
-  @override
   final List<RouteNode> children;
 
   @override
   final Object identity;
 
-  final RoutePattern? _pattern;
+  final Map<Object, Object> _capabilities;
+  final PathTemplate? _template;
 
   @override
-  RoutePattern get compiledPattern =>
-      _pattern ??
+  PathTemplate get template =>
+      _template ??
       (throw StateError('A file route must be compiled before use.'));
+
+  @override
+  T? capability<T extends Object>(RouteCapability<T> key) =>
+      _capabilities[key] as T?;
+
+  /// Returns a copy carrying [value] under [key].
+  AppRoute<P, S, D> withCapability<T extends Object>(
+    RouteCapability<T> key,
+    T value,
+  ) => AppRoute<P, S, D>._(
+    path: path,
+    params: params,
+    search: search,
+    metadata: metadata,
+    terminal: terminal,
+    children: children,
+    identity: identity,
+    capabilities: <Object, Object>{..._capabilities, key: value},
+  );
 
   /// Returns a copy with [children] attached to the same definition.
   AppRoute<P, S, D> withChildren(Iterable<RouteNode> children) =>
@@ -427,12 +347,11 @@ final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
         path: path,
         params: params,
         search: search,
-        load: load,
-        document: document,
+        metadata: metadata,
         terminal: terminal,
-        hasFlutterPage: _hasFlutterPage,
         children: children,
         identity: identity,
+        capabilities: _capabilities,
       );
 
   /// Binds a file-system path and generated codecs to this definition.
@@ -441,18 +360,16 @@ final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
     PathParams<P>? params,
     SearchParams<S>? search,
     required bool terminal,
-    bool? hasFlutterPage,
     Iterable<RouteNode> children = const <RouteNode>[],
   }) => AppRoute<P, S, D>._(
     path: path,
     params: params ?? this.params,
     search: search ?? this.search,
-    load: load,
-    document: document,
+    metadata: metadata,
     terminal: terminal,
-    hasFlutterPage: hasFlutterPage ?? _hasFlutterPage,
     children: children,
     identity: identity,
+    capabilities: _capabilities,
   );
 
   @override
@@ -484,53 +401,11 @@ final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
   }
 
   @override
-  FutureOr<Object?> loadObject(
-    Object? params,
-    Object? search,
-    Uri location,
-    RouteBranch branch,
-    QueryClient query,
-  ) {
-    final loader = load;
-    if (loader == null) return const NoData();
-    return loader(
-      RouteLoadContext<P, S>(
-        params: params as P,
-        search: search as S,
-        location: location,
-        query: query,
-        branch: branch,
-      ),
-    );
-  }
-
-  @override
-  FutureOr<RouteDocument?> buildDocumentObject(
-    Object? params,
-    Object? search,
-    Object? data,
-    Uri location,
-    RouteBranch branch,
-  ) {
-    final builder = document;
-    if (builder == null) return null;
-    return builder(
-      RouteDocumentContext<P, S, D>(
-        params: params as P,
-        search: search as S,
-        data: data as D,
-        location: location,
-        branch: branch,
-      ),
-    );
-  }
-
-  @override
   List<String> encodePath(Object? params) {
     final encoded = this.params == null
         ? const <String, List<String>>{}
         : this.params!.encode(params as P);
-    return compiledPattern.build(encoded);
+    return template.build(encoded);
   }
 
   @override

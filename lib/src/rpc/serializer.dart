@@ -1,18 +1,24 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:convert';
 import 'dart:typed_data';
 
 /// Extends RPC serialization with one tagged domain value.
 abstract interface class SerializationAdapter<T> {
+  /// Wire tag that identifies values handled by this adapter.
   String get tag;
+
+  /// Whether [value] can be encoded by this adapter.
   bool canEncode(Object value);
+
+  /// Converts [value] to a serializer-supported representation.
   Object? encode(T value, Serializer serializer);
+
+  /// Reconstructs a value from its decoded wire representation.
   T decode(Object? value, Serializer serializer);
 }
 
 /// Versioned JSON-compatible serializer used by RPC and hydration handoff.
 final class Serializer {
+  /// Creates a serializer with built-in and custom [adapters].
   Serializer({Iterable<SerializationAdapter<dynamic>> adapters = const []})
     : _adapters = <SerializationAdapter<dynamic>>[
         ..._builtInAdapters,
@@ -33,6 +39,7 @@ final class Serializer {
   final Map<String, SerializationAdapter<dynamic>> _byTag =
       <String, SerializationAdapter<dynamic>>{};
 
+  /// Converts [value] to JSON-compatible values with tagged extensions.
   Object? encode(Object? value) {
     if (value == null || value is bool || value is num || value is String) {
       if (value is double && !value.isFinite) {
@@ -74,6 +81,7 @@ final class Serializer {
     );
   }
 
+  /// Restores a value previously produced by [encode].
   Object? decode(Object? value) {
     if (value is List) return value.map(decode).toList(growable: false);
     if (value is Map) {
@@ -96,7 +104,10 @@ final class Serializer {
     return value;
   }
 
+  /// Encodes [value] as a JSON string.
   String encodeJson(Object? value) => jsonEncode(encode(value));
+
+  /// Decodes one JSON string produced by [encodeJson].
   Object? decodeJson(String value) => decode(jsonDecode(value));
 }
 

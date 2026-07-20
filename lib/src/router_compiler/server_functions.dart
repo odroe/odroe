@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -9,11 +7,15 @@ import 'package:path/path.dart' as p;
 
 import 'model.dart';
 
+/// Discovers server bindings and RPC functions in `server.dart`.
 final class ServerFunctionScanner {
+  /// Creates a scanner rooted at [projectRoot].
   ServerFunctionScanner(this.projectRoot);
 
+  /// Application package root used to render diagnostics.
   final Directory projectRoot;
 
+  /// Adds declarations from [file] to [node].
   void scan(RouteNode node, File file, List<FileRouteDiagnostic> diagnostics) {
     final result = parseString(
       content: file.readAsStringSync(),
@@ -176,6 +178,7 @@ final class ServerFunctionScanner {
   }
 }
 
+/// Returns why [source] cannot cross the server-function wire boundary.
 String? _wireTypeIssue(String source, {required bool input}) {
   late final _WireType type;
   try {
@@ -247,6 +250,7 @@ String? _validateWireType(
   return null;
 }
 
+/// Emits a decoder expression for container-shaped wire value [source].
 String? wireDecoder(String source, String value) {
   final type = _WireType.parse(source);
   final base = type.base;

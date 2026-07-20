@@ -1,6 +1,8 @@
-/// Typed routing and navigation for Flutter applications.
+/// Platform-neutral typed routing, matching, and URL generation.
 library;
 
-export 'route.dart';
-export 'src/router/flutter_router.dart';
-export 'src/router/page.dart';
+export 'src/router/codec.dart';
+export 'src/router/load.dart';
+export 'src/router/match.dart';
+export 'src/router/path.dart' show PathSyntaxException, PathTemplate;
+export 'src/router/route.dart';

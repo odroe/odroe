@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
 import 'cache.dart';
@@ -10,22 +8,30 @@ import 'mutation.dart';
 
 /// Versioned persisted Query payload.
 final class PersistedQueryClient {
+  /// Creates a versioned persisted snapshot.
   const PersistedQueryClient({
     required this.timestamp,
     required this.buster,
     required this.state,
   });
 
+  /// When the snapshot was written.
   final DateTime timestamp;
+
+  /// Application-defined cache version.
   final String buster;
+
+  /// The dehydrated Query state.
   final DehydratedState state;
 
+  /// Encodes this snapshot as JSON-compatible data.
   Map<String, Object?> toJson() => <String, Object?>{
     'timestamp': timestamp.millisecondsSinceEpoch,
     'buster': buster,
     'state': state.toJson(),
   };
 
+  /// Decodes a persisted snapshot from JSON-compatible data.
   factory PersistedQueryClient.fromJson(Map<String, Object?> json) =>
       PersistedQueryClient(
         timestamp: DateTime.fromMillisecondsSinceEpoch(
@@ -40,13 +46,19 @@ final class PersistedQueryClient {
 
 /// Storage adapter implemented by files, preferences, databases, or memory.
 abstract interface class QueryPersister {
+  /// Replaces the stored snapshot with [client].
   FutureOr<void> save(PersistedQueryClient client);
+
+  /// Reads the stored snapshot, if present.
   FutureOr<PersistedQueryClient?> restore();
+
+  /// Deletes the stored snapshot.
   FutureOr<void> remove();
 }
 
 /// Restores a QueryClient and coalesces subsequent cache writes.
 final class QueryPersistence {
+  /// Creates persistence for [client] through [persister].
   QueryPersistence({
     required this.client,
     required this.persister,
@@ -57,12 +69,25 @@ final class QueryPersistence {
     this.deserializeData = _persistenceIdentity,
   });
 
+  /// The client whose caches are persisted.
   final QueryClient client;
+
+  /// The storage adapter.
   final QueryPersister persister;
+
+  /// Cache version required during restore.
   final String buster;
+
+  /// Maximum accepted snapshot age.
   final Duration maxAge;
+
+  /// Delay used to coalesce cache writes.
   final Duration writeDelay;
+
+  /// Converts query data into storage-safe values.
   final QuerySerializeData serializeData;
+
+  /// Restores query data from stored values.
   final QueryDeserializeData deserializeData;
 
   QueryDispose? _removeQueries;
@@ -71,6 +96,7 @@ final class QueryPersistence {
   Future<void> _saveTail = Future<void>.value();
   bool _disposed = false;
 
+  /// Restores an accepted snapshot and starts listening for cache changes.
   Future<void> restoreAndListen() async {
     if (_disposed) throw StateError('QueryPersistence is disposed.');
     try {
@@ -113,6 +139,7 @@ final class QueryPersistence {
     });
   }
 
+  /// Saves one current snapshot after any pending save.
   Future<void> save() {
     if (_disposed) return Future<void>.value();
     final snapshot = PersistedQueryClient(
@@ -128,12 +155,14 @@ final class QueryPersistence {
     return operation;
   }
 
+  /// Cancels the write delay and waits for a current save.
   Future<void> flush() async {
     _writeTimer?.cancel();
     _writeTimer = null;
     await save();
   }
 
+  /// Stops persistence listeners and delayed writes.
   void dispose() {
     _disposed = true;
     _writeTimer?.cancel();

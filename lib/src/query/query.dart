@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
 import 'cache.dart';
@@ -11,16 +9,28 @@ import 'state.dart';
 
 /// Internal contract implemented by reactive query observers.
 abstract interface class QueryObserverHandle {
+  /// Whether this observer permits automatic fetching.
   bool get enabled;
+
+  /// Whether this observer treats data as immutable.
   bool get isStatic;
+
+  /// Whether regaining focus should refetch the query.
   bool shouldRefetchOnFocus();
+
+  /// Whether reconnecting should refetch the query.
   bool shouldRefetchOnReconnect();
+
+  /// Starts a fetch requested by a runtime signal.
   void fetchForSignal();
+
+  /// Receives query state changes.
   void onQueryUpdate();
 }
 
 /// One asynchronous server-state machine stored by [QueryCache].
 final class Query<T> {
+  /// Creates one query cache entry.
   Query({
     required this.client,
     required this.cache,
@@ -34,9 +44,16 @@ final class Query<T> {
     scheduleGc();
   }
 
+  /// The client that owns this query.
   final QueryClient client;
+
+  /// The cache that stores this query.
   final QueryCache cache;
+
+  /// The resolved runtime options.
   ResolvedQueryOptions<T> options;
+
+  /// The current immutable state.
   QueryState<T> state;
 
   QueryOptions<T>? _sourceOptions;
@@ -48,15 +65,27 @@ final class Query<T> {
   int _fetchId = 0;
   bool _destroyed = false;
 
+  /// The query's cache key.
   QueryKey get key => options.key;
+
+  /// The active fetch, if any.
   Future<T>? get promise => _inFlight;
+
+  /// Whether a fetch is active.
   bool get isFetching => _inFlight != null;
+
+  /// Whether any observer permits automatic fetching.
   bool get isActive => _observers.any((observer) => observer.enabled);
+
+  /// Whether this query currently has no active observer.
   bool get isDisabled => _observers.isNotEmpty ? !isActive : !options.enabled;
+
+  /// Whether every observer treats this query as immutable.
   bool get isStatic => _observers.isEmpty
       ? options.freshness is QueryStaticData
       : _observers.every((observer) => observer.isStatic);
 
+  /// Returns whether data is missing, invalidated, or outside [freshness].
   bool isStale([QueryFreshness? freshness, DateTime? now]) {
     if (!state.hasData || state.isInvalidated) return true;
     return switch (freshness ?? options.freshness) {
@@ -67,6 +96,7 @@ final class Query<T> {
     };
   }
 
+  /// Applies a new source definition to this cache entry.
   void setOptions(QueryOptions<T> value) {
     if (identical(_sourceOptions, value)) return;
     _sourceOptions = value;
@@ -74,6 +104,7 @@ final class Query<T> {
     scheduleGc();
   }
 
+  /// Attaches a reactive observer.
   void addObserver(QueryObserverHandle observer) {
     if (_observers.add(observer)) {
       _gcTimer?.cancel();
@@ -82,6 +113,7 @@ final class Query<T> {
     }
   }
 
+  /// Detaches a reactive observer.
   void removeObserver(QueryObserverHandle observer) {
     if (!_observers.remove(observer)) return;
     cache.notify(QueryCacheEvent(QueryCacheEventType.observerRemoved, this));
@@ -91,6 +123,7 @@ final class Query<T> {
     scheduleGc();
   }
 
+  /// Schedules removal after the configured unused lifetime.
   void scheduleGc() {
     _gcTimer?.cancel();
     if (_destroyed || _observers.isNotEmpty) return;
@@ -106,6 +139,7 @@ final class Query<T> {
     if (_observers.isEmpty && !isFetching) cache.remove(this);
   }
 
+  /// Stores successful [value] and returns the structurally shared result.
   T setData(
     T value, {
     DateTime? updatedAt,
@@ -144,19 +178,23 @@ final class Query<T> {
     return merged;
   }
 
+  /// Replaces the complete query state.
   void setState(QueryState<T> value) => _setState(value);
 
+  /// Marks non-static data stale.
   void invalidate() {
     if (isStatic || state.isInvalidated) return;
     _setState(state.copyWith(isInvalidated: true));
   }
 
+  /// Restores initial state and cancels active work.
   void reset() {
     cancel(silent: true, revert: false);
     _setState(_initialStateValue);
     scheduleGc();
   }
 
+  /// Fetches data, deduplicating or replacing active work as configured.
   Future<T> fetch({
     ResolvedQueryOptions<T>? options,
     bool cancelRefetch = true,
@@ -369,6 +407,7 @@ final class Query<T> {
     }
   }
 
+  /// Cancels the active fetch and waits for it to stop.
   Future<void> cancel({bool silent = false, bool revert = true}) async {
     final future = _inFlight;
     _cancellation?.cancel(silent: silent, revert: revert);
@@ -381,6 +420,7 @@ final class Query<T> {
     }
   }
 
+  /// Handles application focus returning.
   void onFocus() {
     for (final observer in _observers) {
       if (observer.shouldRefetchOnFocus()) {
@@ -390,6 +430,7 @@ final class Query<T> {
     }
   }
 
+  /// Handles network connectivity returning.
   void onReconnect() {
     for (final observer in _observers) {
       if (observer.shouldRefetchOnReconnect()) {
@@ -408,6 +449,7 @@ final class Query<T> {
     cache.notify(QueryCacheEvent(QueryCacheEventType.updated, this));
   }
 
+  /// Stops timers, cancellation, and observer notifications.
   void destroy() {
     if (_destroyed) return;
     _destroyed = true;

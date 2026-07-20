@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 import 'dart:io';
 
@@ -7,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import 'project.dart';
 
+/// Runs the generated server and optional Flutter development process.
 Future<int> runDevelopment(
   CliProject project, {
   required String host,

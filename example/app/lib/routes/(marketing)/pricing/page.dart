@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:odroe/router.dart';
+import 'package:odroe/router_flutter.dart';
 
-final route = pageRoute(
+import 'route.dart' as definition;
+
+final route = definition.route.page(
   build: (context) => const Center(child: Text('Pricing')),
 );

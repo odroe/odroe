@@ -1,47 +1,51 @@
-import 'package:odroe/route.dart';
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('route documents merge head and compose semantic bodies', () async {
     late final AppRoute<NoParams, NoSearch, NoData> parent;
-    final child = AppRoute<NoParams, NoSearch, String>(
-      path: 'post',
-      load: (_) => '<Odroe>',
-      document: (context) {
-        expect(context.match(parent)?.data, const NoData());
-        return RouteDocument(
-          title: 'Child',
-          description: 'Child description',
-          canonical: '/post',
-          meta: const <DocumentMeta>[
-            DocumentMeta.property('og:title', 'Child'),
-          ],
-          jsonLd: const <Object?>[
-            <String, Object?>{'@type': 'Article'},
-          ],
-          body: HtmlElement(
-            'article',
-            children: <HtmlNode>[
-              HtmlElement('h1', children: <HtmlNode>[HtmlText(context.data)]),
+    final child = AppRoute<NoParams, NoSearch, String>(path: 'post')
+        .document((context) {
+          expect(context.match(parent)?.data, const NoData());
+          return RouteDocument(
+            title: 'Child',
+            description: 'Child description',
+            canonical: '/post',
+            meta: const <DocumentMeta>[
+              DocumentMeta.property('og:title', 'Child'),
             ],
+            jsonLd: const <Object?>[
+              <String, Object?>{'@type': 'Article'},
+            ],
+            body: HtmlElement(
+              'article',
+              children: <HtmlNode>[
+                HtmlElement('h1', children: <HtmlNode>[HtmlText(context.data)]),
+              ],
+            ),
+          );
+        })
+        .server(load: (_) => '<Odroe>');
+    parent =
+        AppRoute<NoParams, NoSearch, NoData>(
+          path: '/',
+          terminal: false,
+          children: <RouteNode>[child],
+        ).document(
+          (_) => const RouteDocument(
+            language: 'en',
+            baseHref: '/docs/',
+            title: 'Parent',
+            description: 'Parent description',
+            body: HtmlElement('main', children: <HtmlNode>[HtmlOutlet()]),
           ),
         );
-      },
+    final app = Server(
+      routes: <RouteNode>[parent],
+      renderer: const DocumentRenderer().call,
     );
-    parent = AppRoute<NoParams, NoSearch, NoData>(
-      path: '/',
-      terminal: false,
-      document: (_) => const RouteDocument(
-        language: 'en',
-        baseHref: '/docs/',
-        title: 'Parent',
-        description: 'Parent description',
-        body: HtmlElement('main', children: <HtmlNode>[HtmlOutlet()]),
-      ),
-      children: <RouteNode>[child],
-    );
-    final app = OdroeServer(routes: <RouteNode>[parent]);
 
     final response = await app.handle(
       ServerRequest.bytes(

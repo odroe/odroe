@@ -1,24 +1,28 @@
 # Odroe
 
-Odroe 是单包的 Flutter 全栈元框架。Flutter 最终构建 Android、iOS、Web、桌面端或其他目标，由应用与 Flutter CLI 决定；Web 只是其中一个目标。
+Odroe 是单包、可组合的 Flutter 全栈元框架。Flutter 构建 Android、iOS、Web、桌面或其他目标；只有应用选择 Web 时，Document 的 SSR/SSG 与 Flutter 首屏交接才参与构建。
+
+Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选择 modules；Router、Query、Document、RPC 与 Server 也都能独立导入。
 
 ## 入口
 
-- `package:odroe/odroe.dart`：完整 Odroe Flutter App，直接提供 Router、Query、RPC、服务端合同与首屏交接。
-- `package:odroe/query.dart`：平台中立的 Query 状态机、cache、mutation、hydration 与 persistence。
-- `package:odroe/query_flutter.dart`：`query.dart` 加 Flutter provider、builder 与 selector。
-- `package:odroe/route.dart`：平台中立的强类型 route、params/search codec、matcher 与 document contract。
-- `package:odroe/router.dart`：`route.dart` 加 Flutter Router、page 与 shell。
-- `package:odroe/document.dart`：语义 HTML、SEO/GEO document 与 renderer。
-- `package:odroe/rpc.dart`：可独立使用的强类型 RPC client、ref、transport 与 serializer。
-- `package:odroe/server.dart`：adapter-neutral server、middleware、RPC implementation 与公开 HTTP route。
-- `package:odroe/server_io.dart`：Dart IO host 与 SSG prerenderer。
+| 入口 | 能力 |
+| --- | --- |
+| `odroe.dart` | 平台中立的 `Module`、binding、`AppContext` 与生命周期 |
+| `odroe_flutter.dart` | Flutter `App` 组合根与 Flutter binding |
+| `query.dart` | 平台中立的 Query、Mutation、cache、hydration 与 persistence |
+| `query_flutter.dart` | Query Flutter provider、builders 与 `QueryModule` |
+| `router.dart` | 基于 Roux 的中立强类型 route、params/search、matching 与 URL 生成 |
+| `router_flutter.dart` | `PageRoute`、`ShellRoute`、`AppRouter` 与 `RouterModule` |
+| `document.dart` | 语义 HTML、metadata、SEO/GEO、SSR/SSG renderer |
+| `document_flutter.dart` | Flutter Web 首屏 handoff 与 `DocumentModule` |
+| `rpc.dart` | 强类型 server functions、client、transport 与 `RpcModule` |
+| `server.dart` | adapter-neutral HTTP、middleware、route 与 `Server` |
+| `server_io.dart` | Dart IO host 与 prerenderer |
 
-文件路由编译器由 CLI 内部使用，不是公开入口。每项能力都可以单独导入；`odroe.dart` 是标准完整应用入口。
+无后缀入口与 `lib/src/<capability>/` 都是平台中立实现；Flutter 代码只存在于 `<capability>_flutter`，Dart IO 代码只存在于 `server_io`。
 
 ## 创建应用
-
-先创建标准 Flutter App，再加入 Odroe：
 
 ```sh
 flutter create my_app
@@ -29,91 +33,90 @@ flutter pub add odroe
 ```text
 lib/
 ├── main.dart
-└── routes/
-    ├── shell.dart
-    ├── page.dart
-    └── posts/
-        └── [postId]/
-            ├── route.dart
-            ├── page.dart
-            └── server.dart
+├── routes/
+│   ├── route.dart
+│   ├── shell.dart
+│   ├── page.dart
+│   └── posts/
+│       └── [postId]/
+│           ├── route.dart
+│           ├── page.dart
+│           └── server.dart
+├── routes.dart          # generated client tree
+└── routes.server.dart   # generated server tree
 ```
 
-```sh
-dart run odroe generate
-dart run odroe dev
-dart run odroe dev -- -d macos
-dart run odroe dev -- -d chrome
-```
+每个包含 `page.dart`、`shell.dart` 或 `server.dart` 的目录必须包含自己的中立 `route.dart`。没有 flat-route 语法、annotation、`part`、build_runner、registry 或 hash 清单。
 
-`dev` 不默认 Web；`--` 后的参数原样交给 Flutter CLI。
-
-## 四个用户文件
-
-### `main.dart`
-
-完整应用只导入 `odroe.dart`。`OdroeApp` 直接持有 `query`、`router` 与 `rpc`：
+## 组合应用
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:odroe/odroe.dart';
+import 'package:odroe/document_flutter.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/query_flutter.dart';
+import 'package:odroe/router_flutter.dart';
+import 'package:odroe/rpc.dart';
 
 import 'routes.dart';
 
-void main() => runOdroeApp(
-  routes: routeTree,
-  builder: (app) => MaterialApp.router(
-    routerConfig: app.router,
-  ),
-);
+void main() {
+  runApp(
+    App(
+      modules: <Module>[
+        QueryModule(),
+        RpcModule.http(),
+        DocumentModule(),
+        RouterModule(routes: routeTree),
+      ],
+      builder: (app) => MaterialApp.router(
+        routerConfig: app.read(routerKey),
+      ),
+    ),
+  );
+}
 ```
 
-Web RPC 默认使用当前页面的同源地址。Android、iOS 与桌面 App 没有浏览器 origin，应显式传入服务端地址：
+删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
+
+Web 可让 `RpcModule.http()` 使用当前 origin；Android、iOS 与桌面应用应传入明确的服务端地址，例如 `RpcModule.http(baseUri: Uri.parse('https://api.example.com'))`。
+
+## 文件路由
+
+`route.dart` 只声明跨平台的强类型合同与 metadata。Document 是导入 `document.dart` 后附加的可选能力，不是 `AppRoute` 核心参数。
 
 ```dart
-runOdroeApp(
-  routes: routeTree,
-  server: Uri.parse('https://api.example.com'),
-  builder: (app) => MaterialApp.router(routerConfig: app.router),
-);
-```
-
-任意 descendant widget 可通过 `OdroeApp.of(context)` 读取同一个应用对象。需要自定义生命周期时可调用 `createOdroeApp`，并在结束时执行 `dispose()`。
-
-### `route.dart`
-
-共享合同只导入平台中立的 `route.dart`：
-
-```dart
-import 'package:odroe/route.dart';
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
 
 typedef Params = ({int postId});
 typedef Search = ({bool preview});
 
-final route = AppRoute<Params, Search, NoData>(
-  params: const PathParams<Params>.schema(),
-  search: const SearchParams<Search>.schema(
-    defaults: (preview: false),
-  ),
-  document: (context) => RouteDocument(
-    title: 'Post ${context.params.postId}',
-    body: HtmlElement(
-      'h1',
-      children: <HtmlNode>[HtmlText('Post ${context.params.postId}')],
-    ),
-  ),
-);
+final route =
+    AppRoute<Params, Search, NoData>(
+      metadata: const RouteMetadata(description: 'Readable post content.'),
+      params: const PathParams<Params>.schema(),
+      search: const SearchParams<Search>.schema(
+        defaults: (preview: false),
+      ),
+    ).document(
+      (context) => RouteDocument(
+        title: 'Post ${context.params.postId}',
+        body: HtmlElement(
+          'h1',
+          children: <HtmlNode>[
+            HtmlText('Post ${context.params.postId}'),
+          ],
+        ),
+      ),
+    );
 ```
 
-`RouteDocument` 是纯 HTML route 的页面，也是 Flutter route 的 SEO/GEO 可读内容；它不是第二套 Flutter UI。
-
-### `page.dart`
-
-Flutter 页面只导入 `router.dart`：
+`page.dart` 只绑定 Flutter 客户端行为：
 
 ```dart
 import 'package:flutter/widgets.dart';
-import 'package:odroe/router.dart';
+import 'package:odroe/router_flutter.dart';
 
 import 'route.dart' as definition;
 
@@ -122,19 +125,18 @@ final route = definition.route.page(
 );
 ```
 
-### `server.dart`
-
-服务端实现导入 `server.dart`；需要共享 route 类型时同时导入 `route.dart`：
+`server.dart` 只绑定服务端 loader、HTTP handler 与 server functions：
 
 ```dart
-import 'package:odroe/route.dart';
+import 'package:odroe/router.dart';
+import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 
 import 'route.dart' as definition;
 
 final route = definition.route.server(
-  load: (context) => const NoData(),
-  handlers: {
+  load: (_) => const NoData(),
+  handlers: <HttpMethod, ServerRouteHandler<definition.Params, definition.Search>>{
     HttpMethod.get: (context) => ServerResponse.json(
       <String, Object?>{'postId': context.params.postId},
     ),
@@ -146,16 +148,37 @@ final updatePost = ServerFunction<int, bool>(
 );
 ```
 
-`server.dart` 不会进入 Flutter client 产物。CLI 生成 client-safe `lib/routes.dart`、server-only `lib/routes.server.dart` 与 typed RPC refs；用户不维护 registry、hash 文件、annotation、`part` 或 build_runner。
+文件名只有一种心智：`definition.route.page(...)`、`definition.route.shell(...)`、`definition.route.server(...)`、`definition.route.document(...)`。
 
-## SSR 与 SSG
+## 服务端组合
 
-Web 首次请求由 Odroe server 输出语义 HTML、metadata、loader/Query state 与可选 Flutter bootstrap。Flutter 第一帧后接管可见界面，后续导航由已经加载的 Flutter Router 处理。纯 Document route 不加载 Flutter。
+生成的 `routes.server.dart` 暴露 `createServer(modules: ...)`。需要全局 middleware、request-scoped Query 或自定义 renderer 时，创建应用级 `lib/server.dart`；CLI 会自动把它作为 server 入口：
 
-```sh
-dart run odroe build -- web --release
+```dart
+import 'package:odroe/query.dart';
+import 'package:odroe/server.dart';
+
+import 'routes.server.dart' as generated;
+
+Server createServer() => generated.createServer(
+  modules: () => <QueryClientModule>[QueryClientModule.server()],
+);
 ```
 
-Web 构建会请求真实 server 生成静态 HTML；静态 route 自动生成，站内链接可发现动态 route。没有 `page.dart` 或 `shell.dart` 的应用可直接生成纯 HTML。`public/` 原样复制，Odroe 不生成站点 CSS。
+loader、middleware 与 server function 都可以通过 `context.read(queryClientKey)` 读取该请求显式安装的 Query client。没有 `lib/server.dart` 时，CLI 直接使用生成的默认 server。
 
-完整规范见 [Router](doc/router.md)、[Query](doc/query.md) 与 [Server、RPC、SSR/SSG](doc/server.md)。可运行应用见 [`example/app`](example/app)。
+## CLI
+
+```sh
+dart run odroe generate
+dart run odroe dev
+dart run odroe dev --server-only
+dart run odroe dev -- -d ios
+dart run odroe dev -- -d chrome
+dart run odroe build apk
+dart run odroe build web
+```
+
+`dev` 不默认 Web；`--` 后参数原样交给 Flutter CLI。`build web` 会构建 Flutter Web 与 server artifact，再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
+
+可运行应用见 [`example/app`](example/app)。官网与正式文档将由 Odroe 自身构建在 `sites/odroe.dev`，仓库不提交研究过程文档。

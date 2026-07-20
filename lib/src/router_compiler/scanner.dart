@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -9,18 +7,23 @@ import 'package:path/path.dart' as p;
 import 'model.dart';
 import 'server_functions.dart';
 
+/// Scans and validates a filesystem route tree.
 final class RouteScanner {
+  /// Creates a scanner rooted at [projectRoot].
   RouteScanner(this.projectRoot)
     : _serverFunctions = ServerFunctionScanner(projectRoot);
 
+  /// Application package root used for diagnostics and import resolution.
   final Directory projectRoot;
   final ServerFunctionScanner _serverFunctions;
 
+  /// Scans [routesDirectory] into a structural route tree.
   RouteNode scan(
     Directory routesDirectory,
     List<FileRouteDiagnostic> diagnostics,
   ) => _scan(routesDirectory, const <String>[], diagnostics, isRoot: true);
 
+  /// Validates contracts and generated identifiers for [root].
   void validate(
     RouteNode root,
     List<RouteNode> nodes,
@@ -30,12 +33,14 @@ final class RouteScanner {
     _validateGeneratedNames(nodes, diagnostics);
   }
 
+  /// Flattens [root] in stable depth-first order.
   List<RouteNode> flatten(RouteNode root) {
     final nodes = <RouteNode>[];
     _flatten(root, nodes);
     return nodes;
   }
 
+  /// Returns terminal locations that need no path parameters.
   List<String> staticRoutes(List<RouteNode> nodes) => _staticRoutes(nodes);
 
   RouteNode _scan(
@@ -62,12 +67,27 @@ final class RouteScanner {
       node.contract = _parseContract(file, diagnostics);
     }
     if (node.pageFile case final file?) {
-      _requireRouteVariable(file, diagnostics);
+      _requireBoundRoute(file, 'page', diagnostics);
+      if (node.routeFile == null) {
+        _error(
+          diagnostics,
+          file.path,
+          'page.dart requires route.dart as its neutral typed declaration.',
+        );
+      }
     }
     if (node.shellFile case final file?) {
-      _requireRouteVariable(file, diagnostics);
+      _requireBoundRoute(file, 'shell', diagnostics);
+      if (node.routeFile == null) {
+        _error(
+          diagnostics,
+          file.path,
+          'shell.dart requires route.dart as its neutral typed declaration.',
+        );
+      }
     }
     if (node.serverFile case final file?) {
+      _requireBoundRoute(file, 'server', diagnostics);
       _serverFunctions.scan(node, file, diagnostics);
       if (node.routeFile == null) {
         _error(
@@ -175,11 +195,8 @@ final class RouteScanner {
       );
     }
     final initializer = routeVariable?.initializer;
-    final isAppRoute =
-        initializer != null &&
-        RegExp(
-          r'^(?:[A-Za-z_][A-Za-z0-9_]*\.)?AppRoute\s*<',
-        ).hasMatch(initializer.toSource());
+    final appRoute = _appRouteCreation(initializer);
+    final isAppRoute = appRoute != null;
     if (routeVariable != null && !isAppRoute) {
       _error(
         diagnostics,
@@ -187,15 +204,10 @@ final class RouteScanner {
         'route.dart must initialize route with AppRoute<Params, Search, Data>.',
       );
     }
-    final typeArguments = switch (initializer) {
-      InstanceCreationExpression() =>
-        initializer.constructorName.type.typeArguments,
-      MethodInvocation() => initializer.typeArguments,
-      _ => null,
-    };
+    final typeArguments = appRoute?.typeArguments;
     final arguments = typeArguments?.arguments;
-    if (isAppRoute && arguments != null) {
-      if (arguments.length != 3) {
+    if (isAppRoute) {
+      if (arguments == null || arguments.length != 3) {
         _error(
           diagnostics,
           file.path,
@@ -220,11 +232,7 @@ final class RouteScanner {
         }
       }
     }
-    final argumentList = switch (initializer) {
-      InstanceCreationExpression() => initializer.argumentList,
-      MethodInvocation() => initializer.argumentList,
-      _ => null,
-    };
+    final argumentList = appRoute?.argumentList;
     final argumentNames = argumentList != null
         ? argumentList.arguments
               .whereType<NamedExpression>()
@@ -233,7 +241,15 @@ final class RouteScanner {
         : const <String>{};
     final declaresParams = argumentNames.contains('params');
     final declaresSearch = argumentNames.contains('search');
-    final declaresDocument = argumentNames.contains('document');
+    final declaresDocument = _hasInvocation(initializer, 'document');
+    if (argumentNames.contains('document')) {
+      _error(
+        diagnostics,
+        file.path,
+        'Document output is an optional capability. Import document.dart and '
+        'attach it with `AppRoute(...).document(...)`.',
+      );
+    }
     if (declaresParams && params == null) {
       _error(
         diagnostics,
@@ -280,7 +296,11 @@ final class RouteScanner {
     );
   }
 
-  void _requireRouteVariable(File file, List<FileRouteDiagnostic> diagnostics) {
+  void _requireBoundRoute(
+    File file,
+    String method,
+    List<FileRouteDiagnostic> diagnostics,
+  ) {
     final result = parseString(
       content: file.readAsStringSync(),
       path: file.path,
@@ -292,17 +312,59 @@ final class RouteScanner {
       }
       return;
     }
-    final exportsRoute = result.unit.declarations
+    final route = result.unit.declarations
         .whereType<TopLevelVariableDeclaration>()
         .expand((declaration) => declaration.variables.variables)
-        .any((variable) => variable.name.lexeme == 'route');
-    if (!exportsRoute) {
+        .where((variable) => variable.name.lexeme == 'route')
+        .firstOrNull;
+    if (route == null) {
       _error(
         diagnostics,
         file.path,
         'File must export a top-level variable named route.',
       );
+      return;
     }
+    final initializer = route.initializer;
+    final valid =
+        initializer is MethodInvocation &&
+        initializer.methodName.name == method &&
+        initializer.target?.toSource().endsWith('.route') == true;
+    if (!valid) {
+      _error(
+        diagnostics,
+        file.path,
+        '${p.basename(file.path)} must bind its sibling declaration with '
+        '`final route = definition.route.$method(...)`.',
+      );
+    }
+  }
+
+  ({TypeArgumentList? typeArguments, ArgumentList argumentList})?
+  _appRouteCreation(Expression? expression) {
+    return switch (expression) {
+      InstanceCreationExpression()
+          when expression.constructorName.type.name.lexeme == 'AppRoute' =>
+        (
+          typeArguments: expression.constructorName.type.typeArguments,
+          argumentList: expression.argumentList,
+        ),
+      MethodInvocation(:final methodName) when methodName.name == 'AppRoute' =>
+        (
+          typeArguments: expression.typeArguments,
+          argumentList: expression.argumentList,
+        ),
+      MethodInvocation(:final target) => _appRouteCreation(target),
+      _ => null,
+    };
+  }
+
+  bool _hasInvocation(Expression? expression, String name) {
+    return switch (expression) {
+      MethodInvocation(:final target, :final methodName) =>
+        methodName.name == name || _hasInvocation(target, name),
+      _ => false,
+    };
   }
 
   void _validateTree(

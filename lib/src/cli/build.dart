@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -9,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'project.dart';
 
+/// Builds the selected Flutter target and Odroe server artifact.
 Future<int> runBuild(
   CliProject project, {
   required bool serverOnly,

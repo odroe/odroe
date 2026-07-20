@@ -1,9 +1,8 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
 /// Cancellation raised by Query without treating it as a request failure.
 final class QueryCancelledException implements Exception {
+  /// Creates a query cancellation reason.
   const QueryCancelledException({this.silent = false, this.revert = true});
 
   /// Suppresses error-state notifications when true.
@@ -47,15 +46,21 @@ final class QueryCancelToken {
   }
 }
 
+/// Creates and completes a cancellation token for one query fetch.
 final class QueryCancellationController {
+  /// Creates a controller with a fresh token.
   QueryCancellationController() : token = QueryCancelToken._();
 
+  /// The token passed to the query function.
   final QueryCancelToken token;
 
+  /// Whether the query function consumed the token.
   bool get consumed => token._consumed;
 
+  /// Completes when cancellation is requested.
   Future<QueryCancelledException> get whenCancelled => token._cancelled.future;
 
+  /// Cancels the query with the selected notification behavior.
   void cancel({bool silent = false, bool revert = true}) {
     if (!token._cancelled.isCompleted) {
       final reason = QueryCancelledException(silent: silent, revert: revert);

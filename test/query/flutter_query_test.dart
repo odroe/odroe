@@ -1,9 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odroe/odroe_flutter.dart';
 import 'package:odroe/query_flutter.dart';
 
 void main() {
-  testWidgets('QueryBuilder fetches through the inherited client', (
+  testWidgets('QueryModule installs its client for Flutter query widgets', (
     tester,
   ) async {
     final client = QueryClient();
@@ -14,18 +15,23 @@ void main() {
     );
 
     await tester.pumpWidget(
-      QueryClientProvider(
-        client: client,
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: QueryBuilder<int>(
-            options: options,
-            builder: (context, result) =>
-                Text(result.hasData ? '${result.requireData}' : 'loading'),
-          ),
-        ),
+      App(
+        modules: <Module>[QueryModule(client: client)],
+        builder: (app) {
+          expect(app.read(queryClientKey), same(client));
+          return Directionality(
+            textDirection: TextDirection.ltr,
+            child: QueryBuilder<int>(
+              options: options,
+              builder: (context, result) =>
+                  Text(result.hasData ? '${result.requireData}' : 'loading'),
+            ),
+          );
+        },
       ),
     );
+
+    await tester.pump();
     expect(find.text('loading'), findsOneWidget);
 
     await tester.pump();

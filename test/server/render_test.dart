@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:odroe/document.dart';
 import 'package:odroe/query.dart';
-import 'package:odroe/route.dart';
+import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
@@ -10,9 +11,8 @@ void main() {
   test('hybrid renderer leaves document-only routes as pure HTML', () async {
     final route = AppRoute<NoParams, NoSearch, NoData>(
       path: '/',
-      document: (_) => const RouteDocument(title: 'Document only'),
-    );
-    final app = OdroeServer(
+    ).document((_) => const RouteDocument(title: 'Document only'));
+    final app = Server(
       routes: <RouteNode>[route],
       renderer: const DocumentRenderer(
         flutterBootstrap: '/flutter_bootstrap.js',
@@ -33,6 +33,25 @@ void main() {
     expect(html, isNot(contains('<base')));
     expect(html, isNot(contains('__odroe_state__')));
     expect(html, isNot(contains('flutter_bootstrap.js')));
+
+    final hybrid = Server(
+      routes: <RouteNode>[route],
+      flutterRoutes: <RouteNode>[route],
+      renderer: const DocumentRenderer(
+        flutterBootstrap: '/flutter_bootstrap.js',
+        baseHref: '/',
+      ).call,
+    );
+    final hybridResponse = await hybrid.handle(
+      ServerRequest.bytes(
+        method: HttpMethod.get,
+        uri: Uri.parse('http://localhost/'),
+        headers: Headers.single(<String, String>{'accept': 'text/html'}),
+      ),
+    );
+    final hybridHtml = await hybridResponse.readText();
+    expect(hybridHtml, contains('src="/flutter_bootstrap.js"'));
+    expect(hybridHtml, isNot(contains('&#47;')));
   });
 
   test('pending Query state streams after the initial handoff', () async {
@@ -43,14 +62,16 @@ void main() {
     );
     final route = AppRoute<NoParams, NoSearch, NoData>(path: '/').server(
       load: (context) {
-        unawaited(context.query.fetchQuery(options));
+        unawaited(context.read(queryClientKey).fetchQuery(options));
         return const NoData();
       },
     );
-    final app = OdroeServer(
+    final app = Server(
       routes: <RouteNode>[route],
+      modules: () => [QueryClientModule.server()],
       renderer: (context) {
-        final state = dehydrate(context.query, includePending: true);
+        final query = context.request.read(queryClientKey);
+        final state = dehydrate(query, includePending: true);
         expect(state.queries, hasLength(1));
         expect(state.queries.single.pending, isNotNull);
         return const DocumentRenderer().call(context);

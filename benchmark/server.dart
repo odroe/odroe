@@ -1,17 +1,21 @@
 import 'dart:convert';
 
-import 'package:odroe/route.dart';
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
+import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 
 Future<void> main() async {
-  final app = OdroeServer(
-    routes: <RouteNode>[
+  final root =
       AppRoute<NoParams, NoSearch, NoData>(
         path: '/',
-        document: (_) => const RouteDocument(
-          language: 'en',
+        metadata: const RouteMetadata(
           title: 'Odroe',
           description: 'Flutter full-stack framework.',
+        ),
+      ).document(
+        (_) => const RouteDocument(
+          language: 'en',
           body: HtmlElement(
             'main',
             children: <HtmlNode>[
@@ -25,13 +29,15 @@ Future<void> main() async {
             ],
           ),
         ),
-      ),
-    ],
+      );
+  final app = Server(
+    routes: <RouteNode>[root],
     functions: <String, ServerFunctionBinding>{
       'increment': ServerFunctionBinding(
         ServerFunction<int, int>(handler: (context) => context.data + 1),
       ),
     },
+    renderer: const DocumentRenderer().call,
   );
   final client = RpcClient(
     baseUri: Uri.parse('http://localhost'),
@@ -50,7 +56,7 @@ Future<void> main() async {
   rpc.stop();
   _print('In-memory typed RPC', rpc.elapsed, 2000);
 
-  final route = Stopwatch()..start();
+  final routing = Stopwatch()..start();
   for (var index = 0; index < 2000; index++) {
     final response = await app.handle(
       ServerRequest.bytes(
@@ -62,8 +68,8 @@ Future<void> main() async {
     final payload = jsonDecode(await response.readText()) as Map;
     if (payload['location'] != '/') throw StateError('Unexpected route.');
   }
-  route.stop();
-  _print('Route + JSON handoff', route.elapsed, 2000);
+  routing.stop();
+  _print('Route + JSON handoff', routing.elapsed, 2000);
 
   final document = Stopwatch()..start();
   for (var index = 0; index < 2000; index++) {

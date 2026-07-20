@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
 import 'client.dart';
@@ -7,21 +5,37 @@ import 'managers.dart';
 import 'mutation_state.dart';
 import 'options.dart';
 
+/// Why mutation cache subscribers were notified.
 enum MutationCacheEventType {
+  /// A mutation entered the cache.
   added,
+
+  /// A mutation left the cache.
   removed,
+
+  /// A mutation state changed.
   updated,
+
+  /// An observer started watching a mutation.
   observerAdded,
+
+  /// An observer stopped watching a mutation.
   observerRemoved,
 }
 
+/// One mutation cache change.
 final class MutationCacheEvent {
+  /// Creates a cache event for [mutation].
   const MutationCacheEvent(this.type, this.mutation);
 
+  /// The kind of cache change.
   final MutationCacheEventType type;
+
+  /// The mutation affected by the change.
   final Mutation<dynamic, dynamic, dynamic> mutation;
 }
 
+/// Handles successful mutations across a cache.
 typedef GlobalMutationSuccess =
     FutureOr<void> Function(
       Object? data,
@@ -30,6 +44,8 @@ typedef GlobalMutationSuccess =
       Mutation<dynamic, dynamic, dynamic> mutation,
       MutationContext context,
     );
+
+/// Handles failed mutations across a cache.
 typedef GlobalMutationError =
     FutureOr<void> Function(
       Object error,
@@ -42,9 +58,13 @@ typedef GlobalMutationError =
 
 /// Owns mutation executions, serial scopes, and persistence events.
 final class MutationCache {
+  /// Creates a mutation cache with optional global callbacks.
   MutationCache({this.onSuccess, this.onError});
 
+  /// Callback invoked after any mutation succeeds.
   final GlobalMutationSuccess? onSuccess;
+
+  /// Callback invoked after any mutation fails.
   final GlobalMutationError? onError;
   final Set<Mutation<dynamic, dynamic, dynamic>> _mutations =
       <Mutation<dynamic, dynamic, dynamic>>{};
@@ -53,8 +73,10 @@ final class MutationCache {
   final Set<void Function(MutationCacheEvent)> _listeners =
       <void Function(MutationCacheEvent)>{};
 
+  /// All mutations currently in the cache.
   Iterable<Mutation<dynamic, dynamic, dynamic>> get all => _mutations;
 
+  /// Creates and stores a mutation execution.
   Mutation<TData, TVariables, TOptimistic>
   build<TData, TVariables, TOptimistic>(
     QueryClient client,
@@ -78,6 +100,7 @@ final class MutationCache {
     return mutation;
   }
 
+  /// Whether [mutation] is first in its serial scope.
   bool canRun(Mutation<dynamic, dynamic, dynamic> mutation) {
     final scope = mutation.options.scope;
     if (scope == null) return true;
@@ -87,6 +110,7 @@ final class MutationCache {
     return true;
   }
 
+  /// Removes and destroys [mutation].
   void remove(Mutation<dynamic, dynamic, dynamic> mutation) {
     if (!_mutations.remove(mutation)) return;
     final scope = mutation.options.scope;
@@ -99,6 +123,7 @@ final class MutationCache {
     notify(MutationCacheEvent(MutationCacheEventType.removed, mutation));
   }
 
+  /// Sends [event] to current subscribers.
   void notify(MutationCacheEvent event) {
     for (final listener in List<void Function(MutationCacheEvent)>.of(
       _listeners,
@@ -107,11 +132,13 @@ final class MutationCache {
     }
   }
 
+  /// Subscribes to mutation cache events.
   QueryDispose subscribe(void Function(MutationCacheEvent event) listener) {
     _listeners.add(listener);
     return () => _listeners.remove(listener);
   }
 
+  /// Waits until [mutation] can run under scope and network constraints.
   Future<void> waitUntilRunnable(
     QueryClient client,
     Mutation<dynamic, dynamic, dynamic> mutation,
@@ -136,6 +163,7 @@ final class MutationCache {
     }
   }
 
+  /// Continues all cached mutations paused by network or scope constraints.
   Future<void> resumePaused(QueryClient client) async {
     await Future.wait<void>(
       _mutations.where((mutation) => mutation.state.isPaused).map((
@@ -150,6 +178,7 @@ final class MutationCache {
     );
   }
 
+  /// Removes every cached mutation.
   void clear() {
     while (_mutations.isNotEmpty) {
       remove(_mutations.first);
@@ -159,6 +188,7 @@ final class MutationCache {
 
 /// One concrete mutation execution.
 final class Mutation<TData, TVariables, TOptimistic> {
+  /// Creates one concrete mutation execution.
   Mutation({
     required this.client,
     required this.cache,
@@ -168,9 +198,16 @@ final class Mutation<TData, TVariables, TOptimistic> {
     _scheduleGc();
   }
 
+  /// The client executing this mutation.
   final QueryClient client;
+
+  /// The cache that owns this mutation.
   final MutationCache cache;
+
+  /// The mutation definition.
   final MutationOptions<TData, TVariables, TOptimistic> options;
+
+  /// The latest execution state.
   MutationState<TData, TVariables, TOptimistic> state;
 
   final Set<void Function(MutationState<TData, TVariables, TOptimistic>)>
@@ -179,6 +216,7 @@ final class Mutation<TData, TVariables, TOptimistic> {
   Future<TData>? _future;
   bool _destroyed = false;
 
+  /// Starts execution or returns the active execution.
   Future<TData> execute(TVariables variables) {
     final active = _future;
     if (active != null) return active;
@@ -190,6 +228,7 @@ final class Mutation<TData, TVariables, TOptimistic> {
     return _future!;
   }
 
+  /// Continues a restored paused mutation.
   Future<TData> continueExecution() {
     final variables = state.variables;
     if (variables == null && null is! TVariables) {
@@ -403,6 +442,7 @@ final class Mutation<TData, TVariables, TOptimistic> {
     submittedAt: state.submittedAt,
   );
 
+  /// Subscribes to execution state changes.
   QueryDispose subscribe(
     void Function(MutationState<TData, TVariables, TOptimistic> state) listener,
   ) {
@@ -448,6 +488,7 @@ final class Mutation<TData, TVariables, TOptimistic> {
     }
   }
 
+  /// Stops timers and releases observers.
   void destroy() {
     _destroyed = true;
     _gcTimer?.cancel();

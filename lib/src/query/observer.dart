@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
 import 'client.dart';
@@ -10,24 +8,55 @@ import 'state.dart';
 
 /// UI-facing projection of a query's two state axes.
 final class QueryResult<T> {
+  /// Creates a UI projection from [state] and freshness.
   const QueryResult({required this.state, required this.isStale});
 
+  /// The complete cached state.
   final QueryState<T> state;
+
+  /// Whether the current data is stale.
   final bool isStale;
 
+  /// Whether a data value is present.
   bool get hasData => state.hasData;
+
+  /// The current data value.
   T? get data => state.data;
+
+  /// Returns current data or throws when absent.
   T get requireData => state.requireData;
+
+  /// The latest query error.
   Object? get error => state.error;
+
+  /// The stack trace for [error].
   StackTrace? get errorStackTrace => state.errorStackTrace;
+
+  /// Whether no successful result has been stored yet.
   bool get isPending => state.status == QueryStatus.pending;
+
+  /// Whether the query holds a successful result.
   bool get isSuccess => state.status == QueryStatus.success;
+
+  /// Whether the latest fetch failed.
   bool get isError => state.status == QueryStatus.error;
+
+  /// Whether a fetch is running.
   bool get isFetching => state.fetchStatus == QueryFetchStatus.fetching;
+
+  /// Whether a fetch is paused.
   bool get isPaused => state.fetchStatus == QueryFetchStatus.paused;
+
+  /// Whether the initial fetch is running.
   bool get isLoading => isPending && isFetching;
+
+  /// Whether a fetch is running after data was stored.
   bool get isRefetching => isFetching && !isPending;
+
+  /// Whether the initial fetch failed without data.
   bool get isLoadingError => isError && !hasData;
+
+  /// Whether a refetch failed while retaining data.
   bool get isRefetchError => isError && hasData;
 
   @override
@@ -42,12 +71,14 @@ final class QueryResult<T> {
 
 /// Reactive lifecycle around one [Query] cache entry.
 final class QueryObserver<T> implements QueryObserverHandle {
+  /// Creates an observer for [options] on [client].
   QueryObserver(this.client, QueryOptions<T> options) : _options = options {
     _query = client.query(options);
     _resolved = _query.options;
     _result = _createResult();
   }
 
+  /// The client that owns the observed query.
   final QueryClient client;
   QueryOptions<T> _options;
   late ResolvedQueryOptions<T> _resolved;
@@ -59,7 +90,10 @@ final class QueryObserver<T> implements QueryObserverHandle {
   Timer? _refetchTimer;
   bool _disposed = false;
 
+  /// The current query definition.
   QueryOptions<T> get options => _options;
+
+  /// The current UI-facing result.
   QueryResult<T> get current => _listeners.isEmpty ? _createResult() : _result;
 
   @override
@@ -68,6 +102,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
   @override
   bool get isStatic => _resolved.freshness is QueryStaticData;
 
+  /// Subscribes to results and starts observer-driven fetching.
   QueryDispose subscribe(void Function(QueryResult<T> result) listener) {
     if (_disposed) throw StateError('QueryObserver is disposed.');
     final first = _listeners.isEmpty;
@@ -93,6 +128,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
     };
   }
 
+  /// Rebinds this observer to [value].
   void setOptions(QueryOptions<T> value) {
     if (_disposed) throw StateError('QueryObserver is disposed.');
     final oldQuery = _query;
@@ -114,6 +150,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
     }
   }
 
+  /// Fetches the query and returns the resulting state projection.
   Future<QueryResult<T>> refetch({bool cancelRefetch = true}) async {
     try {
       await _query.fetch(options: _resolved, cancelRefetch: cancelRefetch);
@@ -213,6 +250,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
     _refetchTimer = null;
   }
 
+  /// Releases timers and query subscriptions held by this observer.
   void dispose() {
     if (_disposed) return;
     _disposed = true;

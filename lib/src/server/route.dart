@@ -1,51 +1,119 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
-import '../document/document.dart';
-import '../query/client.dart';
+import '../app/context.dart';
+import '../app/key.dart';
 import '../router/codec.dart';
 import '../router/match.dart';
-import '../router/pattern.dart';
+import '../router/path.dart';
 import '../router/route.dart';
 import 'context.dart';
 import 'http.dart';
 import 'middleware.dart';
 
+/// Typed input for one server route loader.
+final class ServerLoadContext<P, S> {
+  /// Creates server loader input.
+  const ServerLoadContext({
+    required this.context,
+    required this.params,
+    required this.search,
+    required this.location,
+    required this.branch,
+  });
+
+  /// Request-scoped application and HTTP state.
+  final RequestContext context;
+
+  /// Path parameters owned by the route.
+  final P params;
+
+  /// Search state owned by the route.
+  final S search;
+
+  /// Complete matched location.
+  final Uri location;
+
+  /// Complete matched route branch.
+  final RouteBranch branch;
+
+  /// Incoming HTTP request.
+  ServerRequest get request => context.request;
+
+  /// Explicitly installed request application modules.
+  AppContext get app => context.app;
+
+  /// Reads an application service.
+  T read<T extends Object>(ContextKey<T> key) => context.read(key);
+
+  /// Reads an optional application service.
+  T? maybe<T extends Object>(ContextKey<T> key) => context.maybe(key);
+
+  /// Returns typed values for an active route.
+  RouteValues<ParentP, ParentS>? match<ParentP, ParentS, ParentD>(
+    TypedRoute<ParentP, ParentS, ParentD> route,
+  ) => branch.match(route);
+}
+
+/// Loads data for a server route.
+typedef ServerLoader<P, S, D> =
+    FutureOr<D> Function(ServerLoadContext<P, S> context);
+
 /// Typed input for one public HTTP route handler.
 final class ServerRouteContext<P, S> {
+  /// Creates route handler input.
   const ServerRouteContext({
-    required this.request,
+    required this.context,
     required this.params,
     required this.search,
     required this.location,
   });
 
-  final RequestContext request;
+  /// Request-scoped application and HTTP state.
+  final RequestContext context;
+
+  /// Path parameters owned by the route.
   final P params;
+
+  /// Search state owned by the route.
   final S search;
+
+  /// Complete matched location.
   final Uri location;
+
+  /// Incoming HTTP request.
+  ServerRequest get request => context.request;
+
+  /// Explicitly installed request application modules.
+  AppContext get app => context.app;
+
+  /// Reads an application service.
+  T read<T extends Object>(ContextKey<T> key) => context.read(key);
+
+  /// Reads an optional application service.
+  T? maybe<T extends Object>(ContextKey<T> key) => context.maybe(key);
 }
 
+/// Handles one HTTP method on a matched route.
 typedef ServerRouteHandler<P, S> =
     FutureOr<ServerResponse> Function(ServerRouteContext<P, S> context);
 
-/// Server-only behavior attached to a client-safe route definition.
+/// Server behavior attached to a neutral route definition.
 final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
   ServerRoute._({
     required this.definition,
     required this.load,
-    required this.serverMiddleware,
+    required this.middleware,
     required this.handlers,
   });
 
-  /// The shared route contract.
+  /// The shared route definition.
   final AppRoute<P, S, D> definition;
 
   /// Optional server loader implementation.
-  final RouteLoader<P, S, D>? load;
+  final ServerLoader<P, S, D>? load;
 
-  final List<Middleware> serverMiddleware;
+  /// Middleware applied when this route is active.
+  final List<Middleware> middleware;
 
   /// Public HTTP handlers keyed by method.
   final Map<HttpMethod, ServerRouteHandler<P, S>> handlers;
@@ -54,16 +122,13 @@ final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
   List<RouteNode> get children => definition.children;
 
   @override
-  RoutePattern get compiledPattern => definition.compiledPattern;
+  PathTemplate get template => definition.template;
 
   @override
   bool get hasPathCodec => definition.hasPathCodec;
 
   @override
-  bool get hasDocument => definition.hasDocument;
-
-  @override
-  bool get hasFlutterPage => definition.hasFlutterPage;
+  RouteMetadata get metadata => definition.metadata;
 
   @override
   Object get identity => definition.identity;
@@ -75,6 +140,10 @@ final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
   bool get terminal => definition.terminal;
 
   @override
+  T? capability<T extends Object>(RouteCapability<T> key) =>
+      definition.capability(key);
+
+  @override
   Object? decodePath(Map<String, List<String>> values) =>
       definition.decodePath(values);
 
@@ -83,48 +152,37 @@ final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
       definition.decodeQuery(values);
 
   @override
-  FutureOr<Object?> loadObject(
-    Object? params,
-    Object? search,
-    Uri location,
-    RouteBranch branch,
-    QueryClient query,
-  ) {
-    final loader = load;
-    if (loader == null) {
-      return definition.loadObject(params, search, location, branch, query);
-    }
-    return loader(
-      RouteLoadContext<P, S>(
-        params: params as P,
-        search: search as S,
-        location: location,
-        query: query,
-        branch: branch,
-      ),
-    );
-  }
-
-  @override
-  FutureOr<RouteDocument?> buildDocumentObject(
-    Object? params,
-    Object? search,
-    Object? data,
-    Uri location,
-    RouteBranch branch,
-  ) => definition.buildDocumentObject(params, search, data, location, branch);
-
-  @override
   List<String> encodePath(Object? params) => definition.encodePath(params);
 
   @override
   Map<String, List<String>> encodeQuery(Object? search) =>
       definition.encodeQuery(search);
 
+  /// Runs this route's loader for the active branch.
+  FutureOr<Object?> runLoader(RequestContext context, RouteMatches matches) {
+    final loader = load;
+    if (loader == null) return const NoData();
+    final match = matches.match(this);
+    if (match == null) {
+      throw StateError('Server route is not part of the active route branch.');
+    }
+    return loader(
+      ServerLoadContext<P, S>(
+        context: context,
+        params: match.params,
+        search: match.search,
+        location: matches.location,
+        branch: matches.branch,
+      ),
+    );
+  }
+
+  /// Whether this route handles [method].
   bool handles(HttpMethod method) =>
       handlers.containsKey(method) ||
       (method == HttpMethod.head && handlers.containsKey(HttpMethod.get));
 
+  /// Runs the handler for [method], or returns `null` when none exists.
   Future<ServerResponse>? handle(
     HttpMethod method,
     RequestContext request,
@@ -138,7 +196,7 @@ final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
     return Future<ServerResponse>.sync(
       () => handler(
         ServerRouteContext<P, S>(
-          request: request,
+          context: request,
           params: match.params,
           search: match.search,
           location: match.location,
@@ -152,7 +210,7 @@ final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
       ServerRoute<P, S, D>._(
         definition: definition.withChildren(children),
         load: load,
-        serverMiddleware: serverMiddleware,
+        middleware: middleware,
         handlers: handlers,
       );
 
@@ -162,7 +220,6 @@ final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
     PathParams<P>? params,
     SearchParams<S>? search,
     required bool terminal,
-    bool hasFlutterPage = false,
     Iterable<RouteNode> children = const <RouteNode>[],
   }) => ServerRoute<P, S, D>._(
     definition: definition.compiled(
@@ -170,25 +227,25 @@ final class ServerRoute<P, S, D> implements TypedRoute<P, S, D> {
       params: params,
       search: search,
       terminal: terminal,
-      hasFlutterPage: hasFlutterPage,
       children: children,
     ),
     load: load,
-    serverMiddleware: serverMiddleware,
+    middleware: middleware,
     handlers: handlers,
   );
 }
 
-/// Attaches server-only behavior to an app route.
+/// Attaches server behavior to a neutral route definition.
 extension AppRouteServer<P, S, D> on AppRoute<P, S, D> {
+  /// Creates a server route.
   ServerRoute<P, S, D> server({
-    RouteLoader<P, S, D>? load,
+    ServerLoader<P, S, D>? load,
     Iterable<Middleware> middleware = const <Middleware>[],
     Map<HttpMethod, ServerRouteHandler<P, S>>? handlers,
   }) => ServerRoute<P, S, D>._(
     definition: this,
     load: load,
-    serverMiddleware: List<Middleware>.of(middleware, growable: false),
+    middleware: List<Middleware>.of(middleware, growable: false),
     handlers: Map<HttpMethod, ServerRouteHandler<P, S>>.of(
       handlers ?? <HttpMethod, ServerRouteHandler<P, S>>{},
     ),

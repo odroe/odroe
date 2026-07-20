@@ -268,8 +268,11 @@ void _writeAttribute(StringBuffer output, String name, String? value) {
 String _escapeText(String value) =>
     const HtmlEscape(HtmlEscapeMode.element).convert(value);
 
-String _escapeAttribute(String value) =>
-    const HtmlEscape(HtmlEscapeMode.attribute).convert(value);
+String _escapeAttribute(String value) => value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 
 final RegExp _scriptEnd = RegExp(r'</script', caseSensitive: false);
 const Set<String> _voidElements = <String>{

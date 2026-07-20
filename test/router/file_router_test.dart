@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:odroe/router.dart';
+import 'package:odroe/router_flutter.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 
 // ignore: avoid_relative_lib_imports
@@ -38,14 +38,26 @@ void main() {
       output.serverSource,
       contains("import 'routes/posts/[postId]/server.dart'"),
     );
-    expect(output.source, contains("import 'package:odroe/route.dart';"));
+    expect(output.source, contains("import 'package:odroe/router.dart';"));
+    expect(output.source, isNot(contains("package:odroe/route.dart")));
     expect(output.source, contains("import 'package:odroe/rpc.dart';"));
-    expect(output.serverSource, contains('OdroeServer createServer('));
-    expect(output.serverSource, contains('hasFlutterPage: true'));
+    expect(output.serverSource, contains("import 'package:odroe/rpc.dart';"));
+    expect(output.serverSource, contains('Server createServer('));
+    expect(
+      output.serverSource,
+      contains('Iterable<Module> Function()? modules'),
+    );
+    expect(output.serverSource, contains('flutterRoutes: <RouteNode>['));
+    expect(output.serverSource, contains('path: ":postId"'));
+    expect(output.source, contains('path: "docs/**:slug"'));
+    expect(output.serverSource, isNot(contains('hasFlutterPage:')));
+    expect(output.source, isNot(contains('AppRoute<NoParams')));
+    expect(output.source, isNot(contains('ignore_for_file')));
+    expect(output.serverSource, isNot(contains('ignore_for_file')));
   });
 
   testWidgets('push crosses a real filesystem shell', (tester) async {
-    final router = OdroeRouter(
+    final router = AppRouter(
       routes: fixture.routeTree,
       initialLocation: Uri.parse('/'),
     );

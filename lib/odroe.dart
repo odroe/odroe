@@ -1,9 +1,8 @@
-/// The complete Odroe Flutter full-stack framework.
+/// Composable application modules and typed application context.
 library;
 
-export 'document.dart';
-export 'query_flutter.dart';
-export 'router.dart';
-export 'rpc.dart';
-export 'server.dart';
-export 'src/odroe/app.dart';
+export 'src/app/binding.dart';
+export 'src/app/context.dart';
+export 'src/app/key.dart';
+export 'src/app/module.dart';
+export 'src/app/registry.dart';

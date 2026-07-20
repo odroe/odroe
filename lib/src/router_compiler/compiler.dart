@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:io';
 
 import 'package:dart_style/dart_style.dart';
@@ -18,6 +16,7 @@ export 'model.dart'
 
 /// Compiles `lib/routes/` into client and server route targets.
 final class FileRouteCompiler {
+  /// Creates a compiler for one application package.
   FileRouteCompiler({
     required Directory projectRoot,
     String routesPath = 'lib/routes',
@@ -32,11 +31,19 @@ final class FileRouteCompiler {
          p.join(projectRoot.absolute.path, serverOutputPath),
        );
 
+  /// Absolute application package root.
   final Directory projectRoot;
+
+  /// Filesystem route source directory.
   final Directory routesDirectory;
+
+  /// Generated client route target.
   final File outputFile;
+
+  /// Generated server route target.
   final File serverOutputFile;
 
+  /// Compiles sources without writing generated files.
   FileRouteOutput compile() {
     final diagnostics = <FileRouteDiagnostic>[];
     if (!routesDirectory.existsSync()) {
@@ -96,6 +103,7 @@ final class FileRouteCompiler {
     );
   }
 
+  /// Compiles and atomically updates generated files when content changed.
   FileRouteOutput write() {
     final output = compile();
     if (output.hasErrors) {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:odroe/router.dart';
+import 'package:odroe/router_flutter.dart';
 
 import '../routes.dart';
 import 'route.dart' as definition;

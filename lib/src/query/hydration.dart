@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
 import 'client.dart';
@@ -8,11 +6,15 @@ import 'mutation.dart';
 import 'query.dart';
 import 'state.dart';
 
+/// Converts query or mutation data into a transport-safe value.
 typedef QuerySerializeData = Object? Function(Object? data);
+
+/// Restores query or mutation data from a transported value.
 typedef QueryDeserializeData = Object? Function(Object? data);
 
 /// One serializable query plus an optional in-memory pending channel.
 final class DehydratedQuery {
+  /// Creates a dehydrated query entry.
   const DehydratedQuery({
     required this.key,
     required this.state,
@@ -21,14 +23,22 @@ final class DehydratedQuery {
     this.pending,
   });
 
+  /// The query's cache key.
   final QueryKey key;
+
+  /// The serialized query state.
   final Map<String, Object?> state;
+
+  /// The server time at which this entry was created.
   final DateTime dehydratedAt;
+
+  /// User metadata associated with the query.
   final Map<String, Object?> meta;
 
   /// Used by server streaming; deliberately omitted from [toJson].
   final Future<Object?>? pending;
 
+  /// Encodes this query as JSON-compatible data.
   Map<String, Object?> toJson() => <String, Object?>{
     'key': key.toJson(),
     'state': state,
@@ -36,6 +46,7 @@ final class DehydratedQuery {
     if (meta.isNotEmpty) 'meta': meta,
   };
 
+  /// Decodes a query from JSON-compatible data.
   factory DehydratedQuery.fromJson(Map<String, Object?> json) =>
       DehydratedQuery(
         key: QueryKey.fromJson(json['key']),
@@ -51,6 +62,7 @@ final class DehydratedQuery {
 
 /// A paused mutation that can be resumed after its keyed options are registered.
 final class DehydratedMutation {
+  /// Creates a dehydrated paused mutation.
   const DehydratedMutation({
     required this.key,
     required this.state,
@@ -58,11 +70,19 @@ final class DehydratedMutation {
     required this.meta,
   });
 
+  /// The mutation key used to restore its options.
   final QueryKey key;
+
+  /// The serialized mutation state.
   final Map<String, Object?> state;
+
+  /// The optional serial execution scope.
   final String? scope;
+
+  /// User metadata associated with the mutation.
   final Map<String, Object?> meta;
 
+  /// Encodes this mutation as JSON-compatible data.
   Map<String, Object?> toJson() => <String, Object?>{
     'key': key.toJson(),
     'state': state,
@@ -70,6 +90,7 @@ final class DehydratedMutation {
     if (meta.isNotEmpty) 'meta': meta,
   };
 
+  /// Decodes a mutation from JSON-compatible data.
   factory DehydratedMutation.fromJson(Map<String, Object?> json) =>
       DehydratedMutation(
         key: QueryKey.fromJson(json['key']),
@@ -83,11 +104,16 @@ final class DehydratedMutation {
 
 /// Transport-neutral Query snapshot shared by handoff and persistence.
 final class DehydratedState {
+  /// Creates a transport-neutral Query snapshot.
   const DehydratedState({required this.queries, required this.mutations});
 
+  /// Dehydrated query entries.
   final List<DehydratedQuery> queries;
+
+  /// Dehydrated paused mutation entries.
   final List<DehydratedMutation> mutations;
 
+  /// Encodes this snapshot as JSON-compatible data.
   Map<String, Object?> toJson() => <String, Object?>{
     'queries': queries.map((query) => query.toJson()).toList(growable: false),
     'mutations': mutations
@@ -95,6 +121,7 @@ final class DehydratedState {
         .toList(growable: false),
   };
 
+  /// Decodes a snapshot from JSON-compatible data.
   factory DehydratedState.fromJson(Map<String, Object?> json) =>
       DehydratedState(
         queries: (json['queries'] as List? ?? const <Object?>[])

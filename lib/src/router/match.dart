@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:collection';
 
-import '../document/document.dart';
-import '../query/client.dart';
+import 'package:roux/roux.dart' as roux;
+
 import 'codec.dart';
-import 'pattern.dart';
 import 'route.dart';
 
 /// One typed route match.
@@ -15,8 +13,8 @@ final class RouteMatch<P, S, D> {
     required this.search,
     required this.searchError,
     required this.location,
-    required RouteBranch branch,
-  }) : _branch = branch;
+    required this.branch,
+  });
 
   /// The matched route definition.
   final TypedRoute<P, S, D> route;
@@ -33,19 +31,8 @@ final class RouteMatch<P, S, D> {
   /// The complete matched location.
   final Uri location;
 
-  final RouteBranch _branch;
-
-  /// Runs the route loader.
-  Future<D> load({QueryClient? query}) async {
-    final value = await route.loadObject(
-      params,
-      search,
-      location,
-      _branch,
-      query ?? QueryClient(),
-    );
-    return value as D;
-  }
+  /// The complete active route branch.
+  final RouteBranch branch;
 }
 
 final class _MatchedNode {
@@ -66,27 +53,6 @@ final class _MatchedNode {
   final int pathEnd;
 }
 
-/// The result of running one route loader.
-final class RouteLoadResult {
-  /// Creates a successful loader result.
-  const RouteLoadResult.data(this.data) : error = null, stackTrace = null;
-
-  /// Creates a failed loader result.
-  const RouteLoadResult.error(this.error, this.stackTrace) : data = null;
-
-  /// Loader data, when loading succeeded.
-  final Object? data;
-
-  /// The loader error, when loading failed.
-  final Object? error;
-
-  /// The loader error stack trace.
-  final StackTrace? stackTrace;
-
-  /// Whether loading succeeded.
-  bool get hasData => error == null;
-}
-
 /// The ordered matches for one location.
 final class RouteMatches {
   RouteMatches._(this.sourceLocation, this._matches)
@@ -94,14 +60,10 @@ final class RouteMatches {
       routes = List<RouteNode>.unmodifiable(
         _matches.map((match) => match.route),
       ),
-      _branch = RouteBranch.from(
+      branch = RouteBranch.from(
         _matches.map(
-          (match) => (
-            route: match.route,
-            params: match.params,
-            search: match.search,
-            data: null,
-          ),
+          (match) =>
+              (route: match.route, params: match.params, search: match.search),
         ),
       );
 
@@ -114,8 +76,10 @@ final class RouteMatches {
   /// Matched route definitions from root to leaf.
   final List<RouteNode> routes;
 
+  /// Typed route values for the active branch.
+  final RouteBranch branch;
+
   final List<_MatchedNode> _matches;
-  final RouteBranch _branch;
 
   static Uri _canonicalize(Uri source, List<_MatchedNode> matches) {
     final segments = <String>[];
@@ -171,83 +135,18 @@ final class RouteMatches {
     return null;
   }
 
-  /// Runs every matched route loader in parallel.
-  Future<Map<Object, RouteLoadResult>> loadAll({QueryClient? query}) async {
-    final queryClient = query ?? QueryClient();
-    final result = HashMap<Object, RouteLoadResult>.identity();
-    await Future.wait<void>(
-      _matches.map((match) async {
-        try {
-          final data = await match.route.loadObject(
-            match.params,
-            match.search,
-            location,
-            _branch,
-            queryClient,
-          );
-          result[match.route.identity] = RouteLoadResult.data(data);
-        } on Object catch (error, stackTrace) {
-          result[match.route.identity] = RouteLoadResult.error(
-            error,
-            stackTrace,
-          );
-        }
-      }),
-    );
-    return UnmodifiableMapView<Object, RouteLoadResult>(result);
-  }
-
-  /// Builds semantic documents for the active branch in root-to-leaf order.
-  Future<List<RouteDocument>> buildDocuments(
-    Map<Object, RouteLoadResult> loads,
-  ) async {
-    final branch = RouteBranch.from(
-      _matches.map((match) {
-        final load = loads[match.route.identity];
-        if (load == null || !load.hasData) {
-          throw StateError(
-            'Every matched route must have successful loader data before '
-            'building its document.',
-          );
-        }
-        return (
-          route: match.route,
-          params: match.params,
-          search: match.search,
-          data: load.data,
-        );
-      }),
-    );
-    final values = await Future.wait<RouteDocument?>(
-      _matches.where((match) => match.route.hasDocument).map((match) {
-        final load = loads[match.route.identity]!;
-        return Future<RouteDocument?>.sync(
-          () => match.route.buildDocumentObject(
-            match.params,
-            match.search,
-            load.data,
-            location,
-            branch,
-          ),
-        );
-      }),
-    );
-    return List<RouteDocument>.unmodifiable(values.nonNulls);
-  }
-
   /// Returns the typed match belonging to [route].
   RouteMatch<P, S, D>? match<P, S, D>(TypedRoute<P, S, D> route) {
     for (final value in _matches) {
-      if (identical(value.route.identity, route.identity)) {
-        return RouteMatch<P, S, D>._(
-          route: route,
-          params: value.params as P,
-          search: value.search as S,
-          searchError: value.searchError,
-          location: location,
-          branch: _branch,
-        );
-      }
+      if (!identical(value.route.identity, route.identity)) continue;
+      return RouteMatch<P, S, D>._(
+        route: route,
+        params: value.params as P,
+        search: value.search as S,
+        searchError: value.searchError,
+        location: location,
+        branch: branch,
+      );
     }
     return null;
   }
@@ -265,15 +164,20 @@ final class RouteMatches {
 
 /// Matches locations against an immutable route tree.
 final class RouteMatcher {
-  /// Creates a matcher and validates route patterns eagerly.
-  RouteMatcher(Iterable<RouteNode> routes)
-    : _routes = _sort(List<RouteNode>.unmodifiable(routes)) {
-    _prepare(_routes, HashSet<Object>.identity());
+  /// Creates a matcher backed by Roux.
+  RouteMatcher(Iterable<RouteNode> routes) {
+    _register(
+      routes,
+      '/',
+      const <RouteNode>[],
+      HashSet<Object>.identity(),
+      <String>{},
+    );
   }
 
-  final List<RouteNode> _routes;
-  final Map<Object, List<RouteNode>> _children =
-      HashMap<Object, List<RouteNode>>.identity();
+  final roux.Router<_Candidate> _router = roux.Router<_Candidate>(
+    caseSensitive: true,
+  );
 
   /// Matches [location], returning `null` when no complete branch matches.
   RouteMatches? match(Uri location) {
@@ -284,41 +188,29 @@ final class RouteMatcher {
         'Route locations must have an absolute path.',
       );
     }
-    final segments = location.pathSegments;
-    final query = location.queryParametersAll;
-    final matches = <_MatchedNode>[];
-    final matched = _matchLevel(
-      routes: _routes,
-      segments: segments,
-      query: query,
-      index: 0,
-      claimedSearchKeys: <String>{},
-      matches: matches,
-    );
-    if (!matched) return null;
-    return RouteMatches._(location, List<_MatchedNode>.unmodifiable(matches));
+    final found = _router.find(_pathname(location));
+    if (found == null) return null;
+    return _decode(location, found.data, found.params);
   }
 
-  bool _matchLevel({
-    required List<RouteNode> routes,
-    required List<String> segments,
-    required Map<String, List<String>> query,
-    required int index,
-    required Set<String> claimedSearchKeys,
-    required List<_MatchedNode> matches,
-  }) {
-    for (final route in routes) {
-      final patternMatch = route.compiledPattern.match(segments, index);
-      if (patternMatch == null) continue;
-
+  RouteMatches? _decode(
+    Uri location,
+    _Candidate candidate,
+    Map<String, String> captures,
+  ) {
+    final query = location.queryParametersAll;
+    final matches = <_MatchedNode>[];
+    final claimedSearchKeys = <String>{};
+    var pathEnd = 0;
+    for (final route in candidate.branch) {
+      final template = route.template;
       Object? params;
       try {
-        params = route.decodePath(patternMatch.parameters);
+        params = route.decodePath(template.captures(captures));
       } on ParameterFormatException {
-        continue;
+        return null;
       }
       final search = route.decodeQuery(query);
-
       Set<String>? overlap;
       for (final key in search.keys) {
         if (claimedSearchKeys.contains(key)) {
@@ -330,66 +222,77 @@ final class RouteMatcher {
           'Search parameters $overlap are owned by more than one active route.',
         );
       }
-      final current = _MatchedNode(
-        route: route,
-        params: params,
-        search: search.value,
-        searchKeys: search.keys,
-        searchError: search.error,
-        pathEnd: patternMatch.nextIndex,
+      pathEnd += template.consumedSegments(captures);
+      matches.add(
+        _MatchedNode(
+          route: route,
+          params: params,
+          search: search.value,
+          searchKeys: search.keys,
+          searchError: search.error,
+          pathEnd: pathEnd,
+        ),
       );
       claimedSearchKeys.addAll(search.keys);
-      matches.add(current);
-
-      if (patternMatch.nextIndex == segments.length && route.terminal) {
-        return true;
-      }
-
-      final childMatched = _matchLevel(
-        routes: _children[route.identity]!,
-        segments: segments,
-        query: query,
-        index: patternMatch.nextIndex,
-        claimedSearchKeys: claimedSearchKeys,
-        matches: matches,
-      );
-      if (childMatched) {
-        return true;
-      }
-
-      matches.removeLast();
-      for (final key in search.keys) {
-        claimedSearchKeys.remove(key);
-      }
     }
-    return false;
+    return RouteMatches._(location, List<_MatchedNode>.of(matches));
   }
 
-  static List<RouteNode> _sort(Iterable<RouteNode> routes) {
-    final result = routes.toList(growable: false);
-    result.sort(
-      (left, right) =>
-          compareRoutePatterns(left.compiledPattern, right.compiledPattern),
-    );
-    return result;
-  }
-
-  void _prepare(List<RouteNode> routes, Set<Object> identities) {
+  void _register(
+    Iterable<RouteNode> routes,
+    String parentPattern,
+    List<RouteNode> parentBranch,
+    Set<Object> identities,
+    Set<String> patterns,
+  ) {
     for (final route in routes) {
       if (!identities.add(route.identity)) {
         throw StateError(
           'A route definition cannot appear more than once in one tree.',
         );
       }
-      final dynamicNames = route.compiledPattern.parameterNames;
+      final dynamicNames = route.template.parameterNames;
       if (dynamicNames.isNotEmpty && !route.hasPathCodec) {
         throw StateError(
           'Route "${route.path}" must declare PathParams for $dynamicNames.',
         );
       }
-      final children = _sort(route.children);
-      _children[route.identity] = children;
-      _prepare(children, identities);
+      final pattern = _join(parentPattern, route.template.pattern);
+      final branch = <RouteNode>[...parentBranch, route];
+      if (route.terminal) {
+        if (!patterns.add(_shape(pattern))) {
+          throw StateError('More than one terminal route uses "$pattern".');
+        }
+        _router.add(pattern, _Candidate(branch));
+      }
+      _register(route.children, pattern, branch, identities, patterns);
     }
   }
+
+  static String _join(String parent, String child) {
+    if (child.isEmpty) return parent;
+    return parent == '/' ? '/$child' : '$parent/$child';
+  }
+
+  static String _shape(String pattern) => pattern
+      .split('/')
+      .map((segment) {
+        if (segment.startsWith('**:')) return '**';
+        if (segment.startsWith(':')) return ':';
+        return segment;
+      })
+      .join('/');
+
+  static String _pathname(Uri location) {
+    final segments = location.pathSegments;
+    if (segments.isEmpty) return '/';
+    return '/${segments.map(Uri.encodeComponent).join('/')}';
+  }
+}
+
+final class _Candidate {
+  _Candidate(List<RouteNode> branch)
+    : branch = List<RouteNode>.of(branch, growable: false);
+
+  final List<RouteNode> branch;
 }

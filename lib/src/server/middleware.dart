@@ -1,14 +1,16 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 
 import 'context.dart';
 import 'http.dart';
 
+/// Continues to the next middleware or request handler.
 typedef Next = Future<ServerResponse> Function();
+
+/// Intercepts a server request around the remaining handler chain.
 typedef Middleware =
     FutureOr<ServerResponse> Function(RequestContext context, Next next);
 
+/// Runs [middleware] in order around [handler].
 Future<ServerResponse> runMiddleware(
   RequestContext context,
   List<Middleware> middleware,

@@ -1,13 +1,30 @@
-// ignore_for_file: public_member_api_docs
-
 /// Data lifecycle independent from active transport state.
-enum QueryStatus { pending, success, error }
+enum QueryStatus {
+  /// No successful result has been stored yet.
+  pending,
+
+  /// The query holds a successful result.
+  success,
+
+  /// The latest fetch failed.
+  error,
+}
 
 /// Current transport activity.
-enum QueryFetchStatus { idle, fetching, paused }
+enum QueryFetchStatus {
+  /// No fetch is active.
+  idle,
+
+  /// A fetch is running.
+  fetching,
+
+  /// A fetch is waiting for its network mode.
+  paused,
+}
 
 /// Immutable state of one query cache entry.
 final class QueryState<T> {
+  /// Creates a complete immutable query state.
   const QueryState({
     required this.status,
     required this.fetchStatus,
@@ -25,6 +42,7 @@ final class QueryState<T> {
     required this.fetchMeta,
   });
 
+  /// Creates the initial state before data has been fetched.
   factory QueryState.pending() => QueryState<T>(
     status: QueryStatus.pending,
     fetchStatus: QueryFetchStatus.idle,
@@ -42,26 +60,55 @@ final class QueryState<T> {
     fetchMeta: null,
   );
 
+  /// The data lifecycle status.
   final QueryStatus status;
+
+  /// The current fetch activity.
   final QueryFetchStatus fetchStatus;
+
+  /// Whether [data] is present, including a present nullable value.
   final bool hasData;
+
+  /// The last successful data value.
   final T? data;
+
+  /// When [data] was last updated.
   final DateTime? dataUpdatedAt;
+
+  /// The latest fetch error.
   final Object? error;
+
+  /// The stack trace associated with [error].
   final StackTrace? errorStackTrace;
+
+  /// When [error] was recorded.
   final DateTime? errorUpdatedAt;
+
+  /// Number of successful data updates.
   final int dataUpdateCount;
+
+  /// Number of error updates.
   final int errorUpdateCount;
+
+  /// Consecutive failures in the current fetch.
   final int fetchFailureCount;
+
+  /// The latest failure that may still be retried.
   final Object? fetchFailureReason;
+
+  /// Whether the cached data was explicitly invalidated.
   final bool isInvalidated;
+
+  /// Metadata associated with the current fetch.
   final Object? fetchMeta;
 
+  /// Returns the stored data or throws when no data is present.
   T get requireData {
     if (!hasData) throw StateError('Query has no data.');
     return data as T;
   }
 
+  /// Returns a state with the selected values replaced.
   QueryState<T> copyWith({
     QueryStatus? status,
     QueryFetchStatus? fetchStatus,

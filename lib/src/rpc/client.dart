@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -8,40 +6,59 @@ import '../server/http.dart';
 import 'function.dart';
 import 'serializer.dart';
 
+/// Typed reference to a server function that returns one value.
 final class ServerFunctionRef<I, O> {
+  /// Creates a reference emitted by the route compiler.
   const ServerFunctionRef({
     required this.id,
     this.method = HttpMethod.post,
     this.decodeOutput,
   });
 
+  /// Stable function identifier in the server manifest.
   final String id;
+
+  /// HTTP method used to invoke the function.
   final HttpMethod method;
+
+  /// Optional decoder for the serialized result.
   final ValueDecoder<O>? decodeOutput;
 
+  /// Invokes this function through [client].
   Future<O> call(RpcClient client, I data) => client.call(this, data);
 }
 
+/// Typed reference to a server function that returns a stream.
 final class ServerStreamFunctionRef<I, T> {
+  /// Creates a streaming reference emitted by the route compiler.
   const ServerStreamFunctionRef({
     required this.id,
     this.method = HttpMethod.post,
     this.decodeOutput,
   });
 
+  /// Stable function identifier in the server manifest.
   final String id;
+
+  /// HTTP method used to invoke the function.
   final HttpMethod method;
+
+  /// Optional decoder for each serialized stream item.
   final ValueDecoder<T>? decodeOutput;
 
+  /// Invokes this function through [client].
   Future<Stream<T>> call(RpcClient client, I data) => client.stream(this, data);
 }
 
+/// Sends RPC requests without coupling the client to an HTTP implementation.
 abstract interface class RpcTransport {
+  /// Sends [request] and returns its response.
   Future<ServerResponse> send(ServerRequest request);
 }
 
 /// Typed client for generated server-function references.
 final class RpcClient {
+  /// Creates a client for one Odroe server origin.
   RpcClient({
     required this.baseUri,
     required this.transport,
@@ -49,11 +66,19 @@ final class RpcClient {
     this.functionPath = '/__odroe/functions',
   }) : serializer = serializer ?? Serializer();
 
+  /// Origin used to resolve server-function URLs.
   final Uri baseUri;
+
+  /// Transport used for every request.
   final RpcTransport transport;
+
+  /// Serializer used for request and response values.
   final Serializer serializer;
+
+  /// URL prefix for server-function endpoints.
   final String functionPath;
 
+  /// Calls a value-returning server [function].
   Future<O> call<I, O>(ServerFunctionRef<I, O> function, I data) async {
     final response = await _send(function.id, function.method, data);
     if (O == ServerResponse) return response as O;
@@ -70,6 +95,7 @@ final class RpcClient {
     );
   }
 
+  /// Calls a streaming server [function].
   Future<Stream<T>> stream<I, T>(
     ServerStreamFunctionRef<I, T> function,
     I data,
@@ -160,9 +186,12 @@ final class RpcClient {
   }
 }
 
+/// Indicates that a response violated the RPC wire protocol.
 final class RpcProtocolException implements Exception {
+  /// Creates a protocol exception with a human-readable [message].
   const RpcProtocolException(this.message);
 
+  /// Description of the protocol violation.
   final String message;
 
   @override
@@ -181,15 +210,22 @@ String _origin(Uri uri) {
   return '${uri.scheme}://${uri.host}$port';
 }
 
+/// Error returned by a remote server function.
 final class RemoteServerException implements Exception {
+  /// Creates an exception from an RPC error frame.
   const RemoteServerException(
     this.message, {
     required this.status,
     this.remoteType,
   });
 
+  /// Error message supplied by the server.
   final String message;
+
+  /// HTTP response status.
   final int status;
+
+  /// Optional remote exception type name.
   final String? remoteType;
 
   @override

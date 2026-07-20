@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:odroe/route.dart';
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
 import 'package:odroe/server_io.dart';
 import 'package:test/test.dart';
 
@@ -18,8 +19,9 @@ void main() {
       ).create('${outside.path}/secret.txt');
     }
 
-    final app = OdroeServer(
+    final app = Server(
       routes: <RouteNode>[AppRoute<NoParams, NoSearch, NoData>(path: '/')],
+      renderer: const DocumentRenderer().call,
     );
     final server = await IoServer.bind(
       app.handle,

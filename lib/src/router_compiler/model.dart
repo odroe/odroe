@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -66,7 +64,7 @@ final class FileRouteOutput {
   /// Whether the file-route tree contains any Flutter page or shell.
   final bool hasFlutter;
 
-  /// Whether [FileRouteOutput.changed] changed the output file.
+  /// Whether a write changed either generated output file.
   final bool changed;
 
   /// Whether any fatal diagnostic was produced.
@@ -87,7 +85,9 @@ final class FileRouteCompilationException implements Exception {
   String toString() => diagnostics.join('\n');
 }
 
+/// One directory in the scanned filesystem route tree.
 final class RouteNode {
+  /// Creates one scanned filesystem route node.
   RouteNode({
     required this.directory,
     required this.segments,
@@ -98,21 +98,47 @@ final class RouteNode {
     required this.serverFile,
   });
 
+  /// Directory represented by this node.
   final Directory directory;
+
+  /// Filesystem segments from the routes root to [directory].
   final List<String> segments;
+
+  /// Filesystem path segment, using `[name]`, `[...name]`, and group syntax.
   final String path;
+
+  /// Optional neutral route declaration.
   final File? routeFile;
+
+  /// Optional Flutter page binding.
   final File? pageFile;
+
+  /// Optional Flutter shell binding.
   final File? shellFile;
+
+  /// Optional server binding.
   final File? serverFile;
+
+  /// Structural child directories.
   final List<RouteNode> children = <RouteNode>[];
+
+  /// Server functions declared in [serverFile].
   final List<ServerFunctionDeclaration> functions =
       <ServerFunctionDeclaration>[];
+
+  /// Imports visible to server-function signatures.
   final List<ServerImport> serverImports = <ServerImport>[];
+
+  /// Whether [serverFile] exposes public HTTP handlers.
   bool serverTerminal = false;
+
+  /// Parsed route contract from [routeFile].
   RouteContract? contract;
+
+  /// Structural parent directory.
   RouteNode? parent;
 
+  /// Whether this node or one of its descendants contributes a route.
   bool get hasContent =>
       routeFile != null ||
       pageFile != null ||
@@ -120,9 +146,60 @@ final class RouteNode {
       serverFile != null ||
       children.isNotEmpty;
 
+  /// Whether this node can terminate the client or document route tree.
   bool get isPageTerminal =>
       pageFile != null || (contract?.declaresDocument ?? false);
 
+  /// Whether this directory owns a runtime route declaration or binding.
+  bool get emitsRuntimeRoute =>
+      routeFile != null ||
+      pageFile != null ||
+      shellFile != null ||
+      serverFile != null;
+
+  /// Nearest runtime descendants, flattening structural-only directories.
+  Iterable<RouteNode> get runtimeChildren sync* {
+    for (final child in children) {
+      if (child.emitsRuntimeRoute) {
+        yield child;
+      } else {
+        yield* child.runtimeChildren;
+      }
+    }
+  }
+
+  /// Runtime lineage with structural-only directories removed.
+  List<RouteNode> get runtimeLineage =>
+      lineage.where((node) => node.emitsRuntimeRoute).toList(growable: false);
+
+  /// Local Roux path from the nearest emitted ancestor to this node.
+  String get runtimePath {
+    if (segments.isEmpty) return '/';
+    final parts = <String>[];
+    RouteNode? current = this;
+    while (current != null) {
+      if (!identical(current, this) && current.emitsRuntimeRoute) break;
+      final part = current._runtimeSegment;
+      if (part.isNotEmpty) parts.add(part);
+      current = current.parent;
+    }
+    return parts.reversed.join('/');
+  }
+
+  String get _runtimeSegment {
+    if (path.isEmpty || path == '/') return '';
+    final rest = RegExp(
+      r'^\[\.\.\.([A-Za-z_][A-Za-z0-9_]*)\]$',
+    ).firstMatch(path);
+    if (rest != null) return '**:${rest.group(1)}';
+    final parameter = RegExp(
+      r'^\[([A-Za-z_][A-Za-z0-9_]*)\]$',
+    ).firstMatch(path);
+    if (parameter != null) return ':${parameter.group(1)}';
+    return path;
+  }
+
+  /// Complete static location, or `null` when the path needs parameters.
   String? get staticLocation {
     final parts = <String>[];
     for (final node in lineage) {
@@ -133,19 +210,36 @@ final class RouteNode {
     return parts.isEmpty ? '/' : '/${parts.join('/')}';
   }
 
+  /// Stable generated identifier suffix.
   String get key => segments.isEmpty
       ? 'Root'
       : segments.map(_identifierPart).map(_upperFirst).join();
 
+  /// Generated client route variable.
   String get variable => '_route$key';
-  String get serverVariable => '_serverRoute$key';
-  String get className => segments.isEmpty ? 'AppRoutes' : 'App${key}Routes';
-  String get memberName => segments.isEmpty ? 'root' : _member(segments.last);
-  String get routeAlias => '_${_lowerFirst(key)}Definition';
-  String get pageAlias => '_${_lowerFirst(key)}Page';
-  String get shellAlias => '_${_lowerFirst(key)}Shell';
-  String get serverAlias => '_${_lowerFirst(key)}Server';
 
+  /// Generated server route variable.
+  String get serverVariable => '_serverRoute$key';
+
+  /// Generated typed navigation facade.
+  String get className => segments.isEmpty ? 'AppRoutes' : 'App${key}Routes';
+
+  /// Member name under the parent navigation facade.
+  String get memberName => segments.isEmpty ? 'root' : _member(segments.last);
+
+  /// Import alias for [routeFile].
+  String get routeAlias => '${_snake(key)}_definition';
+
+  /// Import alias for [pageFile].
+  String get pageAlias => '${_snake(key)}_page';
+
+  /// Import alias for [shellFile].
+  String get shellAlias => '${_snake(key)}_shell';
+
+  /// Import alias for [serverFile].
+  String get serverAlias => '${_snake(key)}_server';
+
+  /// Canonical pattern used to detect ambiguous terminal routes.
   String get effectivePattern {
     final parts = lineage
         .map((node) => node.path)
@@ -161,9 +255,11 @@ final class RouteNode {
     return parts.isEmpty ? '/' : '/${parts.join('/')}';
   }
 
+  /// Generated search argument owned by [target].
   String searchArgumentName({required RouteNode target}) =>
       identical(this, target) ? 'search' : '${_lowerFirst(key)}Search';
 
+  /// Structural lineage from the root through this node.
   List<RouteNode> get lineage {
     final values = <RouteNode>[];
     RouteNode? current = this;
@@ -174,10 +270,12 @@ final class RouteNode {
     return values.reversed.toList(growable: false);
   }
 
+  /// All path fields inherited by this node.
   List<RouteField> get allParams => lineage
       .expand((node) => node.contract?.params?.fields ?? const <RouteField>[])
       .toList(growable: false);
 
+  /// Imports needed by the generated client route tree.
   Iterable<SourceImport> imports(String from) sync* {
     final needsDefinition =
         pageFile == null && shellFile == null ||
@@ -297,9 +395,23 @@ final class RouteNode {
 
   static String _lowerFirst(String value) =>
       value.isEmpty ? value : '${value[0].toLowerCase()}${value.substring(1)}';
+
+  static String _snake(String value) {
+    final output = StringBuffer();
+    for (var index = 0; index < value.length; index++) {
+      final character = value[index];
+      if (index > 0 && character != character.toLowerCase()) {
+        output.write('_');
+      }
+      output.write(character.toLowerCase());
+    }
+    return output.toString();
+  }
 }
 
+/// A public server function discovered in `server.dart`.
 final class ServerFunctionDeclaration {
+  /// Creates a server-function declaration.
   const ServerFunctionDeclaration({
     required this.name,
     required this.inputType,
@@ -308,21 +420,37 @@ final class ServerFunctionDeclaration {
     required this.method,
   });
 
+  /// Top-level variable name.
   final String name;
+
+  /// Client-visible input type.
   final String inputType;
+
+  /// Declared output type.
   final String outputType;
+
+  /// Stream item type when [outputType] is a stream.
   final String? streamType;
+
+  /// Generated HTTP method expression.
   final String method;
 }
 
+/// An import declared by a route's `server.dart`.
 final class ServerImport {
+  /// Creates an import description.
   const ServerImport({required this.uri, required this.prefix});
 
+  /// Import URI.
   final String uri;
+
+  /// Optional source prefix.
   final String? prefix;
 }
 
+/// Parsed type and capability declarations from `route.dart`.
 final class RouteContract {
+  /// Creates a parsed route contract.
   const RouteContract({
     required this.params,
     required this.search,
@@ -333,33 +461,63 @@ final class RouteContract {
     required this.declaresDocument,
   });
 
+  /// Local path-parameter record.
   final RecordContract? params;
+
+  /// Local search-state record.
   final RecordContract? search;
+
+  /// Whether the built-in params schema is requested.
   final bool paramsSchema;
+
+  /// Whether the built-in search schema is requested.
   final bool searchSchema;
+
+  /// Whether `AppRoute` receives a params codec.
   final bool declaresParams;
+
+  /// Whether `AppRoute` receives a search codec.
   final bool declaresSearch;
+
+  /// Whether the declaration attaches the optional document capability.
   final bool declaresDocument;
 }
 
+/// One named record contract declared by a route.
 final class RecordContract {
+  /// Creates a record contract.
   const RecordContract({required this.name, required this.fields});
 
+  /// Typedef name.
   final String name;
+
+  /// Named record fields.
   final List<RouteField> fields;
 }
 
+/// One named field in a route record contract.
 final class RouteField {
+  /// Creates a route field.
   RouteField({required this.name, required this.type});
 
+  /// Field name.
   final String name;
+
+  /// Dart source for the field type.
   final String type;
+
+  /// Route that owns this field after validation.
   RouteNode? owner;
 }
 
+/// A generated source import and its required prefix.
 final class SourceImport {
+  /// Creates a generated source import.
   const SourceImport(this.uri, this.alias);
 
+  /// Project-relative import URI.
   final String uri;
+
+  /// Generated prefix.
   final String alias;
 }

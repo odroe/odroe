@@ -1,4 +1,4 @@
-import 'package:odroe/route.dart';
+import 'package:odroe/router.dart';
 import 'package:test/test.dart';
 
 typedef _OrganizationParams = ({String organizationId});
@@ -9,7 +9,7 @@ void main() {
   test('RouteRef composes typed nested params and search', () {
     final organization =
         AppRoute<_OrganizationParams, _OrganizationSearch, NoData>(
-          path: '/organizations/[organizationId]',
+          path: '/organizations/:organizationId',
           params: PathParams<_OrganizationParams>.codec(
             decode: (input) =>
                 (organizationId: input.requiredString('organizationId')),
@@ -26,7 +26,7 @@ void main() {
           terminal: false,
         );
     final project = AppRoute<_ProjectParams, NoSearch, NoData>(
-      path: 'projects/[projectId]',
+      path: 'projects/:projectId',
       params: PathParams<_ProjectParams>.codec(
         decode: (input) => (projectId: input.requiredInt('projectId')),
         encode: (value, output) => output.integer('projectId', value.projectId),
@@ -45,9 +45,9 @@ void main() {
     expect(destination.route.identity, same(project.identity));
   });
 
-  test('nested matching retains typed values and runs the loader', () async {
+  test('nested matching retains typed params', () {
     final organization = AppRoute<_OrganizationParams, NoSearch, NoData>(
-      path: '/organizations/[organizationId]',
+      path: '/organizations/:organizationId',
       params: PathParams<_OrganizationParams>.codec(
         decode: (input) =>
             (organizationId: input.requiredString('organizationId')),
@@ -56,15 +56,12 @@ void main() {
       ),
       terminal: false,
     );
-    final project = AppRoute<_ProjectParams, NoSearch, String>(
-      path: 'projects/[projectId]',
+    final project = AppRoute<_ProjectParams, NoSearch, NoData>(
+      path: 'projects/:projectId',
       params: PathParams<_ProjectParams>.codec(
         decode: (input) => (projectId: input.requiredInt('projectId')),
         encode: (value, output) => output.integer('projectId', value.projectId),
       ),
-      load: (context) =>
-          '${context.match(organization)!.params.organizationId}:'
-          '${context.params.projectId}',
     );
     final matches = RouteMatcher(<RouteNode>[
       organization.withChildren(<RouteNode>[project]),
@@ -72,6 +69,5 @@ void main() {
 
     expect(matches.match(organization)!.params.organizationId, 'odroe');
     expect(matches.leaf(project).params.projectId, 7);
-    expect(await matches.leaf(project).load(), 'odroe:7');
   });
 }

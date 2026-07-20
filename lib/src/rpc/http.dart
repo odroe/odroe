@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'package:http/http.dart' as http;
 
 import '../server/http.dart';
@@ -7,6 +5,7 @@ import 'client.dart';
 
 /// Cross-platform HTTP transport backed by package:http.
 final class HttpTransport implements RpcTransport {
+  /// Creates a transport, optionally reusing an existing HTTP [client].
   HttpTransport({http.Client? client})
     : _client = client ?? http.Client(),
       _ownsClient = client == null;
@@ -30,6 +29,7 @@ final class HttpTransport implements RpcTransport {
     );
   }
 
+  /// Closes the internally owned HTTP client, if any.
   void close() {
     if (_ownsClient) _client.close();
   }

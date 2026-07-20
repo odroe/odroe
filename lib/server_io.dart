@@ -2,5 +2,5 @@
 library;
 
 export 'server.dart';
-export 'src/build/prerender.dart';
-export 'src/server/io.dart';
+export 'src/server_io/io.dart';
+export 'src/server_io/prerender.dart';
