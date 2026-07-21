@@ -15,8 +15,7 @@ final _safeGitHubMarkdown = markdown.ExtensionSet(
 
 /// Parses an MDC body after frontmatter has been removed.
 ///
-/// This is internal package plumbing shared with [MdcParser] without using
-/// `part` libraries. Applications should use [MdcParser.parse].
+/// Applications should use [MdcParser.parse].
 List<MdcNode> parseMdcBody(String source) {
   final document = markdown.Document(
     blockSyntaxes: const <markdown.BlockSyntax>[MdcBlockSyntax()],

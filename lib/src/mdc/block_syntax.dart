@@ -10,7 +10,7 @@ final class MdcBlockSyntax extends markdown.BlockSyntax {
   /// Creates the block syntax.
   const MdcBlockSyntax();
 
-  static final _pattern = RegExp(r'^:{2,}[A-Za-z]');
+  static final _pattern = RegExp(r'^ {0,3}:{2,}[A-Za-z]');
 
   @override
   RegExp get pattern => _pattern;
@@ -90,7 +90,10 @@ final class _BlockOpening {
   final Map<String, Object?> properties;
 
   static _BlockOpening? tryParse(String line) {
-    var index = 0;
+    final blockStart = _markdownBlockStart(line);
+    if (blockStart == null) return null;
+    var index = blockStart;
+    final fenceStart = index;
     while (index < line.length && line.codeUnitAt(index) == 58) {
       index++;
     }
@@ -99,7 +102,7 @@ final class _BlockOpening {
         !isMdcNameStart(line.codeUnitAt(index))) {
       return null;
     }
-    final fence = line.substring(0, index);
+    final fence = line.substring(fenceStart, index);
     final nameStart = index++;
     while (index < line.length && isMdcNamePart(line.codeUnitAt(index))) {
       index++;
@@ -248,7 +251,19 @@ _YamlProperties _extractYamlProperties(List<markdown.Line> lines) {
   );
 }
 
-bool _isClosingFence(String line, String fence) => line.trim() == fence;
+bool _isClosingFence(String line, String fence) {
+  final start = _markdownBlockStart(line);
+  return start != null && line.substring(start).trimRight() == fence;
+}
+
+int? _markdownBlockStart(String line) {
+  var index = 0;
+  while (index < line.length && line.codeUnitAt(index) == 32) {
+    index++;
+    if (index == 4) return null;
+  }
+  return index;
+}
 
 final class _CodeFence {
   const _CodeFence(this.character, this.length);

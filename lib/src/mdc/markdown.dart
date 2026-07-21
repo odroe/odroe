@@ -5,13 +5,13 @@ import 'package:markdown/markdown.dart' as markdown;
 import 'ast.dart';
 
 /// Internal Markdown sentinel used for component invocations.
-const mdcComponentTag = 'x-odroe-mdc-component';
+const mdcComponentTag = 'x-mdc-component';
 
 /// Internal Markdown sentinel used for named slots.
-const mdcSlotTag = 'x-odroe-mdc-slot';
+const mdcSlotTag = 'x-mdc-slot';
 
 /// Internal Markdown sentinel used for element attributes.
-const mdcAttributeTag = 'x-odroe-mdc-attributes';
+const mdcAttributeTag = 'x-mdc-attributes';
 
 /// Internal sentinel attribute containing a component or slot name.
 const mdcNameAttribute = 'data-mdc-name';

@@ -55,6 +55,7 @@ final class _MdcSpanSyntax extends markdown.InlineSyntax {
       91,
       93,
       honorQuotes: false,
+      skipCodeSpans: true,
     );
     if (content == null || content.end >= parser.source.length) return false;
     final attributes = readMdcDelimited(parser.source, content.end, 123, 125);
@@ -82,7 +83,12 @@ final class _MdcAttributeSyntax extends markdown.InlineSyntax {
   bool tryMatch(markdown.InlineParser parser, [int? startMatchPos]) {
     final start = startMatchPos ?? parser.pos;
     final attributes = readMdcDelimited(parser.source, start, 123, 125);
-    if (attributes == null || !_looksLikeElementAttributes(attributes.value)) {
+    if (attributes == null ||
+        !_looksLikeElementAttributes(
+          attributes.value,
+          source: parser.source,
+          start: start,
+        )) {
       return false;
     }
 
@@ -101,12 +107,21 @@ final class _MdcAttributeSyntax extends markdown.InlineSyntax {
   bool onMatch(markdown.InlineParser parser, Match match) => false;
 }
 
-bool _looksLikeElementAttributes(String source) {
-  final value = source.trimLeft();
-  return value.isNotEmpty &&
-      (value.codeUnitAt(0) == 35 ||
-          value.codeUnitAt(0) == 46 ||
-          value.contains('='));
+bool _looksLikeElementAttributes(
+  String attributes, {
+  required String source,
+  required int start,
+}) {
+  final value = attributes.trimLeft();
+  if (value.isEmpty) return false;
+  final first = value.codeUnitAt(0);
+  if (first == 35 || first == 46) return true;
+  if (!value.contains('=') || start == 0) return false;
+  final previous = source.codeUnitAt(start - 1);
+  return switch (previous) {
+    0x29 || 0x2a || 0x3e || 0x5d || 0x5f || 0x60 || 0x7e => true,
+    _ => false,
+  };
 }
 
 final class _InlineInvocation {
@@ -136,7 +151,14 @@ final class _InlineInvocation {
 
     String? content;
     if (index < source.length && source.codeUnitAt(index) == 91) {
-      final value = readMdcDelimited(source, index, 91, 93, honorQuotes: false);
+      final value = readMdcDelimited(
+        source,
+        index,
+        91,
+        93,
+        honorQuotes: false,
+        skipCodeSpans: true,
+      );
       if (value == null) return null;
       content = value.value;
       index = value.end;

@@ -21,6 +21,7 @@ Map<String, Object?> parseMdcYamlProperties(String source) {
   int opening,
   int closing, {
   bool honorQuotes = true,
+  bool skipCodeSpans = false,
 }) {
   if (start >= source.length || source.codeUnitAt(start) != opening) {
     return null;
@@ -55,6 +56,13 @@ Map<String, Object?> parseMdcYamlProperties(String source) {
       quote = character;
       continue;
     }
+    if (skipCodeSpans && character == 96) {
+      final end = _markdownCodeSpanEnd(source, index);
+      if (end != null) {
+        index = end - 1;
+        continue;
+      }
+    }
     if (character == 123) {
       stack.add(125);
       continue;
@@ -69,6 +77,27 @@ Map<String, Object?> parseMdcYamlProperties(String source) {
         return (value: source.substring(start + 1, index), end: index + 1);
       }
     }
+  }
+  return null;
+}
+
+int? _markdownCodeSpanEnd(String source, int start) {
+  var openingEnd = start;
+  while (openingEnd < source.length && source.codeUnitAt(openingEnd) == 96) {
+    openingEnd++;
+  }
+  final length = openingEnd - start;
+  var index = openingEnd;
+  while (index < source.length) {
+    if (source.codeUnitAt(index) != 96) {
+      index++;
+      continue;
+    }
+    final runStart = index;
+    while (index < source.length && source.codeUnitAt(index) == 96) {
+      index++;
+    }
+    if (index - runStart == length) return index;
   }
   return null;
 }

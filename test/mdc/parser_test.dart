@@ -17,6 +17,9 @@ seo:
 Text with **bold**{.loud}, [marked]{.accent}, and :badge[It's **new**]{count=2 active label='it''s' options={tone: dark}}.
 
 Use {title} and {"a": 1} as ordinary prose.
+Equation {x=1} remains prose.
+
+Code span [Use `]` here]{.marked} and :tip[Use `]` here].
 
 ::callout{tone=info}
 ---
@@ -40,6 +43,15 @@ Default after the slot with :empty{}.
 :::nested{level=2}
 Nested content.
 :::
+::
+
+  ::indented
+  Aligned content.
+  ::
+
+::indented-code
+    ::
+after
 ::
 
 <script>alert("x")</script>
@@ -80,7 +92,9 @@ Nested content.
       'options': <String, Object?>{'tone': 'dark'},
     });
 
-    final callout = document.nodes.whereType<MdcComponent>().single;
+    final callout = document.nodes.whereType<MdcComponent>().firstWhere(
+      (node) => node.name == 'callout',
+    );
     expect(callout.name, 'callout');
     expect(callout.properties, <String, Object?>{
       'tone': 'info',
@@ -94,7 +108,25 @@ Nested content.
       'nested',
     ]);
     expect(_text(document.nodes), contains('Use {title} and {"a": 1}'));
+    expect(_text(document.nodes), contains('Equation {x=1} remains prose.'));
     expect(_text(callout.children), contains('#not-a-slot\n::'));
+
+    final marked = _elements(document.nodes).firstWhere(
+      (node) => node.tag == 'span' && node.attributes['class'] == 'marked',
+    );
+    expect(_text(marked.children), 'Use ] here');
+    final tip = _components(
+      document.nodes,
+    ).firstWhere((node) => node.name == 'tip');
+    expect(_text(tip.children), 'Use ] here');
+    expect(
+      _components(document.nodes).map((node) => node.name),
+      containsAll(<String>['indented', 'indented-code']),
+    );
+    final indentedCode = _components(
+      document.nodes,
+    ).firstWhere((node) => node.name == 'indented-code');
+    expect(_text(indentedCode.children), contains('::\nafter'));
 
     expect(_text(document.nodes), contains('<script>alert("x")</script>'));
     expect(
