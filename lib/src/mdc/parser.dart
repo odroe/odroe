@@ -71,14 +71,26 @@ Map<String, Object?> _normalizeMap(
   return result;
 }
 
-Object? _normalizeValue(Object? value, String location) => switch (value) {
-  null || String() || num() || bool() => value,
-  Map<Object?, Object?> value => _normalizeMap(value, location),
-  Iterable<Object?> value => <Object?>[
-    for (var index = 0; index < value.length; index++)
-      _normalizeValue(value.elementAt(index), '$location[$index]'),
-  ],
-  _ => throw FormatException(
+Object? _normalizeValue(Object? value, String location) {
+  if (value == null || value is String || value is bool || value is int) {
+    return value;
+  }
+  if (value is double) {
+    if (!value.isFinite) {
+      throw FormatException('MDC $location must be finite.');
+    }
+    return value;
+  }
+  if (value is Map<Object?, Object?>) {
+    return _normalizeMap(value, location);
+  }
+  if (value is Iterable<Object?>) {
+    var index = 0;
+    return <Object?>[
+      for (final item in value) _normalizeValue(item, '$location[${index++}]'),
+    ];
+  }
+  throw FormatException(
     'MDC $location contains unsupported ${value.runtimeType}.',
-  ),
-};
+  );
+}

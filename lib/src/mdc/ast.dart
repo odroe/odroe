@@ -1,5 +1,3 @@
-import 'dart:collection';
-
 /// One parsed Markdown Components document.
 final class MdcDocument {
   /// Creates an immutable document.
@@ -92,20 +90,33 @@ final class MdcSlot {
 }
 
 Map<String, Object?> _freezeMap(Map<String, Object?> source) =>
-    UnmodifiableMapView<String, Object?>(<String, Object?>{
+    Map<String, Object?>.unmodifiable(<String, Object?>{
       for (final MapEntry(:key, :value) in source.entries)
         key: _freezeValue(value),
     });
 
-Object? _freezeValue(Object? value) => switch (value) {
-  Map<String, Object?> value => _freezeMap(value),
-  Map<Object?, Object?> value =>
-    UnmodifiableMapView<String, Object?>(<String, Object?>{
-      for (final MapEntry(:key, :value) in value.entries)
-        if (key is String) key: _freezeValue(value),
-    }),
-  Iterable<Object?> value => List<Object?>.unmodifiable(
-    value.map(_freezeValue),
-  ),
-  _ => value,
-};
+Object? _freezeValue(Object? value) {
+  if (value == null || value is String || value is bool || value is int) {
+    return value;
+  }
+  if (value is double) {
+    if (!value.isFinite) {
+      throw ArgumentError.value(value, 'value', 'must be finite');
+    }
+    return value;
+  }
+  if (value is Map<Object?, Object?>) {
+    final result = <String, Object?>{};
+    for (final MapEntry(:key, :value) in value.entries) {
+      if (key is! String) {
+        throw ArgumentError.value(key, 'key', 'must be a string');
+      }
+      result[key] = _freezeValue(value);
+    }
+    return Map<String, Object?>.unmodifiable(result);
+  }
+  if (value is Iterable<Object?>) {
+    return List<Object?>.unmodifiable(value.map(_freezeValue));
+  }
+  throw ArgumentError.value(value, 'value', 'must be JSON-compatible');
+}
