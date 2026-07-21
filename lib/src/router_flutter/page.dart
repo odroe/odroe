@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/widgets.dart' hide PageRoute;
 import 'package:flutter/widgets.dart' as flutter show PageRoute;
 
+import '../app/binding.dart';
 import '../app/context.dart';
+import '../app/key.dart';
 import '../router/codec.dart';
 import '../router/load.dart';
 import '../router/match.dart';
@@ -29,12 +31,16 @@ abstract interface class RouteNavigator {
 class RouteState<P, S> {
   /// Creates route state.
   const RouteState({
+    required this.app,
     required this.router,
     required this.params,
     required this.search,
     required this.location,
     required RouteMatches matches,
   }) : _matches = matches;
+
+  /// The application context containing explicitly installed modules.
+  final AppContext app;
 
   /// The active Odroe navigation controller.
   final RouteNavigator router;
@@ -50,6 +56,15 @@ class RouteState<P, S> {
 
   final RouteMatches _matches;
 
+  /// Reads an application service.
+  T read<T extends Object>(ContextKey<T> key) => app.read(key);
+
+  /// Reads an optional application service.
+  T? maybe<T extends Object>(ContextKey<T> key) => app.maybe(key);
+
+  /// Returns module bindings assignable to [T], in registration order.
+  Iterable<T> bindings<T extends ModuleBinding>() => app.bindings<T>();
+
   /// Returns a typed active ancestor or current route match.
   RouteMatch<ParentP, ParentS, ParentD>? match<ParentP, ParentS, ParentD>(
     TypedRoute<ParentP, ParentS, ParentD> route,
@@ -60,16 +75,13 @@ class RouteState<P, S> {
 final class PageLoadContext<P, S> extends RouteState<P, S> {
   /// Creates page loader input.
   const PageLoadContext({
-    required this.app,
+    required super.app,
     required super.router,
     required super.params,
     required super.search,
     required super.location,
     required super.matches,
   });
-
-  /// The application context containing explicitly installed modules.
-  final AppContext app;
 }
 
 /// Loads data for a Flutter page or shell.
@@ -81,6 +93,7 @@ class RouteContext<P, S> extends RouteState<P, S> {
   /// Creates route context.
   const RouteContext({
     required this.buildContext,
+    required super.app,
     required super.router,
     required super.params,
     required super.search,
@@ -96,6 +109,7 @@ class RouteContext<P, S> extends RouteState<P, S> {
 final class RoutePageState<P, S, D> extends RouteState<P, S> {
   /// Creates custom-page state.
   const RoutePageState({
+    required super.app,
     required super.router,
     required super.params,
     required super.search,
@@ -113,6 +127,7 @@ final class RoutePageContext<P, S, D> extends RouteContext<P, S> {
   /// Creates ready page context.
   const RoutePageContext({
     required super.buildContext,
+    required super.app,
     required super.router,
     required super.params,
     required super.search,
@@ -315,6 +330,7 @@ final class PageRoute<P, S, D> implements TypedRoute<P, S, D> {
   /// Builds this route's Flutter page for one navigation snapshot.
   Page<Object?> buildPage({
     required BuildContext context,
+    required AppContext app,
     required RouteNavigator router,
     required RouteMatches matches,
     required RouteLoadResult? loadResult,
@@ -328,6 +344,7 @@ final class PageRoute<P, S, D> implements TypedRoute<P, S, D> {
     RouteContext<P, S> routeContext(BuildContext buildContext) =>
         RouteContext<P, S>(
           buildContext: buildContext,
+          app: app,
           router: router,
           params: match.params,
           search: match.search,
@@ -337,6 +354,7 @@ final class PageRoute<P, S, D> implements TypedRoute<P, S, D> {
     RoutePageContext<P, S, D> readyContext(BuildContext buildContext) =>
         RoutePageContext<P, S, D>(
           buildContext: buildContext,
+          app: app,
           router: router,
           params: match.params,
           search: match.search,
@@ -345,6 +363,7 @@ final class PageRoute<P, S, D> implements TypedRoute<P, S, D> {
           data: loadResult!.data as D,
         );
     RoutePageState<P, S, D> readyState() => RoutePageState<P, S, D>(
+      app: app,
       router: router,
       params: match.params,
       search: match.search,
@@ -578,6 +597,7 @@ final class ShellRoute<P, S, D> implements TypedRoute<P, S, D> {
   /// Builds this route's nested Flutter navigator page.
   Page<Object?> buildShellPage({
     required BuildContext context,
+    required AppContext app,
     required RouteNavigator router,
     required RouteMatches matches,
     required RouteLoadResult? loadResult,
@@ -593,6 +613,7 @@ final class ShellRoute<P, S, D> implements TypedRoute<P, S, D> {
     RouteContext<P, S> routeContext(BuildContext buildContext) =>
         RouteContext<P, S>(
           buildContext: buildContext,
+          app: app,
           router: router,
           params: match.params,
           search: match.search,
@@ -602,6 +623,7 @@ final class ShellRoute<P, S, D> implements TypedRoute<P, S, D> {
     RoutePageContext<P, S, D> readyContext(BuildContext buildContext) =>
         RoutePageContext<P, S, D>(
           buildContext: buildContext,
+          app: app,
           router: router,
           params: match.params,
           search: match.search,

@@ -1,7 +1,25 @@
 import 'package:odroe/document.dart';
+import 'package:odroe/odroe.dart';
 import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
+
+const _greetingKey = ContextKey<String>('greeting');
+
+final class _GreetingModule extends Module {
+  const _GreetingModule();
+
+  @override
+  void register(ModuleRegistry registry) {
+    registry.provide(_greetingKey, 'Hello');
+  }
+}
+
+final class _OpaqueData {
+  const _OpaqueData(this.name);
+
+  final String name;
+}
 
 void main() {
   test('route documents merge head and compose semantic bodies', () async {
@@ -72,5 +90,32 @@ void main() {
     );
     expect(html, isNot(contains('__odroe_state__')));
     expect(html, isNot(contains('flutter_bootstrap.js')));
+  });
+
+  test('pure HTML reads modules without serializing loader data', () async {
+    final route = AppRoute<NoParams, NoSearch, _OpaqueData>(path: '/')
+        .document(
+          (context) => RouteDocument(
+            title: '${context.read(_greetingKey)} ${context.data.name}',
+          ),
+        )
+        .server(load: (_) => const _OpaqueData('Odroe'));
+    final app = Server(
+      routes: <RouteNode>[route],
+      modules: () => const <Module>[_GreetingModule()],
+      renderer: const DocumentRenderer().call,
+    );
+
+    final response = await app.handle(
+      ServerRequest.bytes(
+        method: HttpMethod.get,
+        uri: Uri.parse('http://localhost/'),
+        headers: Headers.single(<String, String>{'accept': 'text/html'}),
+      ),
+    );
+    final html = await response.readText();
+
+    expect(response.status, 200);
+    expect(html, contains('<title>Hello Odroe</title>'));
   });
 }
