@@ -1,12 +1,29 @@
 import 'package:yaml/yaml.dart';
 
 import 'ast.dart';
+import 'outline.dart';
 import 'syntax.dart';
 
+/// Transforms one parsed immutable MDC document.
+typedef MdcTransform = MdcDocument Function(MdcDocument document);
+
 /// Parses Markdown Components source into an immutable, renderer-neutral AST.
+///
+/// A parser is reusable but deliberately holds no source cache. The content
+/// owner can cache completed [MdcDocument] values using its own lifecycle and
+/// invalidation rules.
 final class MdcParser {
   /// Creates a reusable parser configuration.
-  const MdcParser();
+  const MdcParser({
+    this.transforms = const <MdcTransform>[],
+    this.headingIds = true,
+  });
+
+  /// Ordered transforms applied after syntax parsing.
+  final List<MdcTransform> transforms;
+
+  /// Whether headings without explicit IDs receive stable generated IDs.
+  final bool headingIds;
 
   /// Parses [source].
   ///
@@ -15,7 +32,14 @@ final class MdcParser {
   /// by the parser.
   MdcDocument parse(String source) {
     final (:body, :frontmatter) = _readFrontmatter(source);
-    return MdcDocument(nodes: parseMdcBody(body), frontmatter: frontmatter);
+    var document = MdcDocument(
+      nodes: parseMdcBody(body),
+      frontmatter: frontmatter,
+    );
+    for (final transform in transforms) {
+      document = transform(document);
+    }
+    return headingIds ? document.withHeadingIds() : document;
   }
 }
 
