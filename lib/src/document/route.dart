@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import '../app/binding.dart';
+import '../app/context.dart';
+import '../app/key.dart';
 import '../router/codec.dart';
 import '../router/load.dart';
 import '../router/match.dart';
@@ -62,6 +65,7 @@ final class DocumentBranch {
 final class DocumentContext<P, S, D> {
   /// Creates document builder input.
   const DocumentContext({
+    required this.app,
     required this.route,
     required this.params,
     required this.search,
@@ -69,6 +73,9 @@ final class DocumentContext<P, S, D> {
     required this.location,
     required this.branch,
   });
+
+  /// The application context containing explicitly installed modules.
+  final AppContext app;
 
   /// The route being rendered.
   final TypedRoute<P, S, D> route;
@@ -91,6 +98,15 @@ final class DocumentContext<P, S, D> {
   /// Metadata declared by the neutral route.
   RouteMetadata get metadata => route.metadata;
 
+  /// Reads an application service.
+  T read<T extends Object>(ContextKey<T> key) => app.read(key);
+
+  /// Reads an optional application service.
+  T? maybe<T extends Object>(ContextKey<T> key) => app.maybe(key);
+
+  /// Returns module bindings assignable to [T], in registration order.
+  Iterable<T> bindings<T extends ModuleBinding>() => app.bindings<T>();
+
   /// Returns typed values for an active route.
   DocumentValues<MatchP, MatchS, MatchD>? match<MatchP, MatchS, MatchD>(
     TypedRoute<MatchP, MatchS, MatchD> route,
@@ -103,6 +119,7 @@ typedef DocumentBuilder<P, S, D> =
 
 abstract interface class _DocumentBinding {
   FutureOr<RouteDocument?> build(
+    AppContext app,
     RouteNode route,
     RouteMatches matches,
     Object? data,
@@ -117,6 +134,7 @@ final class _TypedDocumentBinding<P, S, D> implements _DocumentBinding {
 
   @override
   FutureOr<RouteDocument?> build(
+    AppContext app,
     RouteNode route,
     RouteMatches matches,
     Object? data,
@@ -126,6 +144,7 @@ final class _TypedDocumentBinding<P, S, D> implements _DocumentBinding {
     final match = matches.match(typed)!;
     return builder(
       DocumentContext<P, S, D>(
+        app: app,
         route: typed,
         params: match.params,
         search: match.search,
@@ -152,8 +171,9 @@ extension AppRouteDocument<P, S, D> on AppRoute<P, S, D> {
 /// Builds document fragments for a fully loaded route branch.
 Future<List<RouteDocument>> buildDocuments(
   RouteMatches matches,
-  Map<Object, RouteLoadResult> loads,
-) async {
+  Map<Object, RouteLoadResult> loads, {
+  required AppContext app,
+}) async {
   final entries = <_DocumentEntry>[];
   for (final route in matches.routes) {
     final load = loads[route.identity];
@@ -180,6 +200,7 @@ Future<List<RouteDocument>> buildDocuments(
     final built = binding == null
         ? null
         : await binding.build(
+            app,
             route,
             matches,
             loads[route.identity]!.isLoaded

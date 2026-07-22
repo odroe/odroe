@@ -2,9 +2,38 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odroe/odroe.dart';
 import 'package:odroe/router_flutter.dart';
 
+const _messageKey = ContextKey<String>('message');
+
+final class _MessageModule extends Module {
+  const _MessageModule();
+
+  @override
+  void register(ModuleRegistry registry) {
+    registry.provide(_messageKey, 'from module');
+  }
+}
+
 void main() {
+  testWidgets('page builders share the router application context', (
+    tester,
+  ) async {
+    final app = await AppContext.create(const <Module>[_MessageModule()]);
+    addTearDown(app.dispose);
+    final route = AppRoute<NoParams, NoSearch, NoData>(
+      path: '/',
+    ).page(build: (context) => Text(context.read(_messageKey)));
+    final router = AppRouter(routes: <RouteNode>[route], app: app);
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    expect(find.text('from module'), findsOneWidget);
+  });
+
   testWidgets('uses server loader data for the first Flutter route', (
     tester,
   ) async {
