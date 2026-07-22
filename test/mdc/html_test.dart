@@ -96,4 +96,13 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test('rejects inputs that are not task-list checkboxes', () {
+    expect(
+      () => MdcHtmlRenderer().render(
+        MdcDocument(nodes: <MdcNode>[MdcElement('input')]),
+      ),
+      throwsA(isA<MdcHtmlRenderException>()),
+    );
+  });
 }

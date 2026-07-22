@@ -117,5 +117,7 @@ void main() {
 
     expect(response.status, 200);
     expect(html, contains('<title>Hello Odroe</title>'));
+    expect(html, isNot(contains('__odroe_state__')));
+    expect(html, isNot(contains('flutter_bootstrap.js')));
   });
 }

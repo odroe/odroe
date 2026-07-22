@@ -97,7 +97,7 @@ final class _BlockOpening {
     while (index < line.length && line.codeUnitAt(index) == 58) {
       index++;
     }
-    if (index < 2 ||
+    if (index - fenceStart < 2 ||
         index == line.length ||
         !isMdcNameStart(line.codeUnitAt(index))) {
       return null;

@@ -113,7 +113,7 @@ final class MdcHtmlRenderer {
     String tag,
     Map<String, String?> source,
   ) {
-    if (source.isEmpty) return const <String, String?>{};
+    if (source.isEmpty && tag != 'input') return const <String, String?>{};
     final output = <String, String?>{};
     for (final entry in source.entries) {
       final name = entry.key.toLowerCase();

@@ -129,7 +129,9 @@ void _mergeElementAttributes(
     if (entry.key == 'class') {
       final current = target['class'];
       if (current != null) {
-        target['class'] = '$current ${entry.value}';
+        if (entry.value case final value?) {
+          target['class'] = '$current $value';
+        }
         continue;
       }
     }

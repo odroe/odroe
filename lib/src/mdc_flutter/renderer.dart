@@ -84,11 +84,12 @@ final class MdcWidgetRenderer {
     MdcText(:final value) => Text(value, style: _bodyStyle(context)),
     MdcComponent() => _buildComponent(context, node),
     MdcElement(:final tag) => switch (tag) {
-      'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6' => _richText(
-        context,
-        node.children,
-        style: _headingStyle(context, int.parse(tag.substring(1))),
-      ),
+      'h1' ||
+      'h2' ||
+      'h3' ||
+      'h4' ||
+      'h5' ||
+      'h6' => _buildHeading(context, node, int.parse(tag.substring(1))),
       'p' => _richText(context, node.children),
       'blockquote' => _buildBlockquote(context, node),
       'pre' => _buildCodeBlock(context, node),
@@ -101,6 +102,17 @@ final class MdcWidgetRenderer {
       _ => _buildChildren(context, node.children),
     },
   };
+
+  Widget _buildHeading(BuildContext context, MdcElement element, int level) =>
+      Semantics(
+        header: true,
+        headingLevel: level,
+        child: _richText(
+          context,
+          element.children,
+          style: _headingStyle(context, level),
+        ),
+      );
 
   Widget _buildChildren(BuildContext context, Iterable<MdcNode> nodes) {
     final children = <Widget>[

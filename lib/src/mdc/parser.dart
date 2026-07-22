@@ -32,10 +32,15 @@ final class MdcParser {
   /// by the parser.
   MdcDocument parse(String source) {
     final (:body, :frontmatter) = _readFrontmatter(source);
-    var document = MdcDocument(
-      nodes: parseMdcBody(body),
-      frontmatter: frontmatter,
-    );
+    final nodes = parseMdcBody(body);
+    late MdcDocument document;
+    try {
+      document = MdcDocument(nodes: nodes, frontmatter: frontmatter);
+    } on ArgumentError catch (error) {
+      throw FormatException('Invalid MDC frontmatter: ${error.message}');
+    } on TypeError {
+      throw const FormatException('MDC frontmatter keys must be strings.');
+    }
     for (final transform in transforms) {
       document = transform(document);
     }
@@ -77,44 +82,6 @@ final class MdcParser {
     body: lines.skip(end + 1).join('\n'),
     frontmatter: parsed == null
         ? const <String, Object?>{}
-        : _normalizeMap(parsed as Map<Object?, Object?>, 'frontmatter'),
-  );
-}
-
-Map<String, Object?> _normalizeMap(
-  Map<Object?, Object?> source,
-  String location,
-) {
-  final result = <String, Object?>{};
-  for (final MapEntry(:key, :value) in source.entries) {
-    if (key is! String) {
-      throw FormatException('MDC $location keys must be strings.');
-    }
-    result[key] = _normalizeValue(value, '$location.$key');
-  }
-  return result;
-}
-
-Object? _normalizeValue(Object? value, String location) {
-  if (value == null || value is String || value is bool || value is int) {
-    return value;
-  }
-  if (value is double) {
-    if (!value.isFinite) {
-      throw FormatException('MDC $location must be finite.');
-    }
-    return value;
-  }
-  if (value is Map<Object?, Object?>) {
-    return _normalizeMap(value, location);
-  }
-  if (value is Iterable<Object?>) {
-    var index = 0;
-    return <Object?>[
-      for (final item in value) _normalizeValue(item, '$location[${index++}]'),
-    ];
-  }
-  throw FormatException(
-    'MDC $location contains unsupported ${value.runtimeType}.',
+        : (parsed as Map<Object?, Object?>).cast<String, Object?>(),
   );
 }

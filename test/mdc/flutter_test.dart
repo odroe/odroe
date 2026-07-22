@@ -43,6 +43,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Shared AST'), findsOneWidget);
+    final heading = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.headingLevel == 1,
+      ),
+    );
+    expect(heading.properties.header, isTrue);
     expect(find.text('info'), findsOneWidget);
     expect(find.text('Title'), findsOneWidget);
     expect(find.text('Body'), findsOneWidget);

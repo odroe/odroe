@@ -1,4 +1,6 @@
+import 'package:markdown/markdown.dart' as markdown;
 import 'package:odroe/mdc.dart';
+import 'package:odroe/src/mdc/markdown.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -160,6 +162,45 @@ title: yaml
 '''),
       throwsFormatException,
     );
+    expect(
+      () => parser.parse('''
+---
+invalid:
+  1: value
+---
+'''),
+      throwsFormatException,
+    );
+    expect(
+      () => parser.parse('''
+---
+1: value
+---
+'''),
+      throwsFormatException,
+    );
+  });
+
+  test('does not treat indented prose or inline syntax as block fences', () {
+    const parser = MdcParser();
+    for (final source in <String>['  text\n', '   :text\n']) {
+      final document = parser.parse(source);
+
+      expect(_components(document.nodes), isEmpty);
+      expect(_text(document.nodes), contains('text'));
+    }
+  });
+
+  test('preserves an existing class when a merged class is valueless', () {
+    final source = markdown.Element('span', <markdown.Node>[
+      markdown.Element.empty(mdcAttributeTag)
+        ..attributes[mdcPropertiesAttribute] = '{"class":true}',
+    ])..attributes['class'] = 'existing';
+
+    final element = convertMarkdownNodes(<markdown.Node>[source]).single;
+
+    expect(element, isA<MdcElement>());
+    expect((element as MdcElement).attributes['class'], 'existing');
   });
 }
 
