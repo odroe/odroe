@@ -104,9 +104,14 @@ final class _AppContextScope extends InheritedWidget {
 
 /// Reads the current [AppContext] from a Flutter build context.
 extension AppBuildContext on BuildContext {
+  /// The application context installed by the nearest [App], when present.
+  AppContext? get maybeAppContext =>
+      dependOnInheritedWidgetOfExactType<_AppContextScope>()?.context;
+
   /// The application context installed by the nearest [App].
   AppContext get appContext =>
-      dependOnInheritedWidgetOfExactType<_AppContextScope>()!.context;
+      maybeAppContext ??
+      (throw FlutterError('No App found above this BuildContext.'));
 }
 
 Widget _defaultErrorBuilder(Object error, StackTrace stackTrace) =>

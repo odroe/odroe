@@ -608,6 +608,7 @@ final class _RouterDelegate extends RouterDelegate<Object>
         );
         final page = route.buildShellPage(
           context: context,
+          app: _app,
           router: _router(),
           matches: matches,
           loadResult: record.snapshot.results?[route.identity],
@@ -637,6 +638,7 @@ final class _RouterDelegate extends RouterDelegate<Object>
   ) {
     final page = route.buildPage(
       context: context,
+      app: _app,
       router: _router(),
       matches: matches,
       loadResult: record.snapshot.results?[route.identity],

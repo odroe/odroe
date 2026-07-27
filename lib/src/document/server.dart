@@ -28,11 +28,11 @@ final class DocumentRenderer {
         context.request.request.headers.value('accept')?.toLowerCase() ?? '*/*';
     final wantsJson =
         accept.contains('application/json') && !accept.contains('text/html');
-    final query = context.request.maybe(queryClientKey);
-    final state = query == null ? null : _dehydrate(query);
-    final payload = _payload(context, state);
 
     if (wantsJson) {
+      final query = context.request.maybe(queryClientKey);
+      final state = query == null ? null : _dehydrate(query);
+      final payload = _payload(context, state);
       if (state == null ||
           !state.queries.any((query) => query.pending != null)) {
         return ServerResponse.json(payload);
@@ -45,7 +45,11 @@ final class DocumentRenderer {
       );
     }
 
-    final documents = await buildDocuments(context.matches, context.loads);
+    final documents = await buildDocuments(
+      context.matches,
+      context.loads,
+      app: context.request.app,
+    );
     final document = resolveDocument(documents);
     final bootstrap = context.flutter ? flutterBootstrap : null;
     if (bootstrap == null) {
@@ -54,6 +58,9 @@ final class DocumentRenderer {
       );
     }
 
+    final query = context.request.maybe(queryClientKey);
+    final state = query == null ? null : _dehydrate(query);
+    final payload = _payload(context, state);
     final initial = _escapeScript(jsonEncode(payload));
     return ServerResponse(
       headers: Headers.single(<String, String>{
