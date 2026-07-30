@@ -152,9 +152,10 @@ void main() {
     expect(
       source,
       contains(
-        '| Flutter Android, iOS, and Web | Flutter build | Implemented | '
-        'Example app analyzes only; no platform release build has been '
-        'verified |',
+        '| Flutter Android, iOS, and Web | Flutter build | Verified locally | '
+        'Example source builds Web, Android release APK, and unsigned iOS '
+        'release in generated host scaffolds; no signed or device release '
+        'claim |',
       ),
     );
     expect(
@@ -237,6 +238,24 @@ void main() {
     expect(declarations, contains('display: block;'));
     expect(declarations, contains('max-width: 100%;'));
     expect(declarations, contains('overflow-x: auto;'));
+
+    final mobileStart = css.indexOf('@media (max-width: 760px)');
+    final reducedMotionStart = css.indexOf(
+      '@media (prefers-reduced-motion',
+      mobileStart,
+    );
+    expect(mobileStart, greaterThanOrEqualTo(0));
+    expect(reducedMotionStart, greaterThan(mobileStart));
+    final mobileCss = css.substring(mobileStart, reducedMotionStart);
+    expect(
+      RegExp(
+            r'\.docs-article th,\s*\.docs-article td\s*\{([^}]*)\}',
+            multiLine: true,
+          )
+          .allMatches(mobileCss)
+          .any((match) => match.group(1)!.contains('min-width: 9rem;')),
+      isTrue,
+    );
   });
 }
 

@@ -918,6 +918,11 @@ pre {
   .docs-article h1 {
     font-size: clamp(2.7rem, 13vw, 4rem);
   }
+
+  .docs-article th,
+  .docs-article td {
+    min-width: 9rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

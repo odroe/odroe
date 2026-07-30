@@ -46,7 +46,7 @@ deployed.
 
 | Product target | Artifact | Status | Current evidence |
 | --- | --- | --- | --- |
-| Flutter Android, iOS, and Web | Flutter build | Implemented | Example app analyzes only; no platform release build has been verified |
+| Flutter Android, iOS, and Web | Flutter build | Verified locally | Example source builds Web, Android release APK, and unsigned iOS release in generated host scaffolds; no signed or device release claim |
 | Semantic Document and SSG | `build/web` | Verified locally | Real route rendering and prerender integration |
 | Native server | Dart VM executable | Verified locally | Runs on the build OS and architecture |
 | Cloudflare | Worker plus static assets | Preview | Local Workerd only; no remote deployment claim |

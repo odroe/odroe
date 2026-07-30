@@ -1,9 +1,10 @@
 # Odroe
 
 Odroe 是单包、可组合的 Flutter 全栈元框架。当前 Flutter 产品入口面向
-Android、iOS 与 Web；示例应用已通过 analyze，尚未把任何平台的 release
-build 计为已验证。只有应用选择 Web 时，Document 的 SSR/SSG 与 Flutter
-首屏交接才参与构建。
+Android、iOS 与 Web；示例源码已在临时生成的 host scaffold 中通过 Web、
+Android APK 与 iOS `--no-codesign` release build。该证据不等于签名、真机或
+商店发布。只有应用选择 Web 时，Document 的 SSR/SSG 与 Flutter 首屏交接才
+参与构建。
 
 Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选择 modules；Router、Query、Document、RPC 与 Server 也都能独立导入。
 
@@ -298,6 +299,33 @@ final manualTitles = await database.query(
   (row) => row.read(0, sqlText),
 );
 ```
+
+PostgreSQL 可继续使用 `PostgresDatabase.open(...)` 打开一个串行连接，也可按
+服务并发量选择惰性连接池：
+
+```dart
+final database = PostgresDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+);
+```
+
+`pool(...)` 的默认 settings 是
+`pg.PoolSettings(maxConnectionCount: 4)`；这是控制数据库连接成本的旋钮，
+应按部署环境明确调整。若传入自定义 `PoolSettings`，也应显式设置该字段；
+字段为空时底层默认上限是 1。`poolUrl(...)` 同理使用
+`max_connection_count` URL 参数，未设置时上限为 1。创建 pool 不会立即连接，
+首次操作才会获取连接。普通顶层请求最多按连接上限并发，每次 `transaction`
+或 `atomicWrite` 则固定使用同一个连接。
+
+pool-backed 顶层调用不保证复用同一 session。临时表、`SET` 等 session-local
+工作不属于 Odroe pool 合同；需要跨语句持有这类状态时，使用单连接
+`open(...)`，或直接在调用方持有的 `pg.Pool.run(...)` callback 内完成整个
+工作单元。`fromPool(...)` 默认借用调用方的 pool；只有显式
+`ownsPool: true` 时，`close()` 才关闭它。`pool(...)` 与 `poolUrl(...)` 创建的
+pool 由数据库拥有，`close()` 会释放它。
 
 driver 只在 fragments 之间插入 native placeholder，不解析或重写 SQL。SQLite 与
 PostgreSQL 已通过真实合同测试。D1 是 Preview，已通过本地

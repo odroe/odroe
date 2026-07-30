@@ -124,12 +124,47 @@ D1 additionally requires `rowReturning` on every `query` call because its raw
 result cannot distinguish an empty query from a write. `SqlQueries` supplies
 that marker automatically.
 
+## PostgreSQL connections
+
+Keep `PostgresDatabase.open(...)` when one serialized connection is the right
+boundary. Server workloads can choose a lazy pool instead:
+
+```dart
+final database = PostgresDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+);
+```
+
+The default `pool(...)` settings use
+`pg.PoolSettings(maxConnectionCount: 4)`. Treat that limit as a database-cost
+control and size it for the deployment. Set it explicitly when passing custom
+`PoolSettings`; the underlying default for a null limit is one connection.
+`poolUrl(...)` has the same one-connection default unless the URL sets
+`max_connection_count`. Construction does not open a connection; the first
+operation leases one.
+
+Top-level operations may run concurrently. Each `transaction` and
+`atomicWrite` operation leases one connection for its complete lifetime.
+Concurrency remains bounded by the configured connection limit. Separate
+top-level calls are not guaranteed to reuse one session. Temporary tables,
+`SET`, and other session-local work are outside the Odroe pool contract. Use
+single-connection `open(...)` when that state must span statements, or complete
+the whole unit directly inside a caller-owned `pg.Pool.run(...)` callback.
+
+`PostgresDatabase.fromPool(pool)` borrows the pool by default. Closing the
+database leaves that pool open. Pass `ownsPool: true` when the database should
+close it. Pools created by `pool(...)` and `poolUrl(...)` are owned and released
+by `close()`.
+
 ## Runtime matrix
 
 | Entrypoint | Runtime | Status | Current boundary |
 | --- | --- | --- | --- |
 | `database_sqlite.dart` | Native SQLite | Verified | Real CRUD, `RETURNING`, batches, and transactions |
-| `database_postgres.dart` | Dart VM + PostgreSQL | Verified | Real driver contract suite |
+| `database_postgres.dart` | Dart VM + PostgreSQL | Verified | Real single-connection, pooled concurrency, and transaction suite |
 | `database_d1.dart` | Cloudflare D1 | Preview | Verified with local Wrangler/Workerd; atomic batches, no interactive transaction |
 | `database_mysql.dart` | Dart VM + MySQL/MariaDB | Preview | Verified with real MySQL 8.4 and MariaDB 11.8 |
 | RPC | Flutter Web | Available | Calls a server-owned database; no browser SQL driver |
