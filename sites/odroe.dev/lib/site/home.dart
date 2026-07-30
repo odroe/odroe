@@ -128,7 +128,13 @@ HtmlElement _codeWindow() => element(
               attributes: const <String, String?>{'class': 'code-blue'},
               children: <HtmlNode>[text('    RouterModule')],
             ),
-            text('(routes: routeTree),\n  ],\n)'),
+            text('(routes: routeTree),\n  ],\n  builder: (app) =>\n'),
+            element(
+              'span',
+              attributes: const <String, String?>{'class': 'code-green'},
+              children: <HtmlNode>[text('    MaterialApp.router')],
+            ),
+            text('(\n      routerConfig: app.read(routerKey),\n    ),\n)'),
           ],
         ),
       ],
@@ -185,8 +191,8 @@ HtmlElement _architecture() => element(
           'p',
           children: <HtmlNode>[
             text(
-              'Odroe keeps types, routes, and data models consistent across '
-              'every layer—so you can ship features with confidence.',
+              'Odroe keeps routes, inputs, and results explicit at each '
+              'boundary—so every runtime contract stays reviewable.',
             ),
           ],
         ),
@@ -270,8 +276,8 @@ HtmlElement _principles() => element(
         ),
         _principle(
           '03',
-          'Use only what you import.',
-          'Each product entrypoint is complete, focused, and tree-shakeable.',
+          'Entrypoints stay focused.',
+          'Only imported product entrypoints enter the runtime artifact.',
         ),
       ],
     ),

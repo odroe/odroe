@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add typed SQL, a small single-table query layer, and SQLite, PostgreSQL,
+- Add typed SQL, typed inner and left joins, and SQLite, PostgreSQL,
   MySQL/MariaDB, and Cloudflare D1 entrypoints.
 - Add request invocation lifetimes and a Fetch adapter for local
   Cloudflare Workers builds.
@@ -18,7 +18,12 @@
   duplicate native compilation for Cloudflare builds.
 - Revalidate native static assets with weak ETags and Last-Modified, stream
   eligible responses with optional gzip, reject ambiguous or escaped paths on
-  every request, and stop inferring immutable caching from filenames.
+  every request, serve prerendered indexes at canonical routes with
+  media-quality negotiation, and stop inferring immutable caching from
+  filenames.
+- Mount source `public/` assets during development while isolating prerender
+  and development server-only runs from stale Flutter origins and static build
+  output.
 - Release unread Fetch request bodies, return 501 consistently for unsupported
   methods, and keep normal IO response completion distinct from cancellation.
 - Freeze server, route, and server-function configuration snapshots and include

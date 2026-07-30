@@ -30,7 +30,7 @@ App(
 - Typed RPC and adapter-neutral HTTP server contracts.
 - Semantic Document rendering, SSR, SSG, and Flutter Web handoff.
 - Renderer-neutral MDC and filesystem-backed Press collections.
-- Typed single-table SQL plus explicit SQLite, PostgreSQL, MySQL/MariaDB, and
+- Typed relational SQL plus explicit SQLite, PostgreSQL, MySQL/MariaDB, and
   D1 drivers.
 - Dart VM server artifacts for local hosts and containers.
 
@@ -43,6 +43,15 @@ Runtime support is documented as a matrix, not implied by a package name.
 SQLite and PostgreSQL are verified. D1 and MySQL/MariaDB remain Preview with
 documented limits. Edge Fetch is verified locally with Workerd, not remotely
 deployed.
+
+| Product target | Artifact | Status | Current evidence |
+| --- | --- | --- | --- |
+| Flutter Android, iOS, and Web | Flutter build | Implemented | Example app analyzes only; no platform release build has been verified |
+| Semantic Document and SSG | `build/web` | Verified locally | Real route rendering and prerender integration |
+| Native server | Dart VM executable | Verified locally | Runs on the build OS and architecture |
+| Cloudflare | Worker plus static assets | Preview | Local Workerd only; no remote deployment claim |
+
+Database support has its own provider-by-provider evidence and limits.
 
 ## Next
 

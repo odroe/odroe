@@ -26,13 +26,24 @@ abstract interface class SqlDatabase {
 `TransactionalSqlDatabase` is a separate capability. Edge databases that only
 support atomic batches do not claim interactive transactions.
 
-## Typed queries
+## Typed relational queries
 
 ```dart
+final class Authors extends SqlTable<String> {
+  Authors() : super('authors');
+
+  late final id = column<int>('id', sqlInt);
+  late final displayName = column<String>('display_name', sqlText);
+
+  @override
+  late final projection = SqlProjection.column(displayName);
+}
+
 final class Posts extends SqlTable<String> {
   Posts() : super('posts');
 
   late final id = column<int>('id', sqlInt);
+  late final authorId = column<int?>('author_id', nullable(sqlInt));
   late final title = column<String>('title', sqlText);
 
   @override
@@ -40,11 +51,31 @@ final class Posts extends SqlTable<String> {
 }
 
 final posts = Posts();
+final authors = Authors();
 const sql = SqlQueries(SqlDialect.postgres);
 
 final titles = await sql
     .selectTable(posts, where: posts.id.equals(42))
     .all(database);
+
+final authorName = authors.displayName.optional.as('author_name');
+final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
+  <SqlSelection<Object?>>[posts.title, authorName],
+  (row) => (
+    title: posts.title.read(row, 0),
+    authorName: authorName.read(row, 1),
+  ),
+);
+final rows = await sql.select(
+  from: posts,
+  joins: <SqlJoin>[
+    SqlJoin.left(
+      authors,
+      on: posts.authorId.equalsColumn(authors.id),
+    ),
+  ],
+  projection: postsWithAuthors,
+).all(database);
 
 await sql.insert(
   posts,
@@ -60,10 +91,13 @@ await sql.updateAll(
 
 The dialect is explicit. `posts.title.set(42)` is an analyzer error.
 `updateAll` and `deleteAll` also require the `allRows` confirmation token.
+Joined reads qualify every column automatically. For a `LEFT JOIN`, use the
+result-only `.optional` selection to decode a non-null schema column as
+nullable; it cannot be used for INSERT or UPDATE. Mutations remain single-table.
 
 ## BoundSql escape hatch
 
-Use `BoundSql.parts` for SQL outside the typed single-table surface.
+Use `BoundSql.parts` for SQL outside the typed relational surface.
 
 ```dart
 final statement = BoundSql.parts(

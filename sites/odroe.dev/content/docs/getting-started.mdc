@@ -9,7 +9,17 @@ language: en
 Odroe is currently developed from source. Use a path dependency while the
 public package is being prepared.
 
-## Add the package
+## Create the product
+
+Start with a normal Flutter project so the same product can reach Android,
+iOS, and Web.
+
+```sh
+flutter create --platforms=android,ios,web my_app
+cd my_app
+```
+
+Add the source checkout:
 
 ```yaml
 dependencies:
@@ -24,10 +34,11 @@ Flutter product entrypoints.
 flutter pub get
 ```
 
-## Create the first route
+## Define the shared route
 
 Every route keeps its shared contract in `route.dart`. A Document is attached
-there as a platform-neutral binding.
+there as a platform-neutral binding, so the server can return useful HTML
+without importing Flutter.
 
 ```dart
 import 'package:odroe/document.dart';
@@ -45,8 +56,50 @@ final route =
     );
 ```
 
-The directory itself becomes the URL. A `routes/about/route.dart` file maps to
-`/about`.
+Save this as `lib/routes/route.dart`. The directory becomes the URL:
+`lib/routes/about/route.dart` maps to `/about`.
+
+## Add the Flutter page
+
+Save the runtime-specific UI as `lib/routes/page.dart`:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:odroe/router_flutter.dart';
+
+import 'route.dart' as definition;
+
+final route = definition.route.page(
+  build: (_) => const Scaffold(
+    body: Center(child: Text('Hello from Flutter')),
+  ),
+);
+```
+
+Compose the generated route tree in `lib/main.dart`:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:odroe/document_flutter.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/router_flutter.dart';
+
+import 'routes.dart';
+
+void main() {
+  runApp(
+    App(
+      modules: <Module>[
+        DocumentModule(),
+        RouterModule(routes: routeTree),
+      ],
+      builder: (app) => MaterialApp.router(
+        routerConfig: app.read(routerKey),
+      ),
+    ),
+  );
+}
+```
 
 ## Generate and run
 
@@ -55,12 +108,18 @@ dart run odroe generate
 dart run odroe dev --server-only
 ```
 
-For a Flutter target, pass Flutter arguments after `--`.
+The server-only command renders the Document from `route.dart`. Development
+serves files directly from `public/` and never reuses stale `build/web` HTML.
+
+For Flutter, pass Flutter arguments after `--`:
 
 ```sh
+flutter devices
 dart run odroe dev -- -d chrome
-dart run odroe dev -- -d ios
+dart run odroe dev -- -d <ios-device-id>
 ```
+
+Replace `<ios-device-id>` with the device identifier reported by Flutter.
 
 ## Build
 
@@ -70,9 +129,10 @@ dart run odroe build apk
 dart run odroe build --server-only
 ```
 
-A document-only application can run `dart run odroe build` without a Flutter
-target. Odroe emits the native server and prerenders every known static
-location into `build/web`. Known locations come from static file routes and
-`lib/prerender.dart`; link crawling is disabled by default. Add
-`--prerender-crawl` only when page links should discover extra same-origin HTML.
-See [Deployment](/docs/deploy) for build budgets and platform targets.
+`--server-only` emits only the native server. A product with no Flutter
+`page.dart` can run `dart run odroe build` without a target; Odroe emits the
+native server and prerenders every known static location into `build/web`.
+Known locations come from static file routes and `lib/prerender.dart`; link
+crawling is disabled by default. Add `--prerender-crawl` only when page links
+should discover extra same-origin HTML. See [Deployment](/docs/deploy) for
+budgets, static-root behavior, and platform targets.

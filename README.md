@@ -1,6 +1,9 @@
 # Odroe
 
-Odroe 是单包、可组合的 Flutter 全栈元框架。Flutter 构建 Android、iOS、Web、桌面或其他目标；只有应用选择 Web 时，Document 的 SSR/SSG 与 Flutter 首屏交接才参与构建。
+Odroe 是单包、可组合的 Flutter 全栈元框架。当前 Flutter 产品入口面向
+Android、iOS 与 Web；示例应用已通过 analyze，尚未把任何平台的 release
+build 计为已验证。只有应用选择 Web 时，Document 的 SSR/SSG 与 Flutter
+首屏交接才参与构建。
 
 Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选择 modules；Router、Query、Document、RPC 与 Server 也都能独立导入。
 
@@ -215,14 +218,25 @@ Future<Iterable<Uri>> prerenderLocations() => docs.locations();
 
 ## 数据库
 
-`database.dart` 提供小而明确的 typed SQL transport 与单表查询层。
-方言必须显式选择；column receiver 固定赋值和谓词类型。
+`database.dart` 提供小而明确的 typed SQL transport 与关系查询层。
+方言必须显式选择；column receiver 固定赋值、谓词与列间比较类型。
 
 ```dart
+final class Authors extends SqlTable<String> {
+  Authors() : super('authors');
+
+  late final id = column<int>('id', sqlInt);
+  late final displayName = column<String>('display_name', sqlText);
+
+  @override
+  late final projection = SqlProjection.column(displayName);
+}
+
 final class Posts extends SqlTable<String> {
   Posts() : super('posts');
 
   late final id = column<int>('id', sqlInt);
+  late final authorId = column<int?>('author_id', nullable(sqlInt));
   late final title = column<String>('title', sqlText);
 
   @override
@@ -230,11 +244,31 @@ final class Posts extends SqlTable<String> {
 }
 
 final posts = Posts();
+final authors = Authors();
 const sql = SqlQueries(SqlDialect.sqlite);
 
 final titles = await sql
     .selectTable(posts, where: posts.id.equals(42))
     .all(database);
+
+final authorName = authors.displayName.optional.as('author_name');
+final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
+  <SqlSelection<Object?>>[posts.title, authorName],
+  (row) => (
+    title: posts.title.read(row, 0),
+    authorName: authorName.read(row, 1),
+  ),
+);
+final rows = await sql.select(
+  from: posts,
+  joins: <SqlJoin>[
+    SqlJoin.left(
+      authors,
+      on: posts.authorId.equalsColumn(authors.id),
+    ),
+  ],
+  projection: postsWithAuthors,
+).all(database);
 
 await sql.insert(
   posts,
@@ -249,7 +283,9 @@ await sql.updateAll(
 ```
 
 `posts.title.set(42)` 会在分析期失败。`updateAll`/`deleteAll` 同时要求方法名
-与 `allRows` 两次确认。`BoundSql` 保留为手写 SQL 逃生口：
+与 `allRows` 两次确认。联表查询会自动限定列名；`LEFT JOIN` 右侧的非空
+schema column 通过结果专用的 `.optional` 解码，不能用于写入。
+mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口：
 
 ```dart
 final statement = BoundSql.parts(
@@ -287,28 +323,43 @@ callback 必须声明 `write` 或 `rowReturning`，因此 transaction control
 dart run odroe generate
 dart run odroe dev
 dart run odroe dev --server-only
-dart run odroe dev -- -d ios
+flutter devices
+dart run odroe dev -- -d <ios-device-id>
 dart run odroe dev -- -d chrome
 dart run odroe build apk
 dart run odroe build web
 dart run odroe build --server-only --server-target cloudflare
 ```
 
-`dev` 不默认 Web；`--` 后参数原样交给 Flutter CLI。`build web` 会构建 Flutter Web 与 server artifact，再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
+将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
+Web；`--` 后参数原样交给 Flutter CLI。开发 server 直接挂载源码 `public/`，
+不读取旧 `build/web`。`build web` 会构建 Flutter Web 与 server artifact，
+再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；
+带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样
+`/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
 
 prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 HTML 响应
 最多 1 MiB。`--prerender-concurrency`、`--prerender-max-routes` 与
 `--prerender-max-response-bytes` 可显式调整预算。Cloudflare 构建复用生成的
 Dart server 源码完成 prerender，不再额外编译临时 native executable。
 纯文档构建会先写入同级 staging 目录，全部成功后才替换既有静态产物。
+prerender 期间 server 明确禁用静态根，旧产物与 `public/` 中的同名 HTML
+不会替代本轮真实 route 响应。
 
 `build --server-only` 生成的 native executable 与构建 OS/architecture 绑定。
-请在目标平台或兼容 builder 中构建。
+请在目标平台或兼容 builder 中构建。生成的 bootstrap 默认从进程当前目录下的
+`build/web` 提供静态文件；`ODROE_WEB_ROOT` 可指定明确目录，空字符串会禁用
+静态根。部署时必须同时携带对应静态目录，或显式禁用。
 Native `IoServer` 会为 `publicDirectory` 中的文件逐次验证真实路径，使用
 `no-cache` 配合 ETag/Last-Modified 避免重复传输，并对至少 1 KiB 的
 文本、JavaScript、JSON、SVG 与 Wasm 流式发送 gzip。文件名不会被猜测为
 content hash；若上游代理负责内容编码，可设置
 `compressStaticAssets: false`。
+精确文件始终优先；若不存在，地址会读取同路径的 `index.html`，因此
+`/docs`、`/docs/` 与 `/docs.v1` 都可直接复用对应的 prerender 产物，
+无需再次动态渲染。该 fallback 只接管 HTML-compatible 请求；显式
+`Accept: application/json` 仍交给动态 Document handoff，并以 `Vary: Accept`
+隔离缓存。
 
 Cloudflare target 生成 `build/odroe/cloudflare/server.js` 与薄
 `worker.mjs`。平台配置仍由应用持有；Odroe 不覆盖已有

@@ -148,6 +148,7 @@ String _section(PressPage page) {
     'web' => 'Web',
     'data' => 'Data',
     'deploy' => 'Deployment',
+    'server' => 'Core',
     _ => 'Guides',
   };
 }

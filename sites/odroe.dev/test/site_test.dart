@@ -52,6 +52,21 @@ void main() {
           location,
           'og:image:alt',
         );
+        final ogImageType = _single(
+          _meta(body, 'og:image:type'),
+          location,
+          'og:image:type',
+        );
+        final ogImageWidth = _single(
+          _meta(body, 'og:image:width'),
+          location,
+          'og:image:width',
+        );
+        final ogImageHeight = _single(
+          _meta(body, 'og:image:height'),
+          location,
+          'og:image:height',
+        );
         final expectedCanonical = Uri.parse(
           'https://odroe.dev',
         ).resolveUri(location).toString();
@@ -61,9 +76,12 @@ void main() {
         expect(ogUrl, canonical, reason: location.path);
         expect(
           ogImage,
-          'https://odroe.dev/social-card.svg',
+          'https://odroe.dev/social-card.png',
           reason: location.path,
         );
+        expect(ogImageType, 'image/png', reason: location.path);
+        expect(ogImageWidth, '1200', reason: location.path);
+        expect(ogImageHeight, '630', reason: location.path);
         expect(
           ogImageAlt,
           'Odroe: One Dart package. Every layer — Flutter, Semantic Web, '
@@ -94,11 +112,60 @@ void main() {
 
       expect(body, contains('"@type":"SoftwareSourceCode"'));
       expect(body, contains('"programmingLanguage":"Dart"'));
+      expect(body, isNot(contains('"runtimePlatform":"Flutter"')));
       expect(body, isNot(contains('"@type":"SoftwareApplication"')));
       expect(body, isNot(contains('"aggregateRating"')));
       expect(body, isNot(contains('"offers"')));
+      expect(body, contains('builder: (app) =&gt;'));
+      expect(body, isNot(contains('data models consistent')));
+      expect(body, isNot(contains('Use only what you import')));
     },
   );
+
+  test('social card is a 1200x630 PNG', () async {
+    final bytes = await File('public/social-card.png').readAsBytes();
+
+    expect(bytes.take(8), <int>[137, 80, 78, 71, 13, 10, 26, 10]);
+    expect(_uint32(bytes, 16), 1200);
+    expect(_uint32(bytes, 20), 630);
+  });
+
+  test('getting started closes the Flutter and Document run paths', () async {
+    final source = await File(
+      'content/docs/getting-started.mdc',
+    ).readAsString();
+
+    expect(source, contains('flutter create --platforms=android,ios,web'));
+    expect(source, contains('lib/routes/route.dart'));
+    expect(source, contains('lib/routes/page.dart'));
+    expect(source, contains('MaterialApp.router'));
+    expect(source, contains('dart run odroe dev --server-only'));
+    expect(source, contains('flutter devices'));
+    expect(source, contains('dart run odroe dev -- -d <ios-device-id>'));
+    expect(source, isNot(contains('dart run odroe dev -- -d ios')));
+    expect(source, contains('never reuses stale `build/web` HTML'));
+  });
+
+  test('runtime matrix reports Flutter evidence honestly', () async {
+    final source = await File('content/docs/index.mdc').readAsString();
+
+    expect(
+      source,
+      contains(
+        '| Flutter Android, iOS, and Web | Flutter build | Implemented | '
+        'Example app analyzes only; no platform release build has been '
+        'verified |',
+      ),
+    );
+    expect(
+      source,
+      isNot(
+        contains(
+          '| Flutter Android, iOS, and Web | Flutter build | Available |',
+        ),
+      ),
+    );
+  });
 
   test('unknown routes return a real 404 document', () async {
     final server = Server(
@@ -185,3 +252,9 @@ String _single(Iterable<RegExpMatch> matches, Uri location, String label) {
   expect(values, hasLength(1), reason: '${location.path}: $label');
   return values.single.group(1)!;
 }
+
+int _uint32(List<int> bytes, int offset) =>
+    (bytes[offset] << 24) |
+    (bytes[offset + 1] << 16) |
+    (bytes[offset + 2] << 8) |
+    bytes[offset + 3];

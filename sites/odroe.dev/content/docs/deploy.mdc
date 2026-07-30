@@ -28,6 +28,9 @@ The optional crawler follows same-origin, query-free links whose paths are
 extensionless or end in `.html`.
 Document-only builds assemble in a sibling staging directory and replace the
 previous static output only after every route succeeds.
+The prerender server mounts no static root while generating pages, so neither
+an old build nor a same-path HTML file from `public/` can replace the current
+route response.
 
 For a document-only product such as this website:
 
@@ -43,7 +46,10 @@ dart run odroe build --server-only
 
 The result is a Dart native executable. `ODROE_HOST` and `ODROE_PORT` configure
 the listener; platforms that provide `PORT` are supported by the generated
-bootstrap.
+bootstrap. Static files default to `build/web` relative to the process working
+directory. Set `ODROE_WEB_ROOT` to an explicit directory, or to an empty string
+to disable the static root. A production image must carry the matching static
+directory or disable it deliberately.
 
 Native static files are contained by their resolved public root on every
 request. Every name uses `no-cache` with ETag and Last-Modified revalidation
@@ -51,6 +57,12 @@ instead of guessed immutable caching. Eligible text, JavaScript, JSON, SVG, and
 Wasm files of at least 1 KiB stream with gzip when content encoding negotiation
 selects it. Custom `IoServer.bind` callers can set
 `compressStaticAssets: false` when an upstream proxy owns content encoding.
+Exact files win. When no exact file exists, the request resolves to
+`index.html` below that path. Generated indexes therefore serve route URLs
+such as `/docs`, `/docs/`, and `/docs.v1` without running the dynamic
+handler again for HTML-compatible requests. Explicit
+`Accept: application/json` requests still reach the dynamic Document handoff;
+responses vary by `Accept`.
 
 Native output is OS- and architecture-specific. Build on the target OS and
 architecture, or in a compatible builder. For a Linux container, compile in a

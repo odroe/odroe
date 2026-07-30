@@ -22,8 +22,11 @@ RouteDocument buildSiteDocument({required bool home}) => RouteDocument(
     const DocumentMeta.property('og:type', 'website'),
     const DocumentMeta.property(
       'og:image',
-      'https://odroe.dev/social-card.svg',
+      'https://odroe.dev/social-card.png',
     ),
+    const DocumentMeta.property('og:image:type', 'image/png'),
+    const DocumentMeta.property('og:image:width', '1200'),
+    const DocumentMeta.property('og:image:height', '630'),
     const DocumentMeta.property(
       'og:image:alt',
       'Odroe: One Dart package. Every layer — Flutter, Semantic Web, '
@@ -44,7 +47,6 @@ RouteDocument buildSiteDocument({required bool home}) => RouteDocument(
             'name': 'Odroe',
             'description': siteDescription,
             'programmingLanguage': 'Dart',
-            'runtimePlatform': 'Flutter',
             'url': 'https://odroe.dev',
             'codeRepository': _github,
           },
