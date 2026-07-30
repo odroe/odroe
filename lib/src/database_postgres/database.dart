@@ -11,7 +11,7 @@ import '../database/result.dart';
 import '../database/row.dart';
 import '../database/statement.dart';
 
-/// A PostgreSQL database backed by one serialized native connection.
+/// A PostgreSQL database backed by one connection or a lazy connection pool.
 final class PostgresDatabase implements TransactionalSqlDatabase {
   /// Opens and owns one PostgreSQL connection.
   static Future<PostgresDatabase> open({
@@ -35,7 +35,7 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
       ),
       operation: 'connect',
     );
-    return PostgresDatabase._(connection, ownsConnection: true);
+    return PostgresDatabase._connection(connection, ownsConnection: true);
   }
 
   /// Opens and owns one PostgreSQL connection from [connectionString].
@@ -44,7 +44,7 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
       () => pg.Connection.openFromUrl(connectionString),
       operation: 'connect',
     );
-    return PostgresDatabase._(connection, ownsConnection: true);
+    return PostgresDatabase._connection(connection, ownsConnection: true);
   }
 
   /// Wraps an existing [connection].
@@ -54,35 +54,102 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
     pg.Connection connection, {
     bool ownsConnection = false,
   }) {
-    return PostgresDatabase._(connection, ownsConnection: ownsConnection);
+    return PostgresDatabase._connection(
+      connection,
+      ownsConnection: ownsConnection,
+    );
   }
 
-  PostgresDatabase._(this._connection, {required this.ownsConnection});
+  /// Creates and owns a lazy PostgreSQL connection pool.
+  ///
+  /// The default [settings] cap the pool at four connections. When supplying
+  /// custom settings, set `maxConnectionCount` explicitly.
+  static PostgresDatabase pool({
+    required String host,
+    int port = 5432,
+    required String database,
+    String? username,
+    String? password,
+    pg.PoolSettings settings = const pg.PoolSettings(maxConnectionCount: 4),
+  }) {
+    final pool = pg.Pool<void>.withEndpoints(<pg.Endpoint>[
+      pg.Endpoint(
+        host: host,
+        port: port,
+        database: database,
+        username: username,
+        password: password,
+      ),
+    ], settings: settings);
+    return PostgresDatabase._pool(pool, ownsPool: true);
+  }
+
+  /// Creates and owns a lazy PostgreSQL pool from [connectionString].
+  ///
+  /// Use the `max_connection_count` URL parameter to set its connection limit.
+  static PostgresDatabase poolUrl(String connectionString) {
+    return PostgresDatabase._pool(
+      pg.Pool<void>.withUrl(connectionString),
+      ownsPool: true,
+    );
+  }
+
+  /// Wraps an existing [pool].
+  ///
+  /// The pool remains caller-owned unless [ownsPool] is true.
+  static PostgresDatabase fromPool<L>(
+    pg.Pool<L> pool, {
+    bool ownsPool = false,
+  }) {
+    return PostgresDatabase._pool(pool, ownsPool: ownsPool);
+  }
+
+  PostgresDatabase._connection(this._connection, {required this.ownsConnection})
+    : _pool = null,
+      ownsPool = false;
+
+  PostgresDatabase._pool(this._pool, {required this.ownsPool})
+    : _connection = null,
+      ownsConnection = false;
 
   static final Object _transactionZoneKey = Object();
 
-  final pg.Connection _connection;
+  final pg.Connection? _connection;
+  final pg.Pool<dynamic>? _pool;
   final _SerialExecutor _serial = _SerialExecutor();
 
   /// Whether [close] also closes the wrapped PostgreSQL connection.
   final bool ownsConnection;
 
+  /// Whether [close] also closes the wrapped PostgreSQL pool.
+  final bool ownsPool;
+
   bool _closing = false;
   Future<void>? _closeFuture;
+  int _activePoolOperations = 0;
+  Completer<void>? _poolOperationsDrained;
 
   @override
   Future<List<T>> query<T>(BoundSql statement, T Function(SqlRow row) decode) {
-    return _schedule(() {
+    return _schedule(() async {
       _requireTopLevelQuery(statement);
-      return _query(_connection, statement, decode);
+      final result = await _runSession(
+        (session) => _send(session, statement, operation: 'query'),
+        operation: 'query',
+      );
+      return _decodeQuery(result, decode);
     });
   }
 
   @override
   Future<SqlWriteResult> execute(BoundSql statement) {
-    return _schedule(() {
+    return _schedule(() async {
       _requireTopLevelExecute(statement);
-      return _execute(_connection, statement);
+      final result = await _runSession(
+        (session) => _send(session, statement, operation: 'execute'),
+        operation: 'execute',
+      );
+      return _decodeExecute(result);
     });
   }
 
@@ -119,11 +186,16 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
     if (existing != null) return existing;
 
     _closing = true;
-    return _closeFuture = _serial.run(() async {
-      if (ownsConnection) {
-        await _runPostgres(_connection.close, operation: 'close');
-      }
-    });
+    final pool = _pool;
+    final closeFuture = pool == null
+        ? _serial.run(() async {
+            if (ownsConnection) {
+              await _runPostgres(_connection!.close, operation: 'close');
+            }
+          })
+        : _closePool(pool);
+    _closeFuture = closeFuture;
+    return closeFuture;
   }
 
   bool get _insideTransaction => _transactionOwners.contains(this);
@@ -142,15 +214,70 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
         ),
       );
     }
-    return _serial.run(operation);
+    if (_pool == null) return _serial.run(operation);
+
+    _activePoolOperations++;
+    final result = Completer<T>();
+    Future<T>.sync(operation).then(
+      (value) {
+        result.complete(value);
+        _completePoolOperation();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        result.completeError(error, stackTrace);
+        _completePoolOperation();
+      },
+    );
+    return result.future;
   }
 
-  Future<List<T>> _query<T>(
-    pg.Session session,
-    BoundSql statement,
-    T Function(SqlRow row) decode,
-  ) async {
-    final result = await _send(session, statement, operation: 'query');
+  Future<T> _runSession<T>(
+    Future<T> Function(pg.Session session) action, {
+    required String operation,
+  }) {
+    final pool = _pool;
+    if (pool == null) return action(_connection!);
+    return _runPool(pool, () => pool.run(action), operation: operation);
+  }
+
+  Future<T> _runTransaction<T>(
+    Future<T> Function(pg.TxSession transaction) action,
+  ) {
+    final pool = _pool;
+    if (pool == null) return _connection!.runTx(action);
+    return _runPool(pool, () => pool.runTx(action), operation: 'transaction');
+  }
+
+  Future<T> _runPool<T>(
+    pg.Pool<dynamic> pool,
+    Future<T> Function() action, {
+    required String operation,
+  }) {
+    if (!pool.isOpen) return Future<T>.error(_closed());
+    return _runPostgres(
+      action,
+      operation: operation,
+      isClosed: () => !pool.isOpen,
+    );
+  }
+
+  Future<void> _closePool(pg.Pool<dynamic> pool) async {
+    if (_activePoolOperations != 0) {
+      await (_poolOperationsDrained ??= Completer<void>()).future;
+    }
+    if (ownsPool) {
+      await _runPostgres(() => pool.close(), operation: 'close');
+    }
+  }
+
+  void _completePoolOperation() {
+    _activePoolOperations--;
+    if (_activePoolOperations == 0) {
+      _poolOperationsDrained?.complete();
+    }
+  }
+
+  List<T> _decodeQuery<T>(pg.Result result, T Function(SqlRow row) decode) {
     if (result.schema.columns.isEmpty) {
       throw const SqlException(
         SqlErrorCode.unsupported,
@@ -179,6 +306,10 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
     BoundSql statement,
   ) async {
     final result = await _send(session, statement, operation: 'execute');
+    return _decodeExecute(result);
+  }
+
+  SqlWriteResult _decodeExecute(pg.Result result) {
     if (result.schema.columns.isNotEmpty) {
       throw const SqlException(
         SqlErrorCode.unsupported,
@@ -197,7 +328,7 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
     if (statements.isEmpty) return const <SqlWriteResult>[];
 
     return _runPostgres(
-      () => _connection.runTx((transaction) async {
+      () => _runTransaction((transaction) async {
         final results = <SqlWriteResult>[];
         for (final statement in statements) {
           results.add(await _execute(transaction, statement));
@@ -213,7 +344,7 @@ final class PostgresDatabase implements TransactionalSqlDatabase {
   ) async {
     try {
       return await _runPostgres(
-        () => _connection.runTx((session) async {
+        () => _runTransaction((session) async {
           final transaction = _TransactionExecutor(this, session);
           try {
             final result = await runZoned(
@@ -252,9 +383,10 @@ final class _TransactionExecutor implements SqlExecutor {
 
   @override
   Future<List<T>> query<T>(BoundSql statement, T Function(SqlRow row) decode) {
-    return _schedule(() {
+    return _schedule(() async {
       _requireTransactionQuery(statement);
-      return _owner._query(_session, statement, decode);
+      final result = await _send(_session, statement, operation: 'query');
+      return _owner._decodeQuery(result, decode);
     });
   }
 
@@ -429,6 +561,7 @@ SqlValue _readValue(pg.ResultRow row, int index) {
 Future<T> _runPostgres<T>(
   FutureOr<T> Function() action, {
   required String operation,
+  bool Function()? isClosed,
 }) async {
   try {
     return await action();
@@ -463,6 +596,13 @@ Future<T> _runPostgres<T>(
     throw SqlException(
       SqlErrorCode.invalidValue,
       'PostgreSQL rejected a bound value.',
+      cause: _PostgresCause(error.runtimeType.toString()),
+    );
+  } on StateError catch (error) {
+    if (isClosed?.call() ?? false) throw _closed();
+    throw SqlException(
+      SqlErrorCode.driver,
+      'PostgreSQL $operation failed.',
       cause: _PostgresCause(error.runtimeType.toString()),
     );
   } on Exception catch (error) {

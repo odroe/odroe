@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:odroe/database_postgres.dart';
 import 'package:test/test.dart';
 
+import 'pool_contract.dart';
 import 'support/postgres_cluster.dart';
 
 void main() {
@@ -442,9 +443,13 @@ void main() {
       }
     });
 
+    definePostgresPoolContract(() => cluster!, () => database);
+
     test('honors explicit ownership for injected connections', () async {
       final borrowed = await cluster!.openConnection();
       final borrowedDatabase = PostgresDatabase.fromConnection(borrowed);
+      expect(borrowedDatabase.ownsConnection, isFalse);
+      expect(borrowedDatabase.ownsPool, isFalse);
       await borrowedDatabase.close();
       expect(borrowed.isOpen, isTrue);
       await borrowed.execute('SELECT 1');
@@ -455,6 +460,8 @@ void main() {
         owned,
         ownsConnection: true,
       );
+      expect(ownedDatabase.ownsConnection, isTrue);
+      expect(ownedDatabase.ownsPool, isFalse);
       await ownedDatabase.close();
       expect(owned.isOpen, isFalse);
     });
