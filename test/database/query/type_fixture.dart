@@ -5,6 +5,11 @@ final class TypeFixtureTable extends SqlTable<({String email, bool active})> {
 
   late final SqlTableColumn<String> email = column<String>('email', sqlText);
   late final SqlTableColumn<bool> active = column<bool>('active', sqlBool);
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<int?> ownerId = column<int?>(
+    'owner_id',
+    nullable(sqlInt),
+  );
 
   @override
   late final SqlProjection<({String email, bool active})> projection =
@@ -13,6 +18,15 @@ final class TypeFixtureTable extends SqlTable<({String email, bool active})> {
         active,
       ], (row) => (email: email.read(row, 0), active: active.read(row, 1)));
 }
+
+List<SqlPredicate> validColumnComparisons(TypeFixtureTable table) =>
+    <SqlPredicate>[
+      table.id.equalsColumn(table.ownerId),
+      table.ownerId.equalsColumn(table.id),
+    ];
+
+SqlProjection<String?> validOptionalProjection(TypeFixtureTable table) =>
+    SqlProjection.column(table.email.optional);
 
 SqlRead<({String email, bool active})> validTypeFixture() {
   final table = TypeFixtureTable();

@@ -33,7 +33,7 @@ abstract base class SqlTable<Row> {
 }
 
 /// A table-owned SQL column with one statically fixed Dart value type.
-final class SqlTableColumn<T> {
+final class SqlTableColumn<T> implements SqlSelection<T> {
   const SqlTableColumn._(this.table, this.resultColumn);
 
   /// Table that owns this column.
@@ -42,6 +42,12 @@ final class SqlTableColumn<T> {
   /// Named result decoder and value codec for this column.
   final SqlColumn<T> resultColumn;
 
+  @override
+  SqlTableColumn<Object?> get _source => this as SqlTableColumn<Object?>;
+
+  @override
+  SqlColumn<T> get _resultColumn => resultColumn;
+
   /// Physical column name.
   String get name => resultColumn.name;
 
@@ -49,6 +55,7 @@ final class SqlTableColumn<T> {
   SqlCodec<T> get codec => resultColumn.codec;
 
   /// Decodes this column from [row] at [index].
+  @override
   T read(SqlRow row, int index) => resultColumn.read(row, index);
 
   /// Creates a type-safe INSERT or UPDATE assignment.
@@ -83,6 +90,25 @@ final class SqlTableColumn<T> {
       resultColumn.bind(value),
     );
   }
+
+  /// Creates a type-safe equality predicate between two columns.
+  ///
+  /// Nullable and non-nullable columns with the same value type can be
+  /// compared in either direction.
+  SqlPredicate equalsColumn(SqlTableColumn<T?> other) =>
+      _ColumnComparisonPredicate(
+        this as SqlTableColumn<Object?>,
+        _ComparisonOperator.equal,
+        other as SqlTableColumn<Object?>,
+      );
+
+  /// Creates a type-safe inequality predicate between two columns.
+  SqlPredicate notEqualsColumn(SqlTableColumn<T?> other) =>
+      _ColumnComparisonPredicate(
+        this as SqlTableColumn<Object?>,
+        _ComparisonOperator.notEqual,
+        other as SqlTableColumn<Object?>,
+      );
 
   /// Creates a less-than predicate.
   SqlPredicate lessThan(T value) =>
@@ -132,14 +158,56 @@ final class SqlTableColumn<T> {
   }
 }
 
+/// One typed column selected from a SQL result.
+///
+/// A selection keeps its physical source column separate from its result
+/// codec. This lets a `LEFT JOIN` decode a non-nullable schema column as an
+/// optional result without weakening INSERT and UPDATE types.
+abstract interface class SqlSelection<T> {
+  /// Decodes this selection from [row] at [index].
+  T read(SqlRow row, int index);
+
+  SqlTableColumn<Object?> get _source;
+  SqlColumn<T> get _resultColumn;
+}
+
+/// Result-only modifiers for a selected SQL column.
+extension SqlSelectionModifiers<T> on SqlSelection<T> {
+  /// Decodes SQL `NULL` as `null`, typically for the right side of a
+  /// `LEFT JOIN`.
+  SqlSelection<T?> get optional => _SqlSelection<T?>._(
+    _source,
+    SqlColumn<T?>(_resultColumn.name, nullable(_resultColumn.codec)),
+  );
+
+  /// Gives this result column an explicit SQL alias.
+  SqlSelection<T> as(String alias) {
+    _validateIdentifier(alias, 'selection alias');
+    return _SqlSelection<T>._(_source, _resultColumn.as(alias));
+  }
+}
+
+final class _SqlSelection<T> implements SqlSelection<T> {
+  const _SqlSelection._(this._source, this._resultColumn);
+
+  @override
+  final SqlTableColumn<Object?> _source;
+
+  @override
+  final SqlColumn<T> _resultColumn;
+
+  @override
+  T read(SqlRow row, int index) => _resultColumn.read(row, index);
+}
+
 /// Ordered selected columns and a decoder for one result value.
 final class SqlProjection<R> {
   /// Creates a projection from [columns] in decoder order.
   factory SqlProjection(
-    Iterable<SqlTableColumn<Object?>> columns,
+    Iterable<SqlSelection<Object?>> columns,
     R Function(SqlRow row) decode,
   ) {
-    final copied = List<SqlTableColumn<Object?>>.unmodifiable(columns);
+    final copied = List<SqlSelection<Object?>>.unmodifiable(columns);
     if (copied.isEmpty) {
       throw ArgumentError('A SQL projection requires at least one column.');
     }
@@ -147,8 +215,8 @@ final class SqlProjection<R> {
   }
 
   /// Creates a scalar projection for one [column].
-  factory SqlProjection.column(SqlTableColumn<R> column) {
-    return SqlProjection<R>(<SqlTableColumn<Object?>>[
+  factory SqlProjection.column(SqlSelection<R> column) {
+    return SqlProjection<R>(<SqlSelection<Object?>>[
       column,
     ], (row) => column.read(row, 0));
   }
@@ -156,7 +224,7 @@ final class SqlProjection<R> {
   const SqlProjection._(this.columns, this.decode);
 
   /// Selected columns in result order.
-  final List<SqlTableColumn<Object?>> columns;
+  final List<SqlSelection<Object?>> columns;
 
   /// Converts one ordered [SqlRow] into an application value.
   final R Function(SqlRow row) decode;
@@ -192,6 +260,15 @@ final class _ComparisonPredicate extends SqlPredicate {
   final SqlTableColumn<Object?> column;
   final _ComparisonOperator operator;
   final SqlValue value;
+}
+
+final class _ColumnComparisonPredicate extends SqlPredicate {
+  const _ColumnComparisonPredicate(this.left, this.operator, this.right)
+    : super._();
+
+  final SqlTableColumn<Object?> left;
+  final _ComparisonOperator operator;
+  final SqlTableColumn<Object?> right;
 }
 
 final class _NullPredicate extends SqlPredicate {
@@ -238,6 +315,34 @@ final class SqlOrder {
 
   final SqlTableColumn<Object?> _column;
   final bool _descending;
+}
+
+/// One relational table join in a typed SELECT.
+final class SqlJoin {
+  /// Creates an `INNER JOIN`.
+  const SqlJoin.inner(this.table, {required this.on})
+    : _kind = _SqlJoinKind.inner;
+
+  /// Creates a `LEFT JOIN`.
+  const SqlJoin.left(this.table, {required this.on})
+    : _kind = _SqlJoinKind.left;
+
+  /// Joined table. Use another table instance for a self join.
+  final SqlTable<Object?> table;
+
+  /// Join condition.
+  final SqlPredicate on;
+
+  final _SqlJoinKind _kind;
+}
+
+enum _SqlJoinKind {
+  inner('INNER JOIN'),
+  left('LEFT JOIN');
+
+  const _SqlJoinKind(this.sql);
+
+  final String sql;
 }
 
 /// Explicit confirmation token for a full-table mutation.

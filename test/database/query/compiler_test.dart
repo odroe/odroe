@@ -103,6 +103,118 @@ void main() {
     });
   });
 
+  group('relational reads', () {
+    for (final dialect in SqlDialect.values) {
+      test('${dialect.name} qualifies a typed LEFT JOIN', () {
+        final posts = _Posts();
+        final users = _Users();
+        final authorEmail = users.email.optional.as('author_email');
+        final projection = SqlProjection<({String title, String? authorEmail})>(
+          <SqlSelection<Object?>>[posts.title, authorEmail],
+          (row) => (
+            title: posts.title.read(row, 0),
+            authorEmail: authorEmail.read(row, 1),
+          ),
+        );
+        final quote = dialect == SqlDialect.mysql ? '`' : '"';
+
+        final select = SqlQueries(dialect).select(
+          from: posts,
+          joins: <SqlJoin>[
+            SqlJoin.left(users, on: posts.authorId.equalsColumn(users.id)),
+          ],
+          projection: projection,
+          where: users.active.equals(true).or(posts.authorId.isNull),
+          orderBy: <SqlOrder>[users.email.ascending],
+        );
+
+        expect(select.statement.fragments, <String>[
+          'SELECT ${quote}t0$quote.${quote}title$quote, '
+              '${quote}t1$quote.${quote}email$quote AS '
+              '${quote}author_email$quote FROM ${quote}posts$quote AS '
+              '${quote}t0$quote LEFT JOIN ${quote}users$quote AS '
+              '${quote}t1$quote ON ${quote}t0$quote.${quote}author_id$quote = '
+              '${quote}t1$quote.${quote}id$quote WHERE '
+              '(${quote}t1$quote.${quote}active$quote = ',
+          ' OR ${quote}t0$quote.${quote}author_id$quote IS NULL) ORDER BY '
+              '${quote}t1$quote.${quote}email$quote ASC',
+        ]);
+        expect(_values(select.statement), <Object?>[true]);
+      });
+    }
+
+    test('uses distinct table instances for a qualified self join', () {
+      final employee = _Users();
+      final manager = _Users();
+      final managerEmail = manager.email.as('manager_email');
+
+      final select = const SqlQueries(SqlDialect.sqlite).select(
+        from: employee,
+        joins: <SqlJoin>[
+          SqlJoin.inner(manager, on: employee.id.equalsColumn(manager.id)),
+        ],
+        projection: SqlProjection.column(managerEmail),
+      );
+
+      expect(
+        select.statement.fragments.single,
+        'SELECT "t1"."email" AS "manager_email" FROM "users" AS "t0" '
+        'INNER JOIN "users" AS "t1" ON "t0"."id" = "t1"."id"',
+      );
+    });
+
+    test('qualifies schema tables and result aliases independently', () {
+      final parent = _NamedTable(
+        'parents',
+        schema: 'tenant',
+        columnName: 'external_id',
+      );
+      final child = _NamedTable(
+        'children',
+        schema: 'tenant',
+        columnName: 'parent_id',
+      );
+
+      final select = const SqlQueries(SqlDialect.postgres).select(
+        from: child,
+        joins: <SqlJoin>[
+          SqlJoin.inner(parent, on: child.value.equalsColumn(parent.value)),
+        ],
+        projection: SqlProjection.column(parent.value.as('parent_external_id')),
+      );
+
+      expect(
+        select.statement.fragments.single,
+        'SELECT "t1"."external_id" AS "parent_external_id" '
+        'FROM "tenant"."children" AS "t0" '
+        'INNER JOIN "tenant"."parents" AS "t1" '
+        'ON "t0"."parent_id" = "t1"."external_id"',
+      );
+    });
+
+    test('builds incremental scope across three joined tables', () {
+      final posts = _NamedTable('posts', columnName: 'author_key');
+      final authors = _NamedTable('authors', columnName: 'key');
+      final teams = _NamedTable('teams', columnName: 'author_key');
+
+      final select = const SqlQueries(SqlDialect.sqlite).select(
+        from: posts,
+        joins: <SqlJoin>[
+          SqlJoin.inner(authors, on: posts.value.equalsColumn(authors.value)),
+          SqlJoin.inner(teams, on: authors.value.equalsColumn(teams.value)),
+        ],
+        projection: SqlProjection.column(teams.value.as('team_author')),
+      );
+
+      expect(
+        select.statement.fragments.single,
+        'SELECT "t2"."author_key" AS "team_author" FROM "posts" AS "t0" '
+        'INNER JOIN "authors" AS "t1" ON "t0"."author_key" = "t1"."key" '
+        'INNER JOIN "teams" AS "t2" ON "t1"."key" = "t2"."author_key"',
+      );
+    });
+  });
+
   group('mutations', () {
     test('compiles UPDATE, DELETE, and RETURNING without placeholders', () {
       final users = _Users();
@@ -138,9 +250,30 @@ void main() {
       expect(_values(delete.statement), <Object?>['root@example.com']);
       expect(delete.statement.kind, SqlStatementKind.write);
 
+      final columnDelete = queries.deleteWhere(
+        users,
+        where: users.email.notEqualsColumn(users.email),
+      );
+      expect(
+        columnDelete.statement.fragments.single,
+        'DELETE FROM "users" WHERE "email" <> "email"',
+      );
+
+      final aliasedReturning = queries
+          .insert(users, <SqlAssignment>[users.email.set('alias@example.com')])
+          .returning(
+            SqlProjection.column(users.email.optional.as('returned_email')),
+          );
+      expect(aliasedReturning.statement.fragments, <String>[
+        'INSERT INTO "users" ("email") VALUES (',
+        ') RETURNING "email" AS "returned_email"',
+      ]);
+
       for (final fragment in <String>[
         ...update.statement.fragments,
         ...delete.statement.fragments,
+        ...columnDelete.statement.fragments,
+        ...aliasedReturning.statement.fragments,
       ]) {
         expect(fragment, isNot(contains('?')));
         expect(fragment, isNot(matches(RegExp(r'\$\d+'))));
@@ -251,6 +384,78 @@ void main() {
       );
       expect(() => queries.selectTable(users, offset: 1), throwsArgumentError);
     });
+
+    test('rejects invalid relational scopes', () {
+      final posts = _Posts();
+      final users = _Users();
+      final outsider = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      expect(
+        () => queries.selectTable(
+          posts,
+          joins: <SqlJoin>[
+            SqlJoin.inner(posts, on: posts.id.equalsColumn(posts.id)),
+          ],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.selectTable(
+          posts,
+          joins: <SqlJoin>[
+            SqlJoin.inner(users, on: users.id.equalsColumn(users.id)),
+          ],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.selectTable(
+          posts,
+          joins: <SqlJoin>[
+            SqlJoin.inner(users, on: posts.id.equalsColumn(posts.id)),
+          ],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.select(
+          from: posts,
+          joins: <SqlJoin>[
+            SqlJoin.inner(users, on: users.id.equalsColumn(outsider.id)),
+          ],
+          projection: posts.projection,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.selectTable(
+          posts,
+          joins: <SqlJoin>[
+            SqlJoin.inner(users, on: outsider.id.equalsColumn(users.id)),
+            SqlJoin.inner(outsider, on: users.id.equalsColumn(outsider.id)),
+          ],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.select(
+          from: posts,
+          joins: <SqlJoin>[
+            SqlJoin.inner(users, on: posts.authorId.equalsColumn(users.id)),
+          ],
+          projection: outsider.projection,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.updateWhere(users, <SqlAssignment>[
+          users.active.set(false),
+        ], where: users.id.equalsColumn(outsider.id)),
+        throwsArgumentError,
+      );
+      expect(() => users.email.as(''), throwsArgumentError);
+    });
   });
 }
 
@@ -275,6 +480,29 @@ final class _Users extends SqlTable<_User> {
       email: email.read(row, 1),
       nickname: nickname.read(row, 2),
       active: active.read(row, 3),
+    ),
+  );
+}
+
+typedef _Post = ({int id, int? authorId, String title});
+
+final class _Posts extends SqlTable<_Post> {
+  _Posts() : super('posts');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<int?> authorId = column<int?>(
+    'author_id',
+    nullable(sqlInt),
+  );
+  late final SqlTableColumn<String> title = column<String>('title', sqlText);
+
+  @override
+  late final SqlProjection<_Post> projection = SqlProjection<_Post>(
+    <SqlSelection<Object?>>[id, authorId, title],
+    (row) => (
+      id: id.read(row, 0),
+      authorId: authorId.read(row, 1),
+      title: title.read(row, 2),
     ),
   );
 }

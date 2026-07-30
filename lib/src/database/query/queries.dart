@@ -26,7 +26,7 @@ enum SqlDialect {
   bool get _supportsReturning => this != SqlDialect.mysql;
 }
 
-/// Dialect-explicit compiler for typed, single-table SQL operations.
+/// Dialect-explicit compiler for typed SQL operations.
 ///
 /// This object stores no database or request state. Every terminal operation
 /// receives its [SqlExecutor] explicitly.
@@ -40,6 +40,7 @@ final class SqlQueries {
   /// Selects the default [SqlTable.projection] from [table].
   SqlRead<R> selectTable<R>(
     SqlTable<R> table, {
+    List<SqlJoin> joins = const <SqlJoin>[],
     SqlPredicate? where,
     List<SqlOrder> orderBy = const <SqlOrder>[],
     int? limit,
@@ -48,6 +49,7 @@ final class SqlQueries {
     return select<R>(
       from: table,
       projection: table.projection,
+      joins: joins,
       where: where,
       orderBy: orderBy,
       limit: limit,
@@ -55,36 +57,54 @@ final class SqlQueries {
     );
   }
 
-  /// Selects a custom [projection] from one [from] table.
+  /// Selects a custom [projection] from [from] and optional relational [joins].
   SqlRead<R> select<R>({
     required SqlTable<Object?> from,
     required SqlProjection<R> projection,
+    List<SqlJoin> joins = const <SqlJoin>[],
     SqlPredicate? where,
     List<SqlOrder> orderBy = const <SqlOrder>[],
     int? limit,
     int? offset,
   }) {
     _validatePagination(limit, offset);
-    _validateProjection(from, projection);
+    final tables = _validateJoins(from, joins);
+    final aliases = _selectAliases(tables, qualified: joins.isNotEmpty);
+    _validateProjection(tables, projection);
 
     final builder = _BoundSqlBuilder()..write('SELECT ');
-    _writeColumns(builder, projection.columns);
+    _writeSelections(builder, projection.columns, aliases);
     builder
       ..write(' FROM ')
       ..write(_quoteTable(from));
+    final fromAlias = aliases[from];
+    if (fromAlias != null) {
+      builder
+        ..write(' AS ')
+        ..write(dialect.quoteIdentifier(fromAlias));
+    }
+    for (final join in joins) {
+      final alias = aliases[join.table]!;
+      builder
+        ..write(' ${join._kind.sql} ')
+        ..write(_quoteTable(join.table))
+        ..write(' AS ')
+        ..write(dialect.quoteIdentifier(alias))
+        ..write(' ON ');
+      _writePredicate(builder, tables, aliases, join.on);
+    }
     final predicate = where;
     if (predicate != null) {
       builder.write(' WHERE ');
-      _writePredicate(builder, from, predicate);
+      _writePredicate(builder, tables, aliases, predicate);
     }
     if (orderBy.isNotEmpty) {
       builder.write(' ORDER BY ');
       for (final (index, order) in orderBy.indexed) {
         if (index != 0) builder.write(', ');
-        _requireColumn(from, order._column);
-        builder
-          ..write(dialect.quoteIdentifier(order._column.name))
-          ..write(order._descending ? ' DESC' : ' ASC');
+        _requireColumnIn(tables, order._column);
+        _writeColumnReference(builder, order._column, aliases);
+        builder.write(order._descending ? ' DESC' : ' ASC');
       }
     }
     if (limit != null) {
@@ -159,7 +179,12 @@ final class SqlQueries {
       ..write('DELETE FROM ')
       ..write(_quoteTable(table))
       ..write(' WHERE ');
-    _writePredicate(builder, table, where);
+    _writePredicate(
+      builder,
+      <SqlTable<Object?>>[table],
+      const <SqlTable<Object?>, String>{},
+      where,
+    );
     return SqlWrite._(
       builder.build(kind: SqlStatementKind.write),
       table,
@@ -199,7 +224,12 @@ final class SqlQueries {
     final predicate = where;
     if (predicate != null) {
       builder.write(' WHERE ');
-      _writePredicate(builder, table, predicate);
+      _writePredicate(
+        builder,
+        <SqlTable<Object?>>[table],
+        const <SqlTable<Object?>, String>{},
+        predicate,
+      );
     }
     return SqlWrite._(
       builder.build(kind: SqlStatementKind.write),
@@ -229,15 +259,6 @@ final class SqlQueries {
     return assignments;
   }
 
-  void _validateProjection(
-    SqlTable<Object?> table,
-    SqlProjection<Object?> projection,
-  ) {
-    for (final column in projection.columns) {
-      _requireColumn(table, column);
-    }
-  }
-
   void _requireColumn(SqlTable<Object?> table, SqlTableColumn<Object?> column) {
     if (!identical(column.table, table)) {
       throw ArgumentError(
@@ -246,40 +267,153 @@ final class SqlQueries {
     }
   }
 
-  void _writeColumns(
-    _BoundSqlBuilder builder,
-    List<SqlTableColumn<Object?>> columns,
+  List<SqlTable<Object?>> _validateJoins(
+    SqlTable<Object?> from,
+    List<SqlJoin> joins,
   ) {
-    for (final (index, column) in columns.indexed) {
+    final tables = <SqlTable<Object?>>[from];
+    for (final join in joins) {
+      if (_containsTable(tables, join.table)) {
+        throw ArgumentError(
+          'A SELECT cannot use the same table instance more than once. '
+          'Create another "${join.table.name}" instance for a self join.',
+        );
+      }
+      final scope = <SqlTable<Object?>>[...tables, join.table];
+      final columns = _predicateColumns(join.on);
+      for (final column in columns) {
+        _requireColumnIn(scope, column);
+      }
+      if (!columns.any((column) => identical(column.table, join.table))) {
+        throw ArgumentError(
+          'JOIN condition must reference joined table "${join.table.name}".',
+        );
+      }
+      if (!columns.any(
+        (column) => tables.any((table) => identical(column.table, table)),
+      )) {
+        throw ArgumentError(
+          'JOIN condition must reference a table already in the SELECT.',
+        );
+      }
+      tables.add(join.table);
+    }
+    return List<SqlTable<Object?>>.unmodifiable(tables);
+  }
+
+  Map<SqlTable<Object?>, String> _selectAliases(
+    List<SqlTable<Object?>> tables, {
+    required bool qualified,
+  }) {
+    final aliases = Map<SqlTable<Object?>, String>.identity();
+    if (qualified) {
+      for (final (index, table) in tables.indexed) {
+        aliases[table] = 't$index';
+      }
+    }
+    return aliases;
+  }
+
+  void _validateProjection(
+    List<SqlTable<Object?>> tables,
+    SqlProjection<Object?> projection,
+  ) {
+    for (final selection in projection.columns) {
+      _requireColumnIn(tables, selection._source);
+    }
+  }
+
+  void _requireColumnIn(
+    List<SqlTable<Object?>> tables,
+    SqlTableColumn<Object?> column,
+  ) {
+    if (!tables.any((table) => identical(column.table, table))) {
+      throw ArgumentError(
+        'Column "${column.name}" is outside this SQL operation.',
+      );
+    }
+  }
+
+  bool _containsTable(
+    List<SqlTable<Object?>> tables,
+    SqlTable<Object?> candidate,
+  ) => tables.any((table) => identical(table, candidate));
+
+  void _writeSelections(
+    _BoundSqlBuilder builder,
+    List<SqlSelection<Object?>> selections,
+    Map<SqlTable<Object?>, String> aliases,
+  ) {
+    for (final (index, selection) in selections.indexed) {
       if (index != 0) builder.write(', ');
-      builder.write(dialect.quoteIdentifier(column.name));
+      _writeColumnReference(builder, selection._source, aliases);
+      final resultName = selection._resultColumn.name;
+      if (resultName != selection._source.name) {
+        builder
+          ..write(' AS ')
+          ..write(dialect.quoteIdentifier(resultName));
+      }
     }
   }
 
   void _writePredicate(
     _BoundSqlBuilder builder,
-    SqlTable<Object?> table,
+    List<SqlTable<Object?>> tables,
+    Map<SqlTable<Object?>, String> aliases,
     SqlPredicate predicate,
   ) {
     switch (predicate) {
       case _ComparisonPredicate():
-        _requireColumn(table, predicate.column);
-        builder
-          ..write(dialect.quoteIdentifier(predicate.column.name))
-          ..write(' ${predicate.operator.sql} ');
+        _requireColumnIn(tables, predicate.column);
+        _writeColumnReference(builder, predicate.column, aliases);
+        builder.write(' ${predicate.operator.sql} ');
         builder.bind(predicate.value);
+      case _ColumnComparisonPredicate():
+        _requireColumnIn(tables, predicate.left);
+        _requireColumnIn(tables, predicate.right);
+        _writeColumnReference(builder, predicate.left, aliases);
+        builder.write(' ${predicate.operator.sql} ');
+        _writeColumnReference(builder, predicate.right, aliases);
       case _NullPredicate():
-        _requireColumn(table, predicate.column);
-        builder
-          ..write(dialect.quoteIdentifier(predicate.column.name))
-          ..write(predicate.negated ? ' IS NOT NULL' : ' IS NULL');
+        _requireColumnIn(tables, predicate.column);
+        _writeColumnReference(builder, predicate.column, aliases);
+        builder.write(predicate.negated ? ' IS NOT NULL' : ' IS NULL');
       case _LogicalPredicate():
         builder.write('(');
-        _writePredicate(builder, table, predicate.left);
+        _writePredicate(builder, tables, aliases, predicate.left);
         builder.write(' ${predicate.operator.sql} ');
-        _writePredicate(builder, table, predicate.right);
+        _writePredicate(builder, tables, aliases, predicate.right);
         builder.write(')');
     }
+  }
+
+  List<SqlTableColumn<Object?>> _predicateColumns(SqlPredicate predicate) {
+    return switch (predicate) {
+      _ComparisonPredicate() => <SqlTableColumn<Object?>>[predicate.column],
+      _ColumnComparisonPredicate() => <SqlTableColumn<Object?>>[
+        predicate.left,
+        predicate.right,
+      ],
+      _NullPredicate() => <SqlTableColumn<Object?>>[predicate.column],
+      _LogicalPredicate() => <SqlTableColumn<Object?>>[
+        ..._predicateColumns(predicate.left),
+        ..._predicateColumns(predicate.right),
+      ],
+    };
+  }
+
+  void _writeColumnReference(
+    _BoundSqlBuilder builder,
+    SqlTableColumn<Object?> column,
+    Map<SqlTable<Object?>, String> aliases,
+  ) {
+    final alias = aliases[column.table];
+    if (alias != null) {
+      builder
+        ..write(dialect.quoteIdentifier(alias))
+        ..write('.');
+    }
+    builder.write(dialect.quoteIdentifier(column.name));
   }
 
   String _quoteTable(SqlTable<Object?> table) {
@@ -343,7 +477,8 @@ final class SqlWrite {
         'MySQL does not support SQL RETURNING in this query layer.',
       );
     }
-    for (final column in projection.columns) {
+    for (final selection in projection.columns) {
+      final column = selection._source;
       if (!identical(column.table, _table)) {
         throw ArgumentError(
           'Returning column "${column.name}" does not belong to '
@@ -354,9 +489,16 @@ final class SqlWrite {
 
     final fragments = List<String>.of(statement.fragments);
     final suffix = StringBuffer(' RETURNING ');
-    for (final (index, column) in projection.columns.indexed) {
+    for (final (index, selection) in projection.columns.indexed) {
       if (index != 0) suffix.write(', ');
+      final column = selection._source;
       suffix.write(_dialect.quoteIdentifier(column.name));
+      final resultName = selection._resultColumn.name;
+      if (resultName != column.name) {
+        suffix
+          ..write(' AS ')
+          ..write(_dialect.quoteIdentifier(resultName));
+      }
     }
     fragments[fragments.length - 1] = '${fragments.last}${suffix.toString()}';
     return SqlRead<R>._(

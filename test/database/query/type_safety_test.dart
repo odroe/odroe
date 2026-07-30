@@ -6,40 +6,35 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
-  test(
-    'column receivers preserve assignment and predicate value types',
-    () async {
-      final path = File(
-        'test/database/query/type_fixture.invalid',
-      ).absolute.path;
-      final contexts = AnalysisContextCollection(
-        includedPaths: <String>[path],
-        sdkPath: _dartSdkPath(),
-      );
-      final SomeResolvedUnitResult result;
-      try {
-        result = await contexts
-            .contextFor(path)
-            .currentSession
-            .getResolvedUnit(path);
-      } finally {
-        await contexts.dispose();
-      }
+  test('columns preserve assignment, predicate, and selection types', () async {
+    final path = File('test/database/query/type_fixture.invalid').absolute.path;
+    final contexts = AnalysisContextCollection(
+      includedPaths: <String>[path],
+      sdkPath: _dartSdkPath(),
+    );
+    final SomeResolvedUnitResult result;
+    try {
+      result = await contexts
+          .contextFor(path)
+          .currentSession
+          .getResolvedUnit(path);
+    } finally {
+      await contexts.dispose();
+    }
 
-      expect(result, isA<ResolvedUnitResult>());
-      final diagnostics = (result as ResolvedUnitResult).diagnostics;
-      expect(
-        diagnostics.map(
-          (diagnostic) => diagnostic.diagnosticCode.lowerCaseName,
-        ),
-        <String>[
-          'argument_type_not_assignable',
-          'argument_type_not_assignable',
-          'argument_type_not_assignable',
-        ],
-      );
-    },
-  );
+    expect(result, isA<ResolvedUnitResult>());
+    final diagnostics = (result as ResolvedUnitResult).diagnostics;
+    expect(
+      diagnostics.map((diagnostic) => diagnostic.diagnosticCode.lowerCaseName),
+      <String>[
+        'argument_type_not_assignable',
+        'argument_type_not_assignable',
+        'argument_type_not_assignable',
+        'argument_type_not_assignable',
+        'undefined_getter',
+      ],
+    );
+  });
 }
 
 String _dartSdkPath() {

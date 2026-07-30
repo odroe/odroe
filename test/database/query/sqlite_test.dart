@@ -19,6 +19,15 @@ void main() {
         ) STRICT
       '''),
     );
+    await database.execute(
+      BoundSql.raw('''
+        CREATE TABLE posts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          author_id INTEGER REFERENCES users (id),
+          title TEXT NOT NULL
+        ) STRICT
+      '''),
+    );
   });
 
   tearDown(() => database.close());
@@ -92,6 +101,18 @@ void main() {
     expect(await queries.selectTable(users).all(database), isEmpty);
   });
 
+  test('decodes an aliased RETURNING selection', () async {
+    final returnedEmail = users.email.as('returned_email');
+
+    expect(
+      await queries
+          .insert(users, <SqlAssignment>[users.email.set('alias@example.com')])
+          .returning(SqlProjection.column(returnedEmail))
+          .all(database),
+      <String>['alias@example.com'],
+    );
+  });
+
   test('executes explicit full-table mutations', () async {
     await database.atomicWrite(<BoundSql>[
       queries.insert(users, <SqlAssignment>[
@@ -125,6 +146,73 @@ void main() {
     expect(deleted.affectedRows, 2);
     expect(await queries.selectTable(users).all(database), isEmpty);
   });
+
+  test('executes typed INNER and LEFT JOIN projections', () async {
+    final posts = _Posts();
+    await queries
+        .insert(users, <SqlAssignment>[
+          users.email.set('ada@example.com'),
+          users.active.set(true),
+        ])
+        .execute(database);
+    await database.atomicWrite(<BoundSql>[
+      queries.insert(posts, <SqlAssignment>[
+        posts.authorId.set(1),
+        posts.title.set('Typed relations'),
+      ]).statement,
+      queries.insert(posts, <SqlAssignment>[
+        posts.authorId.set(null),
+        posts.title.set('No author'),
+      ]).statement,
+    ]);
+
+    final innerProjection = SqlProjection<({String title, String authorEmail})>(
+      <SqlSelection<Object?>>[posts.title, users.email],
+      (row) => (
+        title: posts.title.read(row, 0),
+        authorEmail: users.email.read(row, 1),
+      ),
+    );
+    expect(
+      await queries
+          .select(
+            from: posts,
+            joins: <SqlJoin>[
+              SqlJoin.inner(users, on: users.id.equalsColumn(posts.authorId)),
+            ],
+            projection: innerProjection,
+          )
+          .all(database),
+      <({String title, String authorEmail})>[
+        (title: 'Typed relations', authorEmail: 'ada@example.com'),
+      ],
+    );
+
+    final optionalAuthor = users.email.optional.as('author_email');
+    final leftProjection = SqlProjection<({String title, String? authorEmail})>(
+      <SqlSelection<Object?>>[posts.title, optionalAuthor],
+      (row) => (
+        title: posts.title.read(row, 0),
+        authorEmail: optionalAuthor.read(row, 1),
+      ),
+    );
+    expect(
+      await queries
+          .select(
+            from: posts,
+            joins: <SqlJoin>[
+              SqlJoin.left(users, on: posts.authorId.equalsColumn(users.id)),
+            ],
+            projection: leftProjection,
+            orderBy: <SqlOrder>[posts.id.ascending],
+          )
+          .all(database),
+      <({String title, String? authorEmail})>[
+        (title: 'Typed relations', authorEmail: 'ada@example.com'),
+        (title: 'No author', authorEmail: null),
+      ],
+    );
+  });
 }
 
 typedef _User = ({int id, String email, String? nickname, bool active});
@@ -148,6 +236,29 @@ final class _Users extends SqlTable<_User> {
       email: email.read(row, 1),
       nickname: nickname.read(row, 2),
       active: active.read(row, 3),
+    ),
+  );
+}
+
+typedef _Post = ({int id, int? authorId, String title});
+
+final class _Posts extends SqlTable<_Post> {
+  _Posts() : super('posts');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<int?> authorId = column<int?>(
+    'author_id',
+    nullable(sqlInt),
+  );
+  late final SqlTableColumn<String> title = column<String>('title', sqlText);
+
+  @override
+  late final SqlProjection<_Post> projection = SqlProjection<_Post>(
+    <SqlSelection<Object?>>[id, authorId, title],
+    (row) => (
+      id: id.read(row, 0),
+      authorId: authorId.read(row, 1),
+      title: title.read(row, 2),
     ),
   );
 }

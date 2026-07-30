@@ -6,4 +6,6 @@ void invalidTypeFixture() {
   table.email.set(42);
   table.email.set(null);
   table.active.equals('yes');
+  table.email.equalsColumn(table.active);
+  table.email.optional.set('write');
 }
