@@ -713,9 +713,12 @@ pre {
 }
 
 .docs-article table {
+  display: block;
   width: 100%;
+  max-width: 100%;
   margin: 1.8rem 0;
   border-collapse: collapse;
+  overflow-x: auto;
   font-size: 0.9rem;
 }
 

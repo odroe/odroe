@@ -78,7 +78,7 @@ final titles = await database.query(
 ```
 
 Fragments are trusted source. Values are bound. Drivers insert native
-placeholders between fragments and never scan or rewrite SQL text.
+placeholders between fragments without parsing or rewriting their contents.
 
 Top-level calls may leave handwritten SQL as `unknown`, but a wrong terminal
 may then be detected only after the database executes it. Declare the kind
@@ -103,6 +103,10 @@ that marker automatically.
 The MySQL/MariaDB driver uses one serialized connection. It does not support
 nested transactions, multiple result sets, portable `TIME` decoding, or
 `RETURNING` through `SqlDialect.mysql`.
+
+MySQL statements without bound values reject `;` before I/O so the driver's
+text protocol cannot execute multiple statements. Omit trailing semicolons.
+Statements with bound values use the prepared protocol.
 
 D1 has not been verified in a remote Cloudflare deployment.
 

@@ -20,8 +20,8 @@ enum SqlStatementKind {
 /// Immutable SQL fragments interleaved with typed bound values.
 ///
 /// A driver inserts its native placeholder between each pair of [fragments].
-/// SQL is never scanned or rewritten, so placeholder-like text inside strings
-/// and comments remains untouched.
+/// Drivers do not parse or rewrite fragment contents, so placeholder-like text
+/// inside strings and comments remains untouched.
 final class BoundSql {
   /// Creates a statement without bound parameters.
   ///

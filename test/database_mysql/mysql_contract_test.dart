@@ -288,6 +288,39 @@ void main() {
       expect(await _count(database, table), 0);
     });
 
+    test('rejects compound SQL before any statement runs', () async {
+      final table = 'odroe_mysql_compound_$suffix';
+      tables.add(table);
+      await database.execute(
+        BoundSql.raw('CREATE TABLE `$table` (value VARCHAR(191) NOT NULL)'),
+      );
+
+      await expectLater(
+        database.execute(
+          BoundSql.raw(
+            "INSERT INTO `$table` VALUES ('one'); "
+            "INSERT INTO `$table` VALUES ('two')",
+          ),
+        ),
+        _throwsSql(SqlErrorCode.unsupported),
+      );
+      expect(await _count(database, table), 0);
+
+      await expectLater(
+        database.execute(
+          BoundSql.parts(
+            <String>[
+              'INSERT INTO `$table` VALUES (',
+              "); INSERT INTO `$table` VALUES ('two')",
+            ],
+            <SqlValue>[const SqlValue.text('one')],
+          ),
+        ),
+        _throwsSql(SqlErrorCode.driver),
+      );
+      expect(await _count(database, table), 0);
+    });
+
     test('serializes external work and closes idempotently', () async {
       final table = 'odroe_mysql_serial_$suffix';
       tables.add(table);

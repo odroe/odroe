@@ -26,14 +26,29 @@ final class CliProject {
     if (match == null) {
       throw FormatException('pubspec.yaml must declare a valid package name.');
     }
+    final routesPath = _resolveProjectPath(
+      root,
+      arguments.option('routes')!,
+      option: '--routes',
+    );
+    final outputPath = _resolveProjectPath(
+      root,
+      arguments.option('output')!,
+      option: '--output',
+    );
+    final serverOutputPath = _resolveProjectPath(
+      root,
+      arguments.option('server-output')!,
+      option: '--server-output',
+    );
     return CliProject._(
       root: root,
       packageName: match.group(1)!,
       compiler: FileRouteCompiler(
         projectRoot: root,
-        routesPath: arguments.option('routes')!,
-        outputPath: arguments.option('output')!,
-        serverOutputPath: arguments.option('server-output')!,
+        routesPath: routesPath,
+        outputPath: outputPath,
+        serverOutputPath: serverOutputPath,
       ),
     );
   }
@@ -75,6 +90,37 @@ final class CliProject {
     );
     _writeGenerated(fetchBootstrap, source);
   }
+}
+
+String _resolveProjectPath(
+  Directory projectRoot,
+  String relativePath, {
+  required String option,
+}) {
+  if (relativePath.isEmpty || p.isAbsolute(relativePath)) {
+    throw FormatException(
+      '$option must be a relative path inside the project.',
+    );
+  }
+  if (p.split(relativePath).contains('..')) {
+    throw FormatException('$option cannot contain parent traversal.');
+  }
+
+  final root = p.normalize(projectRoot.absolute.path);
+  final resolved = p.normalize(p.join(root, relativePath));
+  if (!p.isWithin(root, resolved)) {
+    throw FormatException('$option must resolve inside the project.');
+  }
+
+  var current = root;
+  for (final component in p.split(p.relative(resolved, from: root))) {
+    current = p.join(current, component);
+    if (FileSystemEntity.typeSync(current, followLinks: false) ==
+        FileSystemEntityType.link) {
+      throw FormatException('$option cannot traverse a symbolic link.');
+    }
+  }
+  return p.relative(resolved, from: root);
 }
 
 /// Generates project routes and reports diagnostics to [err].

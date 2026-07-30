@@ -261,12 +261,16 @@ final manualTitles = await database.query(
 );
 ```
 
-driver 只在 fragments 之间插入 native placeholder，不扫描 SQL。SQLite 与
+driver 只在 fragments 之间插入 native placeholder，不解析或重写 SQL。SQLite 与
 PostgreSQL 已通过真实合同测试。D1 是 Preview，已通过本地
 Wrangler/Workerd；它提供原子 batch，不提供交互式 transaction。
 MySQL/MariaDB 是 Preview，已通过真实 MySQL 8.4 与 MariaDB 11.8；当前为
 单连接串行 driver，不支持 nested transaction、multiple result sets、portable
 `TIME` 解码或 `SqlDialect.mysql` 的 `RETURNING`。
+
+MySQL 的无绑定值语句会在 I/O 前拒绝 `;`，以阻止 text protocol 执行多条
+语句；不要给手写 MySQL SQL 添加尾分号。带绑定值的语句使用 prepared
+protocol。
 
 顶层调用可把手写 SQL 保持为默认的 `unknown`，但错误 terminal 可能要在
 数据库执行后才能识别；已知形态时应显式标记。`atomicWrite` 与 transaction

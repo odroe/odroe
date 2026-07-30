@@ -21,8 +21,9 @@ final post = await client.fetchQuery(
 );
 ```
 
-Queries, infinite queries, and mutations share cancellation, invalidation, and
-observer lifecycles.
+Queries and infinite queries participate in `QueryClient` cancellation and
+invalidation. Mutations keep separate cache, observer, scope, and retry
+lifecycles; use mutation callbacks to invalidate related queries explicitly.
 
 ## Flutter
 

@@ -316,15 +316,31 @@ final class MysqlDatabase implements TransactionalSqlDatabase {
   }) async {
     if (!_connection.connected) throw _unavailable();
     final bound = bindMysql(statement);
-    final binary = bound.parameters.isNotEmpty;
+    if (bound.parameters.isNotEmpty) {
+      final result = await runMysql(
+        () => _connection.execute(bound.sql, bound.parameters),
+        operation: operation,
+        connected: _connection.connected,
+      );
+      return (result: result, binary: true);
+    }
+
+    // mysql_dart enables CLIENT_MULTI_STATEMENTS for text queries. Rejecting
+    // every semicolon on this path is deliberately strict: it prevents a
+    // compound statement before I/O without parsing dialect-specific SQL.
+    if (bound.sql.contains(';')) {
+      throw const SqlException(
+        SqlErrorCode.unsupported,
+        'MySQL statements without bound values cannot contain semicolons.',
+      );
+    }
+
     final result = await runMysql(
-      () => binary
-          ? _connection.execute(bound.sql, bound.parameters)
-          : _connection.execute(bound.sql),
+      () => _connection.execute(bound.sql),
       operation: operation,
       connected: _connection.connected,
     );
-    return (result: result, binary: binary);
+    return (result: result, binary: false);
   }
 }
 
