@@ -373,7 +373,8 @@ Future<int> _prerenderBuild(
       ...Platform.environment,
       'ODROE_HOST': '127.0.0.1',
       'ODROE_PORT': '0',
-      'ODROE_WEB_ROOT': outputDirectory.path,
+      'ODROE_WEB_ROOT': '',
+      'ODROE_FLUTTER_ORIGIN_FILE': '',
     },
   );
   final ready = Completer<Uri>();

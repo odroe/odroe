@@ -6,6 +6,7 @@ import '../query/hydration.dart';
 import '../query/module.dart';
 import '../router/codec.dart';
 import '../router/load.dart';
+import '../server/accept.dart';
 import '../server/http.dart';
 import '../server/render.dart';
 import 'renderer.dart';
@@ -24,22 +25,23 @@ final class DocumentRenderer {
 
   /// Renders one loaded route branch.
   Future<ServerResponse> call(RenderContext context) async {
-    final accept =
-        context.request.request.headers.value('accept')?.toLowerCase() ?? '*/*';
-    final wantsJson =
-        accept.contains('application/json') && !accept.contains('text/html');
+    final accept = AcceptPreferences.parse(
+      context.request.request.headers.value('accept'),
+    );
+    final varyAccept = Headers.single(<String, String>{'vary': 'Accept'});
 
-    if (wantsJson) {
+    if (accept.prefersJson) {
       final query = context.request.maybe(queryClientKey);
       final state = query == null ? null : _dehydrate(query);
       final payload = _payload(context, state);
       if (state == null ||
           !state.queries.any((query) => query.pending != null)) {
-        return ServerResponse.json(payload);
+        return ServerResponse.json(payload, headers: varyAccept);
       }
       return ServerResponse(
         headers: Headers.single(<String, String>{
           'content-type': 'application/x-ndjson; charset=utf-8',
+          'vary': 'Accept',
         }),
         body: _jsonHandoff(payload, _pendingFrames(query!, state)),
       );
@@ -55,6 +57,7 @@ final class DocumentRenderer {
     if (bootstrap == null) {
       return ServerResponse.html(
         '${renderDocumentStart(document)}</body></html>',
+        headers: varyAccept,
       );
     }
 
@@ -65,6 +68,7 @@ final class DocumentRenderer {
     return ServerResponse(
       headers: Headers.single(<String, String>{
         'content-type': 'text/html; charset=utf-8',
+        'vary': 'Accept',
       }),
       body: _htmlHandoff(
         renderDocumentStart(document, baseHref: baseHref),

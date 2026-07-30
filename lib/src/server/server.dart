@@ -9,6 +9,7 @@ import '../router/match.dart';
 import '../router/route.dart';
 import '../rpc/function.dart';
 import '../rpc/serializer.dart';
+import 'accept.dart';
 import 'context.dart';
 import 'http.dart';
 import 'invocation.dart';
@@ -225,10 +226,9 @@ final class Server {
     StackTrace? stackTrace,
     Headers? headers,
   }) {
-    final accept = request.headers.value('accept')?.toLowerCase() ?? '*/*';
-    if (!rpc &&
-        (!accept.contains('application/json') ||
-            accept.contains('text/html'))) {
+    final accept = AcceptPreferences.parse(request.headers.value('accept'));
+    final responseHeaders = rpc ? headers : _varyAccept(headers);
+    if (!rpc && !accept.prefersJson) {
       final detail = exposeErrors && stackTrace != null
           ? '<pre>${_text('$error\n$stackTrace')}</pre>'
           : '';
@@ -240,11 +240,10 @@ final class Server {
         '</main></body></html>',
         status: status,
       );
-      if (headers == null) return response;
       return ServerResponse(
         status: response.status,
         reason: response.reason,
-        headers: response.headers.copy()..addAll(headers),
+        headers: response.headers.copy()..addAll(responseHeaders!),
         body: response.body,
       );
     }
@@ -256,7 +255,7 @@ final class Server {
         if (error != null) 'errorType': error.runtimeType.toString(),
       },
       status: status,
-      headers: headers,
+      headers: responseHeaders,
     );
   }
 
@@ -491,6 +490,22 @@ Future<void> _cancelResponseBody(Stream<List<int>> body) async {
 }
 
 Iterable<Module> _emptyModules() => const <Module>[];
+
+Headers _varyAccept(Headers? headers) {
+  final result = headers?.copy() ?? Headers();
+  final varies = result
+      .values('vary')
+      .expand((value) => value.split(','))
+      .map((value) => value.trim().toLowerCase());
+  if (!varies.contains('*') && !varies.contains('accept')) {
+    final current = result.value('vary');
+    result.set(
+      'vary',
+      current == null || current.isEmpty ? 'Accept' : '$current, Accept',
+    );
+  }
+  return result;
+}
 
 String _text(String value) =>
     const HtmlEscape(HtmlEscapeMode.element).convert(value);

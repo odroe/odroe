@@ -1,5 +1,20 @@
 import 'dart:io';
 
+/// Dart CLI used by nested commands under both `dart test` and `flutter test`.
+String get dartExecutable {
+  final name = Platform.resolvedExecutable
+      .split(Platform.pathSeparator)
+      .last
+      .toLowerCase();
+  if (name == 'dart' || name == 'dart.exe') {
+    return Platform.resolvedExecutable;
+  }
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot == null || flutterRoot.isEmpty) return 'dart';
+  final executable = Platform.isWindows ? 'dart.exe' : 'dart';
+  return '$flutterRoot/bin/cache/dart-sdk/bin/$executable';
+}
+
 /// Serializes tests that invoke Dart commands against this checkout.
 ///
 /// Dart's native-assets bundler writes shared files under `.dart_tool/lib`.

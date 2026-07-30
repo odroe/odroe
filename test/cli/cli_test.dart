@@ -16,18 +16,78 @@ void main() {
     await reservation.close();
 
     final dartCommandLock = await acquireDartCommandLock();
+    final publicDirectory = Directory('example/app/public').absolute;
+    final publicDirectoryExisted = publicDirectory.existsSync();
+    final publicAsset = File('${publicDirectory.path}/dev-asset.js');
+    final publicAssetExisted = publicAsset.existsSync();
+    final publicAssetBytes = publicAssetExisted
+        ? publicAsset.readAsBytesSync()
+        : null;
+    publicDirectory.createSync();
+    publicAsset.writeAsStringSync('source public asset');
+    addTearDown(() {
+      if (publicAssetExisted) {
+        publicAsset.writeAsBytesSync(publicAssetBytes!, flush: true);
+      } else if (publicAsset.existsSync()) {
+        publicAsset.deleteSync();
+      }
+      if (!publicDirectoryExisted &&
+          publicDirectory.existsSync() &&
+          publicDirectory.listSync().isEmpty) {
+        publicDirectory.deleteSync();
+      }
+    });
+    final stalePage = File(
+      'example/app/build/web/posts/42/index.html',
+    ).absolute;
+    final stalePageExisted = stalePage.existsSync();
+    final stalePageBytes = stalePageExisted
+        ? stalePage.readAsBytesSync()
+        : null;
+    final candidateDirectories = <Directory>[
+      Directory('example/app/build/web').absolute,
+      Directory('example/app/build/web/posts').absolute,
+      stalePage.parent,
+    ];
+    final existingDirectories = <String>{
+      for (final directory in candidateDirectories)
+        if (directory.existsSync()) directory.path,
+    };
+    stalePage.parent.createSync(recursive: true);
+    stalePage.writeAsStringSync('stale dev build');
+    addTearDown(() {
+      if (stalePageExisted) {
+        stalePage.writeAsBytesSync(stalePageBytes!, flush: true);
+      } else if (stalePage.existsSync()) {
+        stalePage.deleteSync();
+      }
+      for (final directory in candidateDirectories.reversed) {
+        if (!existingDirectories.contains(directory.path) &&
+            directory.existsSync() &&
+            directory.listSync().isEmpty) {
+          directory.deleteSync();
+        }
+      }
+    });
     late final Process process;
     try {
-      process = await Process.start('dart', <String>[
-        'run',
-        'odroe',
-        'dev',
-        '--project',
-        'example/app',
-        '--server-only',
-        '--port',
-        '$port',
-      ]);
+      process = await Process.start(
+        dartExecutable,
+        <String>[
+          'run',
+          'odroe',
+          'dev',
+          '--project',
+          'example/app',
+          '--server-only',
+          '--port',
+          '$port',
+        ],
+        environment: <String, String>{
+          ...Platform.environment,
+          'ODROE_FLUTTER_ORIGIN_FILE': '/stale/flutter-origin',
+        },
+      );
     } on Object {
       await dartCommandLock.release();
       rethrow;
@@ -74,6 +134,15 @@ void main() {
       contains('"location":"/posts/42?preview=true"'),
       reason: '$lastError\n$output',
     );
+    final assetRequest = await client.getUrl(
+      Uri.parse('http://127.0.0.1:$port/dev-asset.js'),
+    );
+    final assetResponse = await assetRequest.close();
+    expect(assetResponse.statusCode, HttpStatus.ok);
+    expect(
+      await assetResponse.transform(utf8.decoder).join(),
+      'source public asset',
+    );
     final bootstrap = await File(
       'example/app/.dart_tool/odroe/server.dart',
     ).readAsString();
@@ -90,6 +159,10 @@ void main() {
         "Platform.environment['ODROE_PORT'] ??\n"
         "        platformPort ??",
       ),
+    );
+    expect(
+      bootstrap,
+      contains("developmentOriginFile == null || developmentOriginFile == ''"),
     );
 
     final id = Uri.encodeComponent(

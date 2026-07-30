@@ -86,6 +86,7 @@ void main() {
     );
 
     expect(response.status, 200);
+    expect(response.headers.value('vary'), 'Accept');
     expect(
       response.headers.value('content-type'),
       'application/x-ndjson; charset=utf-8',

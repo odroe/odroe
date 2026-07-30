@@ -13,7 +13,9 @@ final class IoServer {
   /// Starts an HTTP server that forwards requests to [handler].
   ///
   /// Files in [publicDirectory] use conditional caching and stream eligible
-  /// responses with gzip when [compressStaticAssets] is enabled.
+  /// responses with gzip when [compressStaticAssets] is enabled. Exact files
+  /// take priority; HTML-compatible requests fall back to an `index.html`
+  /// below the requested path.
   static Future<HttpServer> bind(
     ServerHandler handler, {
     Object? address,
@@ -72,6 +74,9 @@ final class IoServer {
         method = HttpMethod.parse(incoming.method);
       } on FormatException {
         incoming.response.statusCode = HttpStatus.notImplemented;
+        return;
+      }
+      if (await staticFiles?.serve(incoming, indexFallback: false) ?? false) {
         return;
       }
       if (await developmentProxy?.serve(incoming) ?? false) return;

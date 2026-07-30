@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/dart_command_lock.dart';
+import '../support/process.dart';
 
 void main() {
   test(
@@ -29,7 +30,7 @@ void main() {
       expect(javaScript, isNot(matches(RegExp(r'\bnew\s+Function\s*\('))));
       expect(await server.length(), lessThan(500 * 1024));
 
-      final smoke = await Process.run('node', <String>[
+      final smoke = await runTestProcess('node', <String>[
         '--input-type=module',
         '--eval',
         '''
@@ -48,7 +49,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
   throw new Error(body);
 }
 ''',
-      ]).timeout(const Duration(seconds: 30));
+      ], timeout: const Duration(seconds: 30));
       expect(smoke.exitCode, 0, reason: '${smoke.stdout}\n${smoke.stderr}');
     },
     timeout: const Timeout(Duration(minutes: 3)),
@@ -200,7 +201,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         'build/odroe/cloudflare-prerender-test/server.js',
         '--prerender-output',
         'build/cloudflare-prerender-test',
-      ]).timeout(const Duration(minutes: 2));
+      ]);
       final logs = '${build.stdout}\n${build.stderr}';
 
       expect(build.exitCode, 0, reason: logs);
@@ -210,6 +211,8 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       expect(File('${artifactDirectory.path}/server.js').existsSync(), isTrue);
       expect(File('${artifactDirectory.path}/worker.mjs').existsSync(), isTrue);
       expect(stale.existsSync(), isFalse);
+      final notFound = await File('${web.path}/404.html').readAsString();
+      expect(notFound, contains('This route ends here.'));
       final html = await web
           .list(recursive: true)
           .where((entity) => entity is File && entity.path.endsWith('.html'))
@@ -237,6 +240,34 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         'docs/web/document/index.html',
         'index.html',
       ]);
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'prerender ignores same-path HTML from public',
+    () async {
+      final project = await _createDocumentFixture();
+      addTearDown(() => project.delete(recursive: true));
+
+      final build = await _runDart(<String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--server-target',
+        'cloudflare',
+      ]);
+      final logs = '${build.stdout}\n${build.stderr}';
+
+      expect(build.exitCode, 0, reason: logs);
+      expect(build.stdout, contains('Prerendered 1 routes.'));
+      final page = await File(
+        p.join(project.path, 'build', 'web', 'index.html'),
+      ).readAsString();
+      expect(page, contains('fresh route'));
+      expect(page, isNot(contains('stale public page')));
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
@@ -274,7 +305,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         'build/cloudflare-prerender-failure-test',
         '--prerender-max-response-bytes',
         '1',
-      ]).timeout(const Duration(minutes: 2));
+      ]);
       final logs = '${build.stdout}\n${build.stderr}';
 
       expect(build.exitCode, 1, reason: logs);
@@ -407,6 +438,72 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
   );
 }
 
+Future<Directory> _createDocumentFixture() async {
+  final project = await Directory.systemTemp.createTemp(
+    'odroe-prerender-fixture-',
+  );
+  try {
+    final root = Directory.current.absolute;
+    await File(p.join(project.path, 'pubspec.yaml')).writeAsString('''
+name: odroe_prerender_fixture
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dependencies:
+  odroe:
+    path: ${jsonEncode(root.path)}
+''');
+    final routes = Directory(p.join(project.path, 'lib', 'routes'));
+    await routes.create(recursive: true);
+    await File(p.join(routes.path, 'route.dart')).writeAsString(r'''
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
+
+final route = AppRoute<NoParams, NoSearch, NoData>().document(
+  (_) => const RouteDocument(
+    title: 'Fresh route',
+    body: HtmlElement(
+      'main',
+      children: <HtmlNode>[HtmlText('fresh route')],
+    ),
+  ),
+);
+''');
+    final public = Directory(p.join(project.path, 'public'));
+    await public.create();
+    await File(
+      p.join(public.path, 'index.html'),
+    ).writeAsString('stale public page');
+
+    final config =
+        jsonDecode(
+              await File(
+                p.join(root.path, '.dart_tool', 'package_config.json'),
+              ).readAsString(),
+            )
+            as Map<String, Object?>;
+    final packages = (config['packages']! as List<Object?>)
+        .cast<Map<String, Object?>>();
+    final odroe = packages.singleWhere((package) => package['name'] == 'odroe');
+    odroe['rootUri'] = root.uri.toString();
+    packages.add(<String, Object?>{
+      'name': 'odroe_prerender_fixture',
+      'rootUri': project.uri.toString(),
+      'packageUri': 'lib/',
+      'languageVersion': '3.10',
+    });
+    final dartTool = Directory(p.join(project.path, '.dart_tool'));
+    await dartTool.create();
+    await File(
+      p.join(dartTool.path, 'package_config.json'),
+    ).writeAsString(jsonEncode(config));
+    return project;
+  } on Object {
+    await project.delete(recursive: true);
+    rethrow;
+  }
+}
+
 Future<void> _buildWorker(Directory project, String artifact) async {
   final build = await _runDart(<String>[
     'run',
@@ -419,12 +516,17 @@ Future<void> _buildWorker(Directory project, String artifact) async {
     'cloudflare',
     '--server-artifact',
     artifact,
-  ]).timeout(const Duration(minutes: 2));
+  ]);
   expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
 }
 
-Future<ProcessResult> _runDart(List<String> arguments) =>
-    withDartCommandLock(() => Process.run('dart', arguments));
+Future<ProcessResult> _runDart(List<String> arguments) => withDartCommandLock(
+  () => runTestProcess(
+    dartExecutable,
+    arguments,
+    timeout: const Duration(minutes: 2),
+  ),
+);
 
 Future<int> _unusedPort() async {
   final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -468,13 +570,7 @@ Future<({int statusCode, String body})> _waitForResponse(
 }
 
 Future<void> _terminate(Process process, Future<int> exitCode) async {
-  process.kill(ProcessSignal.sigterm);
-  try {
-    await exitCode.timeout(const Duration(seconds: 5));
-  } on TimeoutException {
-    process.kill(ProcessSignal.sigkill);
-    await exitCode.timeout(const Duration(seconds: 5));
-  }
+  await terminateTestProcess(process, exitCode);
 }
 
 extension on String {

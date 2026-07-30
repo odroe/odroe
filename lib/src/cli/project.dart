@@ -201,7 +201,8 @@ Future<void> main() async {
     address: host,
     port: port,
     publicDirectory: webRoot == '' ? null : Directory(webRoot ?? 'build/web'),
-    developmentProxyOriginFile: developmentOriginFile == null
+    developmentProxyOriginFile:
+        developmentOriginFile == null || developmentOriginFile == ''
         ? null
         : File(developmentOriginFile),
   );

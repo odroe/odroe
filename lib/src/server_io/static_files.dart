@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../server/accept.dart';
+
 /// Serves one contained public directory for the IO adapter.
 final class StaticFiles {
   /// Creates a server for files contained by [directory].
@@ -16,15 +18,19 @@ final class StaticFiles {
   String? _resolvedRoot;
 
   /// Serves [request] when it resolves to a public file.
-  Future<bool> serve(HttpRequest request) async {
+  Future<bool> serve(HttpRequest request, {bool indexFallback = true}) async {
     if (request.method != 'GET' && request.method != 'HEAD') {
       return false;
     }
     final segments = request.requestedUri.pathSegments;
     if (segments.any(_unsafeSegment)) return false;
     final relative = p.joinAll(segments);
-    if (relative.isEmpty) return false;
-    final asset = await _file(relative);
+    var asset = relative.isEmpty ? null : await _file(relative);
+    var usedIndexFallback = false;
+    if (asset == null && indexFallback && _acceptsIndex(request.headers)) {
+      asset = await _file(p.join(relative, 'index.html'));
+      usedIndexFallback = asset != null;
+    }
     if (asset == null) return false;
     final etag = _etag(asset.stat);
     final response = request.response;
@@ -35,8 +41,14 @@ final class StaticFiles {
     final encoding = compressible
         ? _selectEncoding(request.headers)
         : _ContentEncoding.identity;
-    if (compressible) {
-      response.headers.set(HttpHeaders.varyHeader, 'Accept-Encoding');
+    if (usedIndexFallback || compressible) {
+      response.headers.set(
+        HttpHeaders.varyHeader,
+        <String>[
+          if (usedIndexFallback) 'Accept',
+          if (compressible) 'Accept-Encoding',
+        ].join(', '),
+      );
     }
     if (encoding == _ContentEncoding.notAcceptable) {
       response
@@ -100,6 +112,11 @@ final class StaticFiles {
       return null;
     }
   }
+}
+
+bool _acceptsIndex(HttpHeaders headers) {
+  final values = headers[HttpHeaders.acceptHeader];
+  return AcceptPreferences.parse(values?.join(',')).acceptsHtml;
 }
 
 ContentType _contentType(String path) =>

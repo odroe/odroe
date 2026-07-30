@@ -93,6 +93,132 @@ void main() {
     }
   });
 
+  test('IO adapter serves prerendered indexes at canonical routes', () async {
+    final public = await Directory.systemTemp.createTemp('odroe-routes-');
+    final outside = await Directory.systemTemp.createTemp('odroe-routes-out-');
+    addTearDown(() => public.delete(recursive: true));
+    addTearDown(() => outside.delete(recursive: true));
+    await File('${public.path}/index.html').writeAsString('static root');
+    await Directory('${public.path}/docs').create();
+    await File('${public.path}/docs/index.html').writeAsString('static docs');
+    await Directory('${public.path}/release.v1').create();
+    await File(
+      '${public.path}/release.v1/index.html',
+    ).writeAsString('static release');
+    await File('${public.path}/robots').writeAsString('static exact');
+    await File('${outside.path}/index.html').writeAsString('private');
+    if (!Platform.isWindows) {
+      await Link('${public.path}/escape').create(outside.path);
+    }
+
+    var handlerCalls = 0;
+    final server = await IoServer.bind(
+      (request) async {
+        handlerCalls++;
+        return ServerResponse.text('dynamic ${request.uri.path}');
+      },
+      port: 0,
+      publicDirectory: public,
+    );
+    addTearDown(server.close);
+    final client = HttpClient();
+    addTearDown(client.close);
+    final base = Uri.parse('http://127.0.0.1:${server.port}');
+
+    Future<({HttpClientResponse response, String body})> get(
+      String path, {
+      String? accept,
+    }) async {
+      final request = await client.getUrl(base.resolve(path));
+      if (accept != null) {
+        request.headers.set(HttpHeaders.acceptHeader, accept);
+      }
+      final response = await request.close();
+      return (
+        response: response,
+        body: await response.transform(utf8.decoder).join(),
+      );
+    }
+
+    for (final page in <(String, String)>[
+      ('/', 'static root'),
+      ('/docs', 'static docs'),
+      ('/docs/', 'static docs'),
+      ('/release.v1', 'static release'),
+      ('/release.v1/', 'static release'),
+      ('/robots', 'static exact'),
+    ]) {
+      final result = await get(page.$1);
+      expect(result.response.statusCode, HttpStatus.ok, reason: page.$1);
+      expect(result.body, page.$2, reason: page.$1);
+      expect(
+        result.response.headers.contentType?.mimeType,
+        page.$1 == '/robots'
+            ? ContentType.binary.mimeType
+            : ContentType.html.mimeType,
+        reason: page.$1,
+      );
+    }
+    expect(handlerCalls, 0);
+
+    final docs = await get('/docs');
+    final etag = docs.response.headers.value(HttpHeaders.etagHeader);
+    expect(docs.response.headers.value(HttpHeaders.varyHeader), 'Accept');
+    final head = await client.openUrl('HEAD', base.resolve('/docs'));
+    final headResponse = await head.close();
+    expect(headResponse.statusCode, HttpStatus.ok);
+    expect(headResponse.headers.value(HttpHeaders.etagHeader), etag);
+    expect(headResponse.contentLength, 'static docs'.length);
+    expect(await headResponse.toList(), isEmpty);
+    expect(handlerCalls, 0);
+
+    final conditional = await client.getUrl(base.resolve('/docs'));
+    conditional.headers.set(HttpHeaders.ifNoneMatchHeader, etag!);
+    final notModified = await conditional.close();
+    expect(notModified.statusCode, HttpStatus.notModified);
+    expect(notModified.headers.value(HttpHeaders.varyHeader), 'Accept');
+    expect(await notModified.toList(), isEmpty);
+    expect(handlerCalls, 0);
+
+    final json = await client.getUrl(base.resolve('/docs'));
+    json.headers.set(HttpHeaders.acceptHeader, 'application/json');
+    final jsonResponse = await json.close();
+    expect(jsonResponse.statusCode, HttpStatus.ok);
+    expect(await jsonResponse.transform(utf8.decoder).join(), 'dynamic /docs');
+    expect(handlerCalls, 1);
+
+    for (final accept in <String>[
+      'text/*',
+      '*/*',
+      'application/json;q=0, */*;q=1',
+    ]) {
+      final result = await get('/docs', accept: accept);
+      expect(result.body, 'static docs', reason: accept);
+    }
+    expect(handlerCalls, 1);
+
+    for (final accept in <String>[
+      'text/plain',
+      'text/html;q=0',
+      'application/json;q=1, text/html;q=0.5',
+    ]) {
+      final result = await get('/docs', accept: accept);
+      expect(result.body, 'dynamic /docs', reason: accept);
+    }
+    expect(handlerCalls, 4);
+
+    final callsBeforeMissing = handlerCalls;
+    final missingRoutes = <String>[
+      '/missing.css',
+      if (!Platform.isWindows) '/escape',
+    ];
+    for (final route in missingRoutes) {
+      final result = await get(route);
+      expect(result.body, 'dynamic $route', reason: route);
+    }
+    expect(handlerCalls, callsBeforeMissing + missingRoutes.length);
+  });
+
   test('IO adapter revalidates static assets without guessed hashes', () async {
     final public = await Directory.systemTemp.createTemp('odroe-cache-');
     addTearDown(() => public.delete(recursive: true));
@@ -447,6 +573,53 @@ void main() {
       expect(response, startsWith('HTTP/1.1 501 Not Implemented'));
       expect(proxied, isFalse);
       expect(dispatched, isFalse);
+    },
+  );
+
+  test(
+    'IO adapter serves exact public files before development proxy',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'odroe-public-proxy-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      await File('${directory.path}/vendor.js').writeAsString('public vendor');
+
+      final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => upstream.close(force: true));
+      upstream.listen((request) {
+        request.response.write('proxy ${request.uri.path}');
+        unawaited(request.response.close());
+      });
+      final originFile = File('${directory.path}/origin');
+      await originFile.writeAsString('http://127.0.0.1:${upstream.port}');
+
+      final server = await IoServer.bind(
+        (_) async => ServerResponse.text('dynamic'),
+        port: 0,
+        publicDirectory: directory,
+        developmentProxyOriginFile: originFile,
+      );
+      addTearDown(server.close);
+      final client = HttpClient();
+      addTearDown(client.close);
+      final base = Uri.parse('http://127.0.0.1:${server.port}');
+
+      final public = await client.getUrl(base.resolve('/vendor.js'));
+      final publicResponse = await public.close();
+      expect(publicResponse.statusCode, HttpStatus.ok);
+      expect(
+        await publicResponse.transform(utf8.decoder).join(),
+        'public vendor',
+      );
+
+      final proxied = await client.getUrl(base.resolve('/missing.js'));
+      final proxiedResponse = await proxied.close();
+      expect(proxiedResponse.statusCode, HttpStatus.ok);
+      expect(
+        await proxiedResponse.transform(utf8.decoder).join(),
+        'proxy /missing.js',
+      );
     },
   );
 

@@ -72,14 +72,13 @@ Future<int> runDevelopment(
       ).toString(),
     );
   }
+  final publicDirectory = Directory(p.join(project.root.path, 'public'));
   final environment = <String, String>{
     ...Platform.environment,
     'ODROE_HOST': host,
     'ODROE_PORT': '$resolvedPort',
-    if (developmentOriginFile != null) ...<String, String>{
-      'ODROE_FLUTTER_ORIGIN_FILE': developmentOriginFile.path,
-      'ODROE_WEB_ROOT': '',
-    },
+    'ODROE_WEB_ROOT': publicDirectory.existsSync() ? publicDirectory.path : '',
+    'ODROE_FLUTTER_ORIGIN_FILE': developmentOriginFile?.path ?? '',
   };
   Process server = await startProjectProcess(
     Platform.resolvedExecutable,
