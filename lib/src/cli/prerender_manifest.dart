@@ -6,24 +6,30 @@ import 'package:path/path.dart' as p;
 
 const _defaultCallbackTimeout = Duration(seconds: 20);
 const _defaultTerminationGracePeriod = Duration(seconds: 10);
+const _maxCallbackStderrCharacters = 8 * 1024;
 
 /// Loads application-owned prerender locations and merges static routes.
 Future<List<String>> loadPrerenderLocations({
   required Directory projectRoot,
   required String packageName,
   required Iterable<String> staticLocations,
+  required int maxRoutes,
   String? dartExecutable,
   Duration callbackTimeout = _defaultCallbackTimeout,
   Duration terminationGracePeriod = _defaultTerminationGracePeriod,
 }) async {
+  if (maxRoutes < 1) {
+    throw ArgumentError.value(maxRoutes, 'maxRoutes', 'Must be at least 1.');
+  }
   final application = File(
     p.join(projectRoot.path, 'lib', 'prerender.dart'),
   ).absolute;
-  final locations = <Uri>[
-    for (final location in staticLocations) Uri.parse(location),
-  ];
+  final staticRoutes = normalizePrerenderLocations(
+    staticLocations.map(Uri.parse),
+    maxRoutes: maxRoutes,
+  );
   if (!application.existsSync()) {
-    return normalizePrerenderLocations(locations);
+    return staticRoutes;
   }
 
   final directory = Directory(
@@ -40,8 +46,9 @@ Future<List<String>> loadPrerenderLocations({
   Future<int>? exitCode;
   Future<void>? stdoutDone;
   Future<void>? stderrDone;
-  StreamSubscription<List<int>>? stdoutSubscription;
-  StreamSubscription<List<int>>? stderrSubscription;
+  StreamSubscription<String>? stdoutSubscription;
+  StreamSubscription<String>? stderrSubscription;
+  var stderrTail = '';
   try {
     bootstrap.writeAsStringSync(source);
     process = await Process.start(
@@ -51,11 +58,26 @@ Future<List<String>> loadPrerenderLocations({
       environment: <String, String>{
         ...Platform.environment,
         'ODROE_PRERENDER_OUTPUT': output.path,
+        'ODROE_PRERENDER_MAX_ROUTES': '$maxRoutes',
       },
     );
     exitCode = process.exitCode;
-    stdoutSubscription = process.stdout.listen(null);
-    stderrSubscription = process.stderr.listen(null);
+    const decoder = Utf8Decoder(allowMalformed: true);
+    stdoutSubscription = process.stdout.transform(decoder).listen(null);
+    stderrSubscription = process.stderr.transform(decoder).listen((chunk) {
+      if (chunk.length >= _maxCallbackStderrCharacters) {
+        stderrTail = chunk.substring(
+          chunk.length - _maxCallbackStderrCharacters,
+        );
+        return;
+      }
+      stderrTail += chunk;
+      if (stderrTail.length > _maxCallbackStderrCharacters) {
+        stderrTail = stderrTail.substring(
+          stderrTail.length - _maxCallbackStderrCharacters,
+        );
+      }
+    });
     stdoutDone = stdoutSubscription.asFuture<void>();
     stderrDone = stderrSubscription.asFuture<void>();
     final code = await _waitForCompletion(exitCode, stdoutDone, stderrDone)
@@ -68,10 +90,13 @@ Future<List<String>> loadPrerenderLocations({
           ),
         );
     if (code != 0) {
+      final diagnostics = stderrTail.trim();
       throw ProcessException(
         executable,
         processArguments,
-        'Application prerender locations failed.',
+        diagnostics.isEmpty
+            ? 'Application prerender locations failed.'
+            : 'Application prerender locations failed:\n$diagnostics',
         code,
       );
     }
@@ -84,11 +109,20 @@ Future<List<String>> loadPrerenderLocations({
     final decoded = jsonDecode(await output.readAsString());
     if (decoded is! Map<String, Object?> ||
         decoded['version'] != 1 ||
+        decoded['overflow'] is! bool ||
         decoded['locations'] is! List<Object?>) {
       throw const FormatException(
         'Application prerender manifest has an unsupported shape.',
       );
     }
+    if (decoded['overflow']! as bool) {
+      throw StateError(
+        'Application prerender locations exceed the limit of $maxRoutes.',
+      );
+    }
+    final locations = <Uri>[
+      for (final location in staticRoutes) Uri.parse(location),
+    ];
     for (final value in decoded['locations']! as List<Object?>) {
       if (value is! String) {
         throw const FormatException(
@@ -97,7 +131,7 @@ Future<List<String>> loadPrerenderLocations({
       }
       locations.add(Uri.parse(value));
     }
-    return normalizePrerenderLocations(locations);
+    return normalizePrerenderLocations(locations, maxRoutes: maxRoutes);
   } on Object catch (error, stackTrace) {
     if (process case final process?) {
       try {
@@ -121,7 +155,13 @@ Future<List<String>> loadPrerenderLocations({
 }
 
 /// Validates, normalizes, deduplicates, and sorts prerender locations.
-List<String> normalizePrerenderLocations(Iterable<Uri> locations) {
+List<String> normalizePrerenderLocations(
+  Iterable<Uri> locations, {
+  int? maxRoutes,
+}) {
+  if (maxRoutes != null && maxRoutes < 1) {
+    throw ArgumentError.value(maxRoutes, 'maxRoutes', 'Must be at least 1.');
+  }
   final normalized = <String>{};
   for (final location in locations) {
     if (!location.hasAbsolutePath ||
@@ -142,6 +182,9 @@ List<String> normalizePrerenderLocations(Iterable<Uri> locations) {
       value = value.substring(0, value.length - 1);
     }
     normalized.add(value);
+    if (maxRoutes != null && normalized.length > maxRoutes) {
+      throw StateError('Prerender locations exceed the limit of $maxRoutes.');
+    }
   }
   return normalized.toList(growable: false)..sort();
 }
@@ -174,8 +217,8 @@ Future<int> _waitForCompletion(
 Future<void> _finishOutput(
   Future<void> stdoutDone,
   Future<void> stderrDone,
-  StreamSubscription<List<int>> stdoutSubscription,
-  StreamSubscription<List<int>> stderrSubscription,
+  StreamSubscription<String> stdoutSubscription,
+  StreamSubscription<String> stderrSubscription,
   Duration gracePeriod,
 ) async {
   try {
@@ -220,15 +263,44 @@ Future<void> main() async {
   if (output == null || output.isEmpty) {
     throw StateError('ODROE_PRERENDER_OUTPUT is required.');
   }
+  final maxRoutes = int.parse(
+    Platform.environment['ODROE_PRERENDER_MAX_ROUTES'] ?? '',
+  );
   final Iterable<Uri> locations = await app.prerenderLocations();
+  final values = <String, String>{};
+  var overflow = false;
+  for (final location in locations) {
+    values.putIfAbsent(_manifestKey(location), () => location.toString());
+    if (values.length > maxRoutes) {
+      overflow = true;
+      break;
+    }
+  }
   await File(output).writeAsString(
     jsonEncode(<String, Object?>{
       'version': 1,
-      'locations': <String>[
-        for (final location in locations) location.toString(),
-      ],
+      'overflow': overflow,
+      'locations': values.values.toList(growable: false),
     }),
     flush: true,
   );
+}
+
+String _manifestKey(Uri location) {
+  if (!location.hasAbsolutePath ||
+      location.hasScheme ||
+      location.hasAuthority ||
+      location.hasQuery ||
+      location.hasFragment ||
+      location.pathSegments.any(
+        (segment) => segment == '.' || segment == '..',
+      )) {
+    return location.toString();
+  }
+  var value = location.toString();
+  while (value.length > 1 && value.endsWith('/')) {
+    value = value.substring(0, value.length - 1);
+  }
+  return value;
 }
 ''';

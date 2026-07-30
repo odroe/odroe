@@ -72,4 +72,7 @@ dart run odroe build --server-only
 
 A document-only application can run `dart run odroe build` without a Flutter
 target. Odroe emits the native server and prerenders every known static
-location into `build/web`.
+location into `build/web`. Known locations come from static file routes and
+`lib/prerender.dart`; link crawling is disabled by default. Add
+`--prerender-crawl` only when page links should discover extra same-origin HTML.
+See [Deployment](/docs/deploy) for build budgets and platform targets.

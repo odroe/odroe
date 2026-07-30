@@ -1,10 +1,31 @@
 import 'dart:io';
 
 import 'package:odroe/src/cli/build.dart';
+import 'package:odroe/src/cli/cli.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('prerender CLI defaults are bounded and crawling is explicit', () async {
+    final output = StringBuffer();
+    final code = await runOdroe(
+      const <String>['build', '--help'],
+      output: output,
+      errors: StringBuffer(),
+    );
+    final usage = output.toString();
+
+    expect(code, 0);
+    expect(usage, contains('--prerender-crawl'));
+    expect(usage, contains('Discover additional same-origin HTML links.'));
+    expect(usage, contains('--prerender-concurrency'));
+    expect(usage, contains('(defaults to "4")'));
+    expect(usage, contains('--prerender-max-routes'));
+    expect(usage, contains('(defaults to "1000")'));
+    expect(usage, contains('--prerender-max-response-bytes'));
+    expect(usage, contains('(defaults to "1048576")'));
+  });
+
   test('prerender readiness accepts only the generated loopback line', () {
     expect(parsePrerenderReadyLine('https://example.com'), isNull);
     expect(

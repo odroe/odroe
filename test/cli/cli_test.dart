@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../support/dart_command_lock.dart';
+
 void main() {
   test('dev serves the generated route tree and server functions', () async {
     final reservation = await ServerSocket.bind(
@@ -13,16 +15,23 @@ void main() {
     final port = reservation.port;
     await reservation.close();
 
-    final process = await Process.start('dart', <String>[
-      'run',
-      'odroe',
-      'dev',
-      '--project',
-      'example/app',
-      '--server-only',
-      '--port',
-      '$port',
-    ]);
+    final dartCommandLock = await acquireDartCommandLock();
+    late final Process process;
+    try {
+      process = await Process.start('dart', <String>[
+        'run',
+        'odroe',
+        'dev',
+        '--project',
+        'example/app',
+        '--server-only',
+        '--port',
+        '$port',
+      ]);
+    } on Object {
+      await dartCommandLock.release();
+      rethrow;
+    }
     final output = StringBuffer();
     final stdoutDone = process.stdout
         .transform(utf8.decoder)
@@ -33,9 +42,13 @@ void main() {
         .listen(output.write)
         .asFuture<void>();
     addTearDown(() async {
-      process.kill(ProcessSignal.sigterm);
-      await process.exitCode.timeout(const Duration(seconds: 10));
-      await Future.wait<void>(<Future<void>>[stdoutDone, stderrDone]);
+      try {
+        process.kill(ProcessSignal.sigterm);
+        await process.exitCode.timeout(const Duration(seconds: 10));
+        await Future.wait<void>(<Future<void>>[stdoutDone, stderrDone]);
+      } finally {
+        await dartCommandLock.release();
+      }
     });
 
     final client = HttpClient();

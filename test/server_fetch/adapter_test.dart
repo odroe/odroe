@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../support/dart_command_lock.dart';
+
 void main() {
   test('dart2js output passes the Node Fetch runtime smoke', () async {
     final temporary = await Directory.systemTemp.createTemp(
@@ -11,15 +13,17 @@ void main() {
     addTearDown(() => temporary.delete(recursive: true));
     final output = File('${temporary.path}/fixture.js');
 
-    final compile = await Process.run('dart', <String>[
-      'compile',
-      'js',
-      '-O4',
-      '--no-source-maps',
-      'test/server_fetch/fixture.dart',
-      '-o',
-      output.path,
-    ]).timeout(const Duration(seconds: 30));
+    final compile = await withDartCommandLock(
+      () => Process.run('dart', <String>[
+        'compile',
+        'js',
+        '-O4',
+        '--no-source-maps',
+        'test/server_fetch/fixture.dart',
+        '-o',
+        output.path,
+      ]),
+    ).timeout(const Duration(seconds: 30));
     expect(compile.exitCode, 0, reason: '${compile.stdout}\n${compile.stderr}');
 
     final javaScript = await output.readAsString();

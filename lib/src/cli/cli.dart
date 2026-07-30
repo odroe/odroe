@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:args/args.dart';
+import 'package:odroe/server_io.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 
 import 'build.dart';
@@ -64,8 +65,23 @@ Future<int> runOdroe(
     )
     ..addOption(
       'prerender-concurrency',
-      defaultsTo: '${Platform.numberOfProcessors}',
+      defaultsTo: '${Prerenderer.defaultConcurrency}',
       help: 'Maximum parallel prerender requests.',
+    )
+    ..addFlag(
+      'prerender-crawl',
+      negatable: false,
+      help: 'Discover additional same-origin HTML links.',
+    )
+    ..addOption(
+      'prerender-max-routes',
+      defaultsTo: '${Prerenderer.defaultMaxRoutes}',
+      help: 'Maximum explicit and discovered prerender routes.',
+    )
+    ..addOption(
+      'prerender-max-response-bytes',
+      defaultsTo: '${Prerenderer.defaultMaxResponseBytes}',
+      help: 'Maximum HTML response bytes per prerender route.',
     );
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
@@ -125,6 +141,15 @@ Future<int> runOdroe(
         prerenderConcurrency: _positiveInt(
           command.option('prerender-concurrency')!,
           'prerender-concurrency',
+        ),
+        prerenderCrawl: command.flag('prerender-crawl'),
+        prerenderMaxRoutes: _positiveInt(
+          command.option('prerender-max-routes')!,
+          'prerender-max-routes',
+        ),
+        prerenderMaxResponseBytes: _positiveInt(
+          command.option('prerender-max-response-bytes')!,
+          'prerender-max-response-bytes',
         ),
         flutterArguments: command.rest,
         out: out,

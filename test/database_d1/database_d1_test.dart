@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../support/dart_command_lock.dart';
+
 void main() {
   // This verifies the JS binding shape, not Cloudflare's real D1 runtime.
   // A Wrangler local smoke remains the provider-level acceptance test.
@@ -13,15 +15,17 @@ void main() {
     addTearDown(() => temporary.delete(recursive: true));
     final output = File('${temporary.path}/fixture.js');
 
-    final compile = await Process.run(_dartExecutable, <String>[
-      'compile',
-      'js',
-      '-O4',
-      '--no-source-maps',
-      'test/database_d1/fixture.dart',
-      '-o',
-      output.path,
-    ]).timeout(const Duration(seconds: 30));
+    final compile = await withDartCommandLock(
+      () => Process.run(_dartExecutable, <String>[
+        'compile',
+        'js',
+        '-O4',
+        '--no-source-maps',
+        'test/database_d1/fixture.dart',
+        '-o',
+        output.path,
+      ]),
+    ).timeout(const Duration(seconds: 30));
     expect(compile.exitCode, 0, reason: '${compile.stdout}\n${compile.stderr}');
 
     final javaScript = await output.readAsString();

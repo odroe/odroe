@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../support/dart_command_lock.dart';
+
 const _skipReason =
     'Set ODROE_WRANGLER to a Wrangler v4 executable to run this test.';
 
@@ -35,9 +37,8 @@ void main() {
       });
 
       final compiled = File('${temporary.path}/workerd_fixture.js');
-      final compilation = await Process.run(
-        _dartExecutable,
-        <String>[
+      final compilation = await withDartCommandLock(
+        () => Process.run(_dartExecutable, <String>[
           'compile',
           'js',
           '-O4',
@@ -45,8 +46,7 @@ void main() {
           'test/database_d1/workerd_fixture.dart',
           '-o',
           compiled.path,
-        ],
-        workingDirectory: Directory.current.path,
+        ], workingDirectory: Directory.current.path),
       ).timeout(const Duration(seconds: 45));
       expect(
         compilation.exitCode,

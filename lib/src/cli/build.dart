@@ -27,6 +27,9 @@ Future<int> runBuild(
   required bool prerender,
   required String prerenderOutput,
   required int prerenderConcurrency,
+  required bool prerenderCrawl,
+  required int prerenderMaxRoutes,
+  required int prerenderMaxResponseBytes,
   required List<String> flutterArguments,
   required StringSink out,
   required StringSink err,
@@ -55,6 +58,17 @@ Future<int> runBuild(
     err.writeln('Prerendering requires the Odroe server artifact.');
     return 64;
   }
+  File? artifact;
+  if (buildServer) {
+    artifact = File(
+      resolveBuildOutputPath(
+        project.root,
+        serverArtifact ?? _defaultServerArtifact(serverTarget),
+        option: '--server-artifact',
+      ),
+    );
+  }
+  var routes = const <String>[];
   late final Directory outputDirectory;
   if (shouldPrerender) {
     outputDirectory = Directory(
@@ -64,20 +78,36 @@ Future<int> runBuild(
         option: '--prerender-output',
       ),
     );
+    final serverOutputs = <String>[
+      artifact!.path,
+      if (serverTarget == ServerBuildTarget.cloudflare) ...<String>[
+        p.join(artifact.parent.path, 'worker.mjs'),
+        '${artifact.path}.deps',
+      ],
+    ];
+    if (serverOutputs.any(
+      (path) => _pathsOverlap(path, outputDirectory.path),
+    )) {
+      err.writeln('--server-artifact and --prerender-output must not overlap.');
+      return 64;
+    }
+    try {
+      routes = await loadPrerenderLocations(
+        projectRoot: project.root,
+        packageName: project.packageName,
+        staticLocations: generated.staticRoutes,
+        maxRoutes: prerenderMaxRoutes,
+      );
+    } on StateError catch (error) {
+      err.writeln(error.message);
+      return 1;
+    }
   }
-  late final File artifact;
   if (buildServer) {
-    artifact = File(
-      resolveBuildOutputPath(
-        project.root,
-        serverArtifact ?? _defaultServerArtifact(serverTarget),
-        option: '--server-artifact',
-      ),
-    );
     final code = await _buildServer(
       project,
       target: serverTarget,
-      artifact: artifact,
+      artifact: artifact!,
       out: out,
     );
     if (code != 0) return code;
@@ -91,40 +121,45 @@ Future<int> runBuild(
     if (code != 0) return code;
   }
   if (!shouldPrerender) return 0;
-  if (!generated.hasFlutter && outputDirectory.existsSync()) {
-    outputDirectory.deleteSync(recursive: true);
-  }
-  outputDirectory.createSync(recursive: true);
-  final assets = await _copyPublicAssets(project, outputDirectory);
-  if (assets > 0) out.writeln('Copied $assets public assets.');
-  final routes = await loadPrerenderLocations(
-    projectRoot: project.root,
-    packageName: project.packageName,
-    staticLocations: generated.staticRoutes,
-  );
-  File prerenderArtifact = artifact;
-  var removePrerenderArtifact = false;
-  if (serverTarget == ServerBuildTarget.cloudflare) {
-    prerenderArtifact = File(
-      p.join(project.root.path, '.dart_tool', 'odroe', 'prerender-server'),
-    ).absolute;
-    final code = await _compileNativeServer(project, prerenderArtifact);
-    if (code != 0) return code;
-    removePrerenderArtifact = true;
-  }
+  final stagingDirectory = generated.hasFlutter
+      ? null
+      : _siblingTemporaryDirectory(outputDirectory, 'staging');
+  final renderDirectory = stagingDirectory ?? outputDirectory;
   try {
-    return await _prerenderBuild(
+    renderDirectory.createSync(recursive: true);
+    final assets = await _copyPublicAssets(project, renderDirectory);
+    if (assets > 0) out.writeln('Copied $assets public assets.');
+    final prerenderExecutable = serverTarget == ServerBuildTarget.cloudflare
+        ? Platform.resolvedExecutable
+        : artifact!.path;
+    final prerenderArguments = serverTarget == ServerBuildTarget.cloudflare
+        ? <String>['run', project.bootstrap.path]
+        : const <String>[];
+    final code = await _prerenderBuild(
       project,
-      artifact: prerenderArtifact,
+      executable: prerenderExecutable,
+      arguments: prerenderArguments,
       routes: routes,
-      outputDirectory: outputDirectory,
+      outputDirectory: renderDirectory,
+      reportedOutputDirectory: outputDirectory,
       concurrency: prerenderConcurrency,
+      crawlLinks: prerenderCrawl,
+      maxRoutes: prerenderMaxRoutes,
+      maxResponseBytes: prerenderMaxResponseBytes,
+      startupTimeout: serverTarget == ServerBuildTarget.cloudflare
+          ? const Duration(minutes: 1)
+          : const Duration(seconds: 20),
       out: out,
       err: err,
     );
+    if (code != 0) return code;
+    if (stagingDirectory != null) {
+      _replaceDirectory(stagingDirectory, outputDirectory);
+    }
+    return 0;
   } finally {
-    if (removePrerenderArtifact && prerenderArtifact.existsSync()) {
-      prerenderArtifact.deleteSync();
+    if (stagingDirectory?.existsSync() ?? false) {
+      stagingDirectory!.deleteSync(recursive: true);
     }
   }
 }
@@ -133,6 +168,48 @@ String _defaultServerArtifact(ServerBuildTarget target) => switch (target) {
   ServerBuildTarget.native => 'build/odroe/server',
   ServerBuildTarget.cloudflare => 'build/odroe/cloudflare/server.js',
 };
+
+bool _pathsOverlap(String left, String right) {
+  final normalizedLeft = p.normalize(left).toLowerCase();
+  final normalizedRight = p.normalize(right).toLowerCase();
+  return p.equals(normalizedLeft, normalizedRight) ||
+      p.isWithin(normalizedLeft, normalizedRight) ||
+      p.isWithin(normalizedRight, normalizedLeft);
+}
+
+Directory _siblingTemporaryDirectory(Directory target, String suffix) {
+  final id = '${pid}_${DateTime.now().microsecondsSinceEpoch}';
+  return Directory(
+    p.join(target.parent.path, '.${p.basename(target.path)}.odroe-$suffix-$id'),
+  );
+}
+
+void _replaceDirectory(Directory source, Directory target) {
+  final backup = _siblingTemporaryDirectory(target, 'backup');
+  var movedTarget = false;
+  try {
+    if (target.existsSync()) {
+      target.renameSync(backup.path);
+      movedTarget = true;
+    }
+    source.renameSync(target.path);
+  } on Object {
+    if (movedTarget && !target.existsSync() && backup.existsSync()) {
+      try {
+        backup.renameSync(target.path);
+      } on FileSystemException catch (error) {
+        throw FileSystemException(
+          'Could not restore the previous prerender output; it remains at '
+          '${backup.path}. ${error.message}',
+          target.path,
+          error.osError,
+        );
+      }
+    }
+    rethrow;
+  }
+  if (backup.existsSync()) backup.deleteSync(recursive: true);
+}
 
 /// Resolves one user-selected artifact path inside a project's real build tree.
 ///
@@ -271,10 +348,16 @@ Future<int> _copyPublicAssets(CliProject project, Directory output) async {
 
 Future<int> _prerenderBuild(
   CliProject project, {
-  required File artifact,
+  required String executable,
+  required List<String> arguments,
   required List<String> routes,
   required Directory outputDirectory,
+  required Directory reportedOutputDirectory,
   required int concurrency,
+  required bool crawlLinks,
+  required int maxRoutes,
+  required int maxResponseBytes,
+  required Duration startupTimeout,
   required StringSink out,
   required StringSink err,
 }) async {
@@ -283,8 +366,8 @@ Future<int> _prerenderBuild(
     return 0;
   }
   final process = await Process.start(
-    artifact.path,
-    const <String>[],
+    executable,
+    arguments,
     workingDirectory: project.root.path,
     environment: <String, String>{
       ...Platform.environment,
@@ -317,16 +400,23 @@ Future<int> _prerenderBuild(
   );
 
   try {
-    final origin = await ready.future.timeout(const Duration(seconds: 20));
+    final origin = await ready.future.timeout(startupTimeout);
     final rendered = await Prerenderer().render(
       origin: origin,
       routes: routes,
       output: outputDirectory,
       concurrency: concurrency,
-      crawlLinks: true,
+      crawlLinks: crawlLinks,
+      maxRoutes: maxRoutes,
+      maxResponseBytes: maxResponseBytes,
     );
     for (final route in rendered) {
-      final relative = p.relative(route.file.path, from: project.root.path);
+      final outputRelative = p.relative(
+        route.file.path,
+        from: outputDirectory.path,
+      );
+      final reportedFile = p.join(reportedOutputDirectory.path, outputRelative);
+      final relative = p.relative(reportedFile, from: project.root.path);
       out.writeln(
         'Prerendered ${route.route} -> $relative '
         '(${route.elapsed.inMilliseconds}ms)',
@@ -334,6 +424,9 @@ Future<int> _prerenderBuild(
     }
     out.writeln('Prerendered ${rendered.length} routes.');
     return 0;
+  } on StateError catch (error) {
+    err.writeln(error.message);
+    return 1;
   } on Object catch (error) {
     err.writeln(error);
     return 1;

@@ -203,7 +203,9 @@ final snapshot = await docs.snapshot();
 final page = snapshot.page(const <String>['getting-started']);
 ```
 
-应用可用 `lib/prerender.dart` 返回动态静态地址。CLI 会与文件路由的静态地址合并、规范化、去重并排序，再通过真实 server 构建页面。
+应用可用 `lib/prerender.dart` 返回动态静态地址。CLI 会与文件路由的静态地址
+合并、规范化、去重并排序，再通过真实 server 构建页面。默认只构建这份显式
+清单；需要从页面发现额外同源 HTML 时使用 `--prerender-crawl`。
 
 ```dart
 import 'content.dart';
@@ -293,6 +295,12 @@ dart run odroe build --server-only --server-target cloudflare
 ```
 
 `dev` 不默认 Web；`--` 后参数原样交给 Flutter CLI。`build web` 会构建 Flutter Web 与 server artifact，再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
+
+prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 HTML 响应
+最多 1 MiB。`--prerender-concurrency`、`--prerender-max-routes` 与
+`--prerender-max-response-bytes` 可显式调整预算。Cloudflare 构建复用生成的
+Dart server 源码完成 prerender，不再额外编译临时 native executable。
+纯文档构建会先写入同级 staging 目录，全部成功后才替换既有静态产物。
 
 `build --server-only` 生成的 native executable 与构建 OS/architecture 绑定。
 请在目标平台或兼容 builder 中构建。

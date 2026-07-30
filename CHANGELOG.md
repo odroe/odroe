@@ -8,3 +8,11 @@
   Cloudflare Workers builds.
 - Add Press collections, dynamic prerender locations, and the Odroe-built
   documentation website.
+- Change prerender defaults to fixed concurrency 4, at most 1000 routes and
+  1 MiB per HTML response. Link crawling is now opt-in with
+  `--prerender-crawl` or `crawlLinks: true`; raise the matching CLI or SDK
+  limits for larger applications. SDK seed routes must be absolute local paths
+  without queries or fragments.
+- Resolve application prerender locations before compilation, preserve the
+  previous document-only output until a replacement succeeds, and avoid
+  duplicate native compilation for Cloudflare builds.

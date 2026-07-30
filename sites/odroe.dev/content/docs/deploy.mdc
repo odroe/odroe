@@ -19,6 +19,16 @@ Document routes are rendered through the real server. Pure document routes
 produce semantic HTML; Flutter routes also keep their bootstrap and handoff
 state. Files from `public/` are copied without a bundler.
 
+Static file routes and locations returned from `lib/prerender.dart` are the
+default source of truth. Link discovery is opt-in with `--prerender-crawl`.
+Builds use 4 concurrent requests and stop at 1000 routes or 1 MiB of HTML per
+route unless `--prerender-concurrency`, `--prerender-max-routes`, or
+`--prerender-max-response-bytes` changes that budget.
+The optional crawler follows same-origin, query-free links whose paths are
+extensionless or end in `.html`.
+Document-only builds assemble in a sibling staging directory and replace the
+previous static output only after every route succeeds.
+
 For a document-only product such as this website:
 
 ```sh
@@ -47,9 +57,17 @@ Build the Cloudflare Workers target explicitly:
 dart run odroe build --server-only --server-target cloudflare
 ```
 
+For a document-only application that also needs static HTML:
+
+```sh
+dart run odroe build --server-target cloudflare
+```
+
 Odroe writes `build/odroe/cloudflare/server.js` and a thin `worker.mjs`.
 Your application continues to own `wrangler.jsonc`; the build never overwrites
-platform configuration.
+platform configuration. A non-server-only Cloudflare build runs the generated
+Dart server source for prerendering instead of compiling a second temporary
+native executable.
 
 ```json
 {

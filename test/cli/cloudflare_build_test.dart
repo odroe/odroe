@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:odroe/src/cli/cli.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import '../support/dart_command_lock.dart';
 
 void main() {
   test(
@@ -46,6 +50,248 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
 ''',
       ]).timeout(const Duration(seconds: 30));
       expect(smoke.exitCode, 0, reason: '${smoke.stdout}\n${smoke.stderr}');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test('prerender route limits fail before replacing build output', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final output = Directory(
+      p.join(project.path, 'build', 'prerender-limit-test'),
+    )..createSync(recursive: true);
+    final sentinel = File(p.join(output.path, 'sentinel.txt'))
+      ..writeAsStringSync('keep');
+    final artifactDirectory = Directory(
+      p.join(project.path, 'build', 'odroe', 'prerender-limit-test'),
+    );
+    addTearDown(() {
+      if (output.existsSync()) output.deleteSync(recursive: true);
+      if (artifactDirectory.existsSync()) {
+        artifactDirectory.deleteSync(recursive: true);
+      }
+    });
+    final errors = StringBuffer();
+
+    final code = await runOdroe(
+      <String>[
+        'build',
+        '--project',
+        project.path,
+        '--server-target',
+        'cloudflare',
+        '--server-artifact',
+        'build/odroe/prerender-limit-test/server.js',
+        '--prerender-output',
+        'build/prerender-limit-test',
+        '--prerender-max-routes',
+        '1',
+      ],
+      output: StringBuffer(),
+      errors: errors,
+    );
+
+    expect(code, 1);
+    expect(errors.toString(), 'Prerender locations exceed the limit of 1.\n');
+    expect(sentinel.readAsStringSync(), 'keep');
+    expect(artifactDirectory.existsSync(), isFalse);
+  });
+
+  test('server artifacts cannot overlap prerender output', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final outputs = <Directory>[
+      Directory(p.join(project.path, 'build', 'overlap-test')),
+      Directory(p.join(project.path, 'build', 'overlap-case')),
+      Directory(
+        p.join(project.path, 'build', 'cloudflare-sidecar', 'worker.mjs'),
+      ),
+      Directory(
+        p.join(project.path, 'build', 'cloudflare-deps', 'server.js.deps'),
+      ),
+    ];
+    addTearDown(() {
+      for (final output in outputs) {
+        if (output.existsSync()) output.deleteSync(recursive: true);
+      }
+    });
+
+    final cases = <({String artifact, String output, String target})>[
+      (
+        artifact: 'build/overlap-test/server',
+        output: 'build/overlap-test',
+        target: 'native',
+      ),
+      (
+        artifact: 'build/overlap-test/server.js',
+        output: 'build/overlap-test',
+        target: 'cloudflare',
+      ),
+      (
+        artifact: 'build/Overlap-Case/server.js',
+        output: 'build/overlap-case',
+        target: 'cloudflare',
+      ),
+      (
+        artifact: 'build/cloudflare-sidecar/server.js',
+        output: 'build/cloudflare-sidecar/worker.mjs',
+        target: 'cloudflare',
+      ),
+      (
+        artifact: 'build/cloudflare-deps/server.js',
+        output: 'build/cloudflare-deps/server.js.deps',
+        target: 'cloudflare',
+      ),
+    ];
+    for (final buildCase in cases) {
+      final errors = StringBuffer();
+      final code = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          '--server-target',
+          buildCase.target,
+          '--server-artifact',
+          buildCase.artifact,
+          '--prerender-output',
+          buildCase.output,
+        ],
+        output: StringBuffer(),
+        errors: errors,
+      );
+
+      expect(code, 64, reason: '$buildCase');
+      expect(
+        errors.toString(),
+        '--server-artifact and --prerender-output must not overlap.\n',
+        reason: '$buildCase',
+      );
+      for (final output in outputs) {
+        expect(output.existsSync(), isFalse, reason: '$buildCase');
+      }
+    }
+  });
+
+  test(
+    'Cloudflare document build prerenders the explicit website manifest',
+    () async {
+      final project = Directory('sites/odroe.dev').absolute;
+      final artifactDirectory = Directory(
+        '${project.path}/build/odroe/cloudflare-prerender-test',
+      );
+      final web = Directory('${project.path}/build/cloudflare-prerender-test')
+        ..createSync(recursive: true);
+      final stale = File('${web.path}/stale.txt')..writeAsStringSync('replace');
+      addTearDown(() async {
+        if (artifactDirectory.existsSync()) {
+          await artifactDirectory.delete(recursive: true);
+        }
+        if (web.existsSync()) await web.delete(recursive: true);
+      });
+
+      final build = await _runDart(<String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--server-target',
+        'cloudflare',
+        '--server-artifact',
+        'build/odroe/cloudflare-prerender-test/server.js',
+        '--prerender-output',
+        'build/cloudflare-prerender-test',
+      ]).timeout(const Duration(minutes: 2));
+      final logs = '${build.stdout}\n${build.stderr}';
+
+      expect(build.exitCode, 0, reason: logs);
+      expect(build.stdout, contains('Prerendered 11 routes.'));
+      expect(build.stdout, isNot(contains('prerender-server')));
+      expect(build.stdout, isNot(contains('.odroe-staging-')));
+      expect(File('${artifactDirectory.path}/server.js').existsSync(), isTrue);
+      expect(File('${artifactDirectory.path}/worker.mjs').existsSync(), isTrue);
+      expect(stale.existsSync(), isFalse);
+      final html = await web
+          .list(recursive: true)
+          .where((entity) => entity is File && entity.path.endsWith('.html'))
+          .cast<File>()
+          .toList();
+      final relativeHtml =
+          html
+              .map(
+                (file) => p.posix.joinAll(
+                  p.split(p.relative(file.path, from: web.path)),
+                ),
+              )
+              .toList()
+            ..sort();
+      expect(relativeHtml, <String>[
+        '404.html',
+        'docs/core/app/index.html',
+        'docs/core/query/index.html',
+        'docs/core/routing/index.html',
+        'docs/data/database/index.html',
+        'docs/deploy/index.html',
+        'docs/getting-started/index.html',
+        'docs/index.html',
+        'docs/server/index.html',
+        'docs/web/document/index.html',
+        'index.html',
+      ]);
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'failed Cloudflare prerender preserves the previous website output',
+    () async {
+      final project = Directory('sites/odroe.dev').absolute;
+      final artifactDirectory = Directory(
+        '${project.path}/build/odroe/cloudflare-prerender-failure-test',
+      );
+      final web = Directory(
+        '${project.path}/build/cloudflare-prerender-failure-test',
+      )..createSync(recursive: true);
+      final sentinel = File('${web.path}/sentinel.txt')
+        ..writeAsStringSync('keep');
+      addTearDown(() async {
+        if (artifactDirectory.existsSync()) {
+          await artifactDirectory.delete(recursive: true);
+        }
+        if (web.existsSync()) await web.delete(recursive: true);
+      });
+
+      final build = await _runDart(<String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--server-target',
+        'cloudflare',
+        '--server-artifact',
+        'build/odroe/cloudflare-prerender-failure-test/server.js',
+        '--prerender-output',
+        'build/cloudflare-prerender-failure-test',
+        '--prerender-max-response-bytes',
+        '1',
+      ]).timeout(const Duration(minutes: 2));
+      final logs = '${build.stdout}\n${build.stderr}';
+
+      expect(build.exitCode, 1, reason: logs);
+      expect(logs, contains('exceeds the 1 byte prerender limit'));
+      expect(sentinel.readAsStringSync(), 'keep');
+      expect(
+        web.listSync().map((entity) => entity.uri.pathSegments.last),
+        <String>['sentinel.txt'],
+      );
+      expect(
+        web.parent.listSync().where(
+          (entity) => entity.uri.pathSegments.last.startsWith(
+            '.cloudflare-prerender-failure-test.odroe-staging-',
+          ),
+        ),
+        isEmpty,
+      );
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
@@ -162,7 +408,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
 }
 
 Future<void> _buildWorker(Directory project, String artifact) async {
-  final build = await Process.run('dart', <String>[
+  final build = await _runDart(<String>[
     'run',
     'odroe',
     'build',
@@ -176,6 +422,9 @@ Future<void> _buildWorker(Directory project, String artifact) async {
   ]).timeout(const Duration(minutes: 2));
   expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
 }
+
+Future<ProcessResult> _runDart(List<String> arguments) =>
+    withDartCommandLock(() => Process.run('dart', arguments));
 
 Future<int> _unusedPort() async {
   final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);

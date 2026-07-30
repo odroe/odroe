@@ -6,23 +6,127 @@ import 'package:odroe/src/cli/prerender_manifest.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/dart_command_lock.dart';
+
 void main() {
   test('loads, normalizes, and merges application locations', () async {
+    final dartCommandLock = await acquireDartCommandLock();
+    try {
+      final locations = await loadPrerenderLocations(
+        projectRoot: Directory('example/app').absolute,
+        packageName: 'odroe_example',
+        staticLocations: const <String>['/', '/about///', '/pricing', '/about'],
+        maxRoutes: 6,
+        dartExecutable: 'dart',
+      );
+
+      expect(locations, <String>[
+        '/',
+        '/about',
+        '/docs/getting-started',
+        '/docs/routing',
+        '/posts/42',
+        '/pricing',
+      ]);
+
+      await expectLater(
+        loadPrerenderLocations(
+          projectRoot: Directory('example/app').absolute,
+          packageName: 'odroe_example',
+          staticLocations: const <String>[
+            '/',
+            '/about///',
+            '/pricing',
+            '/about',
+          ],
+          maxRoutes: 5,
+          dartExecutable: 'dart',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('Prerender locations exceed the limit of 5'),
+          ),
+        ),
+      );
+
+      await expectLater(
+        loadPrerenderLocations(
+          projectRoot: Directory('example/app').absolute,
+          packageName: 'odroe_example',
+          staticLocations: const <String>[],
+          maxRoutes: 2,
+          dartExecutable: 'dart',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('Application prerender locations exceed the limit of 2'),
+          ),
+        ),
+      );
+    } finally {
+      await dartCommandLock.release();
+    }
+  });
+
+  test('application route limits count normalized locations', () async {
+    final projectRoot = await _createManifestProject(
+      packageName: 'prerender_normalized_fixture',
+      source: '''
+Future<Iterable<Uri>> prerenderLocations() async => <Uri>[
+  Uri(path: '/docs'),
+  Uri(path: '/docs/'),
+];
+''',
+    );
+    addTearDown(() => projectRoot.delete(recursive: true));
+
     final locations = await loadPrerenderLocations(
-      projectRoot: Directory('example/app').absolute,
-      packageName: 'odroe_example',
-      staticLocations: const <String>['/', '/about///', '/pricing', '/about'],
+      projectRoot: projectRoot,
+      packageName: 'prerender_normalized_fixture',
+      staticLocations: const <String>[],
+      maxRoutes: 1,
       dartExecutable: 'dart',
     );
 
-    expect(locations, <String>[
-      '/',
-      '/about',
-      '/docs/getting-started',
-      '/docs/routing',
-      '/posts/42',
-      '/pricing',
-    ]);
+    expect(locations, const <String>['/docs']);
+  });
+
+  test('application callback failures retain bounded diagnostics', () async {
+    final projectRoot = await _createManifestProject(
+      packageName: 'prerender_failure_fixture',
+      source: r'''
+import 'dart:io';
+
+Future<Iterable<Uri>> prerenderLocations() async {
+  stderr.write(List<String>.filled(3000, '错').join());
+  stderr.write('done');
+  await stderr.flush();
+  exit(1);
+}
+''',
+    );
+    addTearDown(() => projectRoot.delete(recursive: true));
+
+    await expectLater(
+      loadPrerenderLocations(
+        projectRoot: projectRoot,
+        packageName: 'prerender_failure_fixture',
+        staticLocations: const <String>[],
+        maxRoutes: 1,
+        dartExecutable: 'dart',
+      ),
+      throwsA(
+        isA<ProcessException>().having(
+          (error) => error.message,
+          'message',
+          contains('done'),
+        ),
+      ),
+    );
   });
 
   test('rejects locations that cannot be statically rendered', () {
@@ -55,6 +159,7 @@ void main() {
           projectRoot: projectRoot,
           packageName: 'prerender_timeout_fixture',
           staticLocations: const <String>['/'],
+          maxRoutes: 1000,
           dartExecutable: 'dart',
           callbackTimeout: const Duration(milliseconds: 250),
           terminationGracePeriod: const Duration(milliseconds: 100),
@@ -104,6 +209,8 @@ void main() {
         }
       });
 
+      final dartCommandLock = await acquireDartCommandLock();
+      addTearDown(dartCommandLock.release);
       final process = await Process.start('dart', <String>[
         'run',
         harness.path,
@@ -132,6 +239,7 @@ void main() {
         await stdoutSubscription.cancel();
         await stderrDone.timeout(const Duration(seconds: 1));
         await _killFixtureChild(childPidFile);
+        await dartCommandLock.release();
       }
 
       expect(
@@ -142,6 +250,39 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 10)),
   );
+}
+
+Future<Directory> _createManifestProject({
+  required String packageName,
+  required String source,
+}) async {
+  final root = await Directory.systemTemp.createTemp(
+    'odroe_prerender_manifest.',
+  );
+  final library = Directory(p.join(root.path, 'lib'));
+  final dartTool = Directory(p.join(root.path, '.dart_tool'));
+  await library.create(recursive: true);
+  await dartTool.create(recursive: true);
+  await File(p.join(root.path, 'pubspec.yaml')).writeAsString('''
+name: $packageName
+environment:
+  sdk: ^3.10.0
+''');
+  await File(p.join(library.path, 'prerender.dart')).writeAsString(source);
+  await File(p.join(dartTool.path, 'package_config.json')).writeAsString(
+    jsonEncode(<String, Object?>{
+      'configVersion': 2,
+      'packages': <Object?>[
+        <String, Object?>{
+          'name': packageName,
+          'rootUri': '../',
+          'packageUri': 'lib/',
+          'languageVersion': '3.10',
+        },
+      ],
+    }),
+  );
+  return root;
 }
 
 Future<Directory> _createHangingProject() async {
@@ -267,6 +408,7 @@ Future<void> main(List<String> arguments) async {
       projectRoot: Directory(arguments.single),
       packageName: 'prerender_inherited_stdio_fixture',
       staticLocations: const <String>['/'],
+      maxRoutes: 1000,
       dartExecutable: 'dart',
       callbackTimeout: const Duration(seconds: 2),
       terminationGracePeriod: const Duration(milliseconds: 100),
