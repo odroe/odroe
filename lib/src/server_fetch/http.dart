@@ -14,14 +14,33 @@ Future<web.Response> handleFetchInvocation(
   ServerInvocation invocation,
 ) async {
   final requestBody = request.body;
+  final requestBodySource = requestBody == null
+      ? null
+      : _RequestBodySource(requestBody);
+  late final HttpMethod method;
+  try {
+    method = HttpMethod.parse(request.method);
+  } on FormatException {
+    await _cancelRequestBody(requestBodySource);
+    return web.Response(
+      null,
+      web.ResponseInit(status: 501, statusText: 'Not Implemented'),
+    );
+  }
   final serverRequest = ServerRequest(
-    method: HttpMethod.parse(request.method),
+    method: method,
     uri: Uri.parse(request.url),
     headers: _readHeaders(request.headers),
-    body: requestBody == null ? null : _readBody(requestBody),
+    body: requestBodySource?.stream,
     cancelled: _cancelled(request.signal),
   );
-  final response = await handler(serverRequest, invocation);
+  late final ServerResponse response;
+  try {
+    response = await handler(serverRequest, invocation);
+  } on Object catch (error, stackTrace) {
+    await _cancelRequestBody(requestBodySource);
+    Error.throwWithStackTrace(error, stackTrace);
+  }
   final omitBody =
       serverRequest.method == HttpMethod.head ||
       response.status < 200 ||
@@ -33,6 +52,7 @@ Future<web.Response> handleFetchInvocation(
     if (omitBody) {
       bodyHandled = true;
       await _cancelBody(response.body);
+      await _cancelRequestBody(requestBodySource);
     }
 
     final headers = web.Headers();
@@ -41,8 +61,14 @@ Future<web.Response> handleFetchInvocation(
         headers.append(entry.key, value);
       }
     }
+    final body = omitBody
+        ? null
+        : _ResponseBodySource(
+            response.body,
+            onDone: () => _cancelRequestBody(requestBodySource),
+          ).stream;
     final result = web.Response(
-      omitBody ? null : _ResponseBodySource(response.body).stream,
+      body,
       web.ResponseInit(
         status: response.status,
         statusText: response.reason ?? '',
@@ -59,6 +85,7 @@ Future<web.Response> handleFetchInvocation(
         // Preserve the response-conversion failure.
       }
     }
+    await _cancelRequestBody(requestBodySource);
     Error.throwWithStackTrace(error, stackTrace);
   }
 }
@@ -71,31 +98,6 @@ Headers _readHeaders(web.Headers source) {
     }).toJS,
   );
   return headers;
-}
-
-Stream<List<int>> _readBody(web.ReadableStream body) async* {
-  final reader = web.ReadableStreamDefaultReader(body);
-  var done = false;
-  try {
-    while (true) {
-      final result = await reader.read().toDart;
-      if (result.done) {
-        done = true;
-        break;
-      }
-      final value = result.value;
-      if (value == null) {
-        throw StateError('Fetch body returned an empty chunk.');
-      }
-      yield (value as JSUint8Array).toDart;
-    }
-  } finally {
-    try {
-      if (!done) await reader.cancel().toDart;
-    } finally {
-      reader.releaseLock();
-    }
-  }
 }
 
 Future<void> _cancelled(web.AbortSignal signal) {
@@ -117,11 +119,17 @@ Future<void> _cancelBody(Stream<List<int>> body) async {
 }
 
 final class _ResponseBodySource {
-  _ResponseBodySource(Stream<List<int>> body)
-    : _iterator = StreamIterator<List<int>>(body);
+  _ResponseBodySource(
+    Stream<List<int>> body, {
+    required Future<void> Function() onDone,
+  }) : _iterator = StreamIterator<List<int>>(body),
+       _onDone = onDone;
 
   final StreamIterator<List<int>> _iterator;
+  final Future<void> Function() _onDone;
   bool _closed = false;
+  bool _cancelled = false;
+  Future<void>? _closing;
 
   web.ReadableStream get stream => web.ReadableStream(
     _UnderlyingSource(
@@ -136,7 +144,7 @@ final class _ResponseBodySource {
     if (_closed) return null;
     try {
       if (!await _iterator.moveNext()) {
-        _closed = true;
+        await _close(cancelIterator: false);
         controller.close();
         return null;
       }
@@ -145,21 +153,111 @@ final class _ResponseBodySource {
       controller.enqueue(bytes.toJS);
       return null;
     } on Object catch (error, stackTrace) {
-      _closed = true;
       try {
-        await _iterator.cancel();
+        await _close(cancelIterator: true);
       } on Object {
         // Preserve the stream's primary error.
       }
+      if (_cancelled) return null;
       Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
   Future<JSAny?> _cancel() async {
-    if (_closed) return null;
-    _closed = true;
-    await _iterator.cancel();
+    _cancelled = true;
+    await _close(cancelIterator: true);
     return null;
+  }
+
+  Future<void> _close({required bool cancelIterator}) {
+    _closed = true;
+    return _closing ??= _closeOnce(cancelIterator: cancelIterator);
+  }
+
+  Future<void> _closeOnce({required bool cancelIterator}) async {
+    try {
+      if (cancelIterator) await _iterator.cancel();
+    } finally {
+      try {
+        await _onDone();
+      } on Object {
+        // Request-body cleanup must not replace the response outcome.
+      }
+    }
+  }
+}
+
+final class _RequestBodySource {
+  _RequestBodySource(this._body);
+
+  final web.ReadableStream _body;
+  web.ReadableStreamDefaultReader? _reader;
+  var _opened = false;
+  var _closed = false;
+  Future<void>? _cancelling;
+
+  Stream<List<int>> get stream => _read();
+
+  Stream<List<int>> _read() async* {
+    if (_opened) throw StateError('Fetch request body is single-use.');
+    _opened = true;
+    if (_closed) return;
+    final reader = web.ReadableStreamDefaultReader(_body);
+    _reader = reader;
+    var done = false;
+    try {
+      while (!_closed) {
+        final result = await reader.read().toDart;
+        if (result.done) {
+          done = true;
+          break;
+        }
+        final value = result.value;
+        if (value == null) {
+          throw StateError('Fetch body returned an empty chunk.');
+        }
+        yield (value as JSUint8Array).toDart;
+      }
+    } finally {
+      try {
+        if (!done && !_closed) await reader.cancel().toDart;
+      } finally {
+        _closed = true;
+        _release(reader);
+      }
+    }
+  }
+
+  Future<void> cancel() => _cancelling ??= _cancel();
+
+  Future<void> _cancel() async {
+    if (_closed) return;
+    _closed = true;
+    final reader = _reader;
+    if (reader == null) {
+      await _body.cancel().toDart;
+      return;
+    }
+    try {
+      await reader.cancel().toDart;
+    } finally {
+      _release(reader);
+    }
+  }
+
+  void _release(web.ReadableStreamDefaultReader reader) {
+    if (_reader == null) return;
+    _reader = null;
+    reader.releaseLock();
+  }
+}
+
+Future<void> _cancelRequestBody(_RequestBodySource? source) async {
+  if (source == null) return;
+  try {
+    await source.cancel();
+  } on Object {
+    // Cleanup must not replace the request or response outcome.
   }
 }
 

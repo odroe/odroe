@@ -44,7 +44,7 @@ final class ServerFunction<I, O> {
     this.decodeInput,
     this.method = HttpMethod.post,
     Iterable<Middleware> middleware = const <Middleware>[],
-  }) : middleware = List<Middleware>.of(middleware, growable: false);
+  }) : middleware = List<Middleware>.unmodifiable(middleware);
 
   /// User implementation invoked for each request.
   final ServerFunctionHandler<I, O> handler;

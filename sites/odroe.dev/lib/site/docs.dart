@@ -5,44 +5,53 @@ import 'package:odroe/press.dart';
 import '../docs.dart';
 import 'html.dart';
 
-RouteDocument buildDocsDocument(DocsData data) => RouteDocument(
-  language: data.page.language,
-  title: '${data.page.title} · Odroe',
-  description: data.page.description,
-  canonical: Uri.parse(
+RouteDocument buildDocsDocument(DocsData data) {
+  final canonical = Uri.parse(
     'https://odroe.dev',
-  ).resolveUri(data.page.location).toString(),
-  meta: const <DocumentMeta>[DocumentMeta.property('og:type', 'article')],
-  bodyAttributes: const <String, String?>{'class': 'site-body docs-body'},
-  body: element(
-    'div',
-    attributes: const <String, String?>{'class': 'docs-layout'},
-    children: <HtmlNode>[
-      _navigation(data, 'docs-sidebar'),
-      _mobileNavigation(data),
-      element(
-        'article',
-        attributes: const <String, String?>{'class': 'docs-article'},
-        children: <HtmlNode>[
-          element(
-            'p',
-            attributes: const <String, String?>{'class': 'docs-breadcrumb'},
-            children: <HtmlNode>[
-              element(
-                'a',
-                attributes: const <String, String?>{'href': '/docs'},
-                children: <HtmlNode>[text('Docs')],
-              ),
-              text(' / ${_section(data.page)}'),
-            ],
-          ),
-          MdcHtmlRenderer().render(data.page.content),
-        ],
-      ),
-      _outline(data.page),
+  ).resolveUri(data.page.location).toString();
+  final title = '${data.page.title} · Odroe';
+  return RouteDocument(
+    language: data.page.language,
+    title: title,
+    description: data.page.description,
+    canonical: canonical,
+    meta: <DocumentMeta>[
+      const DocumentMeta.property('og:type', 'article'),
+      DocumentMeta.property('og:title', title),
+      DocumentMeta.property('og:description', data.page.description),
+      DocumentMeta.property('og:url', canonical),
     ],
-  ),
-);
+    bodyAttributes: const <String, String?>{'class': 'site-body docs-body'},
+    body: element(
+      'div',
+      attributes: const <String, String?>{'class': 'docs-layout'},
+      children: <HtmlNode>[
+        _navigation(data, 'docs-sidebar'),
+        _mobileNavigation(data),
+        element(
+          'article',
+          attributes: const <String, String?>{'class': 'docs-article'},
+          children: <HtmlNode>[
+            element(
+              'p',
+              attributes: const <String, String?>{'class': 'docs-breadcrumb'},
+              children: <HtmlNode>[
+                element(
+                  'a',
+                  attributes: const <String, String?>{'href': '/docs'},
+                  children: <HtmlNode>[text('Docs')],
+                ),
+                text(' / ${_section(data.page)}'),
+              ],
+            ),
+            MdcHtmlRenderer().render(data.page.content),
+          ],
+        ),
+        _outline(data.page),
+      ],
+    ),
+  );
+}
 
 HtmlElement _mobileNavigation(DocsData data) => element(
   'details',

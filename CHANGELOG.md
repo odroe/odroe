@@ -16,3 +16,10 @@
 - Resolve application prerender locations before compilation, preserve the
   previous document-only output until a replacement succeeds, and avoid
   duplicate native compilation for Cloudflare builds.
+- Revalidate native static assets with weak ETags and Last-Modified, stream
+  eligible responses with optional gzip, reject ambiguous or escaped paths on
+  every request, and stop inferring immutable caching from filenames.
+- Release unread Fetch request bodies, return 501 consistently for unsupported
+  methods, and keep normal IO response completion distinct from cancellation.
+- Freeze server, route, and server-function configuration snapshots and include
+  the required Allow header in 405 route responses.

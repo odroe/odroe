@@ -304,6 +304,11 @@ Dart server 源码完成 prerender，不再额外编译临时 native executable�
 
 `build --server-only` 生成的 native executable 与构建 OS/architecture 绑定。
 请在目标平台或兼容 builder 中构建。
+Native `IoServer` 会为 `publicDirectory` 中的文件逐次验证真实路径，使用
+`no-cache` 配合 ETag/Last-Modified 避免重复传输，并对至少 1 KiB 的
+文本、JavaScript、JSON、SVG 与 Wasm 流式发送 gzip。文件名不会被猜测为
+content hash；若上游代理负责内容编码，可设置
+`compressStaticAssets: false`。
 
 Cloudflare target 生成 `build/odroe/cloudflare/server.js` 与薄
 `worker.mjs`。平台配置仍由应用持有；Odroe 不覆盖已有

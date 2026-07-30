@@ -34,15 +34,71 @@ void main() {
       expect(response.status, 200, reason: '${location.path}\n$body');
       expect(body, startsWith('<!doctype html>'));
       expect(body, contains('<main id="main-content">'));
-      expect(
-        body,
-        location.path == '/404.html'
-            ? isNot(contains('<link rel="canonical"'))
-            : contains('<link rel="canonical"'),
-      );
+      if (location.path == '/404.html') {
+        expect(_canonical.allMatches(body), isEmpty);
+        expect(_meta(body, 'og:url'), isEmpty);
+      } else {
+        final title = _single(_title.allMatches(body), location, 'title');
+        final canonical = _single(
+          _canonical.allMatches(body),
+          location,
+          'canonical',
+        );
+        final ogTitle = _single(_meta(body, 'og:title'), location, 'og:title');
+        final ogUrl = _single(_meta(body, 'og:url'), location, 'og:url');
+        final ogImage = _single(_meta(body, 'og:image'), location, 'og:image');
+        final ogImageAlt = _single(
+          _meta(body, 'og:image:alt'),
+          location,
+          'og:image:alt',
+        );
+        final expectedCanonical = Uri.parse(
+          'https://odroe.dev',
+        ).resolveUri(location).toString();
+
+        expect(ogTitle, title, reason: location.path);
+        expect(canonical, expectedCanonical, reason: location.path);
+        expect(ogUrl, canonical, reason: location.path);
+        expect(
+          ogImage,
+          'https://odroe.dev/social-card.svg',
+          reason: location.path,
+        );
+        expect(
+          ogImageAlt,
+          'Odroe: One Dart package. Every layer — Flutter, Semantic Web, '
+          'Typed Server, Data, and Edge.',
+          reason: location.path,
+        );
+      }
       expect(body, isNot(contains('flutter_bootstrap.js')));
     }
   });
+
+  test(
+    'homepage structured data describes source without invented commerce',
+    () async {
+      final server = Server(
+        routes: generated.serverRouteTree,
+        functions: generated.serverFunctions,
+        renderer: const DocumentRenderer(baseHref: '/').call,
+      );
+      final response = await server.handle(
+        ServerRequest(
+          method: HttpMethod.get,
+          uri: Uri(path: '/'),
+          headers: Headers.single(<String, String>{'accept': 'text/html'}),
+        ),
+      );
+      final body = await utf8.decodeStream(response.body);
+
+      expect(body, contains('"@type":"SoftwareSourceCode"'));
+      expect(body, contains('"programmingLanguage":"Dart"'));
+      expect(body, isNot(contains('"@type":"SoftwareApplication"')));
+      expect(body, isNot(contains('"aggregateRating"')));
+      expect(body, isNot(contains('"offers"')));
+    },
+  );
 
   test('unknown routes return a real 404 document', () async {
     final server = Server(
@@ -61,7 +117,8 @@ void main() {
     expect(response.status, 404);
     final body = await utf8.decodeStream(response.body);
     expect(body, contains('Page not found'));
-    expect(body, isNot(contains('<link rel="canonical"')));
+    expect(_canonical.allMatches(body), isEmpty);
+    expect(_meta(body, 'og:url'), isEmpty);
   });
 
   test('deployment serves canonical URLs without trailing slashes', () async {
@@ -114,4 +171,17 @@ void main() {
     expect(declarations, contains('max-width: 100%;'));
     expect(declarations, contains('overflow-x: auto;'));
   });
+}
+
+final _title = RegExp(r'<title>([^<]+)</title>');
+final _canonical = RegExp(r'<link rel="canonical" href="([^"]+)">');
+
+Iterable<RegExpMatch> _meta(String body, String property) => RegExp(
+  '<meta property="${RegExp.escape(property)}" content="([^"]+)">',
+).allMatches(body);
+
+String _single(Iterable<RegExpMatch> matches, Uri location, String label) {
+  final values = matches.toList(growable: false);
+  expect(values, hasLength(1), reason: '${location.path}: $label');
+  return values.single.group(1)!;
 }

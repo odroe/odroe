@@ -40,9 +40,9 @@ final class Server {
     this.maxFunctionPayload = 1024 * 1024,
     this.exposeErrors = false,
     this.allowRpcWithoutOrigin = false,
-  }) : routes = List<RouteNode>.of(routes, growable: false),
-       functions = Map<String, ServerFunctionBinding>.of(functions),
-       middleware = List<Middleware>.of(middleware, growable: false),
+  }) : routes = List<RouteNode>.unmodifiable(routes),
+       functions = Map<String, ServerFunctionBinding>.unmodifiable(functions),
+       middleware = List<Middleware>.unmodifiable(middleware),
        modules = modules ?? _emptyModules,
        serializer = serializer ?? Serializer(),
        _flutterRoutes = HashSet<Object>.identity()
@@ -362,7 +362,22 @@ final class Server {
     }
     if (context.request.method != HttpMethod.get &&
         context.request.method != HttpMethod.head) {
-      return ServerResponse.text('Method not allowed.', status: 405);
+      final allowed = <HttpMethod>{
+        for (final method in HttpMethod.values)
+          if (serverRoute?.handles(method) ?? false) method,
+        if (renderer != null) HttpMethod.get,
+        if (renderer != null) HttpMethod.head,
+      };
+      return ServerResponse.text(
+        'Method not allowed.',
+        status: 405,
+        headers: Headers.single(<String, String>{
+          'allow': HttpMethod.values
+              .where(allowed.contains)
+              .map((method) => method.wire)
+              .join(', '),
+        }),
+      );
     }
     final render = renderer;
     if (render == null) {

@@ -4,6 +4,10 @@ import 'home.dart';
 import 'html.dart';
 
 const _github = 'https://github.com/odroe/odroe';
+const siteTitle = 'Odroe · One Dart package. Every layer.';
+const siteDescription =
+    'Build Flutter apps, semantic web experiences, and typed servers '
+    'with one explicit Dart package.';
 
 RouteDocument buildSiteDocument({required bool home}) => RouteDocument(
   language: 'en',
@@ -12,21 +16,35 @@ RouteDocument buildSiteDocument({required bool home}) => RouteDocument(
     DocumentLink(rel: 'stylesheet', href: '/site.css'),
     DocumentLink(rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml'),
   ],
-  meta: const <DocumentMeta>[
-    DocumentMeta.name('theme-color', '#ffffff'),
-    DocumentMeta.property('og:site_name', 'Odroe'),
-    DocumentMeta.property('og:type', 'website'),
-    DocumentMeta.property('og:image', 'https://odroe.dev/social-card.svg'),
-    DocumentMeta.name('twitter:card', 'summary_large_image'),
+  meta: <DocumentMeta>[
+    const DocumentMeta.name('theme-color', '#ffffff'),
+    const DocumentMeta.property('og:site_name', 'Odroe'),
+    const DocumentMeta.property('og:type', 'website'),
+    const DocumentMeta.property(
+      'og:image',
+      'https://odroe.dev/social-card.svg',
+    ),
+    const DocumentMeta.property(
+      'og:image:alt',
+      'Odroe: One Dart package. Every layer — Flutter, Semantic Web, '
+          'Typed Server, Data, and Edge.',
+    ),
+    const DocumentMeta.name('twitter:card', 'summary_large_image'),
+    if (home) ...const <DocumentMeta>[
+      DocumentMeta.property('og:title', siteTitle),
+      DocumentMeta.property('og:description', siteDescription),
+      DocumentMeta.property('og:url', 'https://odroe.dev/'),
+    ],
   ],
   jsonLd: home
       ? const <Object?>[
           <String, Object?>{
             '@context': 'https://schema.org',
-            '@type': 'SoftwareApplication',
+            '@type': 'SoftwareSourceCode',
             'name': 'Odroe',
-            'applicationCategory': 'DeveloperApplication',
-            'operatingSystem': 'Cross-platform',
+            'description': siteDescription,
+            'programmingLanguage': 'Dart',
+            'runtimePlatform': 'Flutter',
             'url': 'https://odroe.dev',
             'codeRepository': _github,
           },

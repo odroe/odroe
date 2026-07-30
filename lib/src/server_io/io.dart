@@ -11,6 +11,9 @@ final class IoServer {
   const IoServer._();
 
   /// Starts an HTTP server that forwards requests to [handler].
+  ///
+  /// Files in [publicDirectory] use conditional caching and stream eligible
+  /// responses with gzip when [compressStaticAssets] is enabled.
   static Future<HttpServer> bind(
     ServerHandler handler, {
     Object? address,
@@ -18,6 +21,7 @@ final class IoServer {
     int backlog = 0,
     bool shared = false,
     Directory? publicDirectory,
+    bool compressStaticAssets = true,
     File? developmentProxyOriginFile,
   }) async {
     final server = await HttpServer.bind(
@@ -30,7 +34,9 @@ final class IoServer {
       _listen(
         server,
         handler,
-        publicDirectory == null ? null : StaticFiles(publicDirectory),
+        publicDirectory == null
+            ? null
+            : StaticFiles(publicDirectory, compress: compressStaticAssets),
         developmentProxyOriginFile == null
             ? null
             : DevelopmentProxy(developmentProxyOriginFile.absolute),
@@ -61,6 +67,13 @@ final class IoServer {
     DevelopmentProxy? developmentProxy,
   ) async {
     try {
+      late final HttpMethod method;
+      try {
+        method = HttpMethod.parse(incoming.method);
+      } on FormatException {
+        incoming.response.statusCode = HttpStatus.notImplemented;
+        return;
+      }
       if (await developmentProxy?.serve(incoming) ?? false) return;
       if (await staticFiles?.serve(incoming) ?? false) return;
 
@@ -68,13 +81,16 @@ final class IoServer {
       incoming.headers.forEach((name, values) => rawHeaders[name] = values);
       final cancelled = Completer<void>();
       unawaited(
-        incoming.response.done.whenComplete(() {
-          if (!cancelled.isCompleted) cancelled.complete();
-        }),
+        incoming.response.done.then<void>(
+          (_) {},
+          onError: (Object _, StackTrace _) {
+            if (!cancelled.isCompleted) cancelled.complete();
+          },
+        ),
       );
       final response = await handler(
         ServerRequest(
-          method: HttpMethod.parse(incoming.method),
+          method: method,
           uri: incoming.requestedUri,
           headers: Headers(rawHeaders),
           body: incoming,
@@ -114,11 +130,15 @@ final class IoServer {
         incoming.response
           ..statusCode = HttpStatus.internalServerError
           ..write('Internal server error.');
-      } on StateError {
-        // The response has already started.
+      } on Object {
+        // The response has already started or the client disconnected.
       }
     } finally {
-      await incoming.response.close();
+      try {
+        await incoming.response.close();
+      } on Object {
+        // Closing a disconnected response is already complete from our side.
+      }
     }
   }
 }

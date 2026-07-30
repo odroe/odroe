@@ -45,6 +45,13 @@ The result is a Dart native executable. `ODROE_HOST` and `ODROE_PORT` configure
 the listener; platforms that provide `PORT` are supported by the generated
 bootstrap.
 
+Native static files are contained by their resolved public root on every
+request. Every name uses `no-cache` with ETag and Last-Modified revalidation
+instead of guessed immutable caching. Eligible text, JavaScript, JSON, SVG, and
+Wasm files of at least 1 KiB stream with gzip when content encoding negotiation
+selects it. Custom `IoServer.bind` callers can set
+`compressStaticAssets: false` when an upstream proxy owns content encoding.
+
 Native output is OS- and architecture-specific. Build on the target OS and
 architecture, or in a compatible builder. For a Linux container, compile in a
 Linux build stage. Do not copy a macOS executable into the image.
@@ -83,6 +90,7 @@ native executable.
 The target follows these rules:
 
 - static assets remain asset-first to avoid unnecessary Worker invocations;
+- the platform, rather than the Worker adapter, owns asset caching and encoding;
 - dynamic routes use the standard Fetch `Request` and `Response` contract;
 - D1 is passed as an explicit request binding;
 - `waitUntil` tasks keep request modules alive until background work settles.

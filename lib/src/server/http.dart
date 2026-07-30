@@ -153,6 +153,8 @@ final class ServerRequest {
   final Stream<List<int>> body;
 
   /// Completes when the adapter observes client disconnection.
+  ///
+  /// Some transports can observe this only after response delivery begins.
   final Future<void>? cancelled;
 
   /// Reads and buffers the body, up to [maxBytes].

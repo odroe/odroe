@@ -15,6 +15,8 @@ function environment() {
     marker: "edge-binding",
     produced: 0,
     responseCancelled: false,
+    responseCancelStarted: false,
+    releaseResponseCancel: false,
   };
 }
 
@@ -110,6 +112,29 @@ async function invoke(request, env = environment()) {
 }
 
 {
+  const chunks = ["lazy ", "request ", "stream"];
+  let index = 0;
+  const body = new ReadableStream({
+    pull(controller) {
+      if (index == chunks.length) {
+        controller.close();
+      } else {
+        controller.enqueue(encoder.encode(chunks[index]));
+      }
+      index++;
+    },
+  });
+  const { response } = await invoke(
+    new Request("https://example.test/request-stream", {
+      method: "POST",
+      body,
+      duplex: "half",
+    }),
+  );
+  assert.equal(await response.text(), chunks.join(""));
+}
+
+{
   const controller = new AbortController();
   const { context } = executionContext();
   const responsePromise = handler(
@@ -151,6 +176,37 @@ async function invoke(request, env = environment()) {
 {
   const env = environment();
   const { response } = await invoke(
+    new Request("https://example.test/error-cancel"),
+    env,
+  );
+  const reader = response.body.getReader();
+  const first = await reader.read();
+  assert.equal(decoder.decode(first.value), "first");
+  const terminalRead = reader.read().catch(() => null);
+  while (!env.responseCancelStarted) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  let downstreamCancelSettled = false;
+  const downstreamCancel = reader.cancel().then(
+    () => {
+      downstreamCancelSettled = true;
+    },
+    () => {
+      downstreamCancelSettled = true;
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(downstreamCancelSettled, false);
+  env.releaseResponseCancel = true;
+  await downstreamCancel;
+  await terminalRead;
+  assert.equal(env.responseCancelled, true);
+}
+
+{
+  const env = environment();
+  const { response } = await invoke(
     new Request("https://example.test/head", { method: "HEAD" }),
     env,
   );
@@ -180,17 +236,115 @@ for (const status of [204, 205, 304]) {
 }
 
 {
+  let requestCancelled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("unused"));
+    },
+    cancel() {
+      requestCancelled = true;
+    },
+  });
+  const { response } = await invoke(
+    new Request("https://example.test/wait", {
+      method: "POST",
+      body,
+      duplex: "half",
+    }),
+  );
+  assert.equal(await response.text(), "scheduled");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(requestCancelled, true);
+}
+
+{
+  let releaseRequestCancel;
+  let requestCancelStarted = false;
+  const requestCancelGate = new Promise((resolve) => {
+    releaseRequestCancel = resolve;
+  });
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("unused"));
+    },
+    cancel() {
+      requestCancelStarted = true;
+      return requestCancelGate;
+    },
+  });
+  const { response } = await invoke(
+    new Request("https://example.test/wait", {
+      method: "POST",
+      body,
+      duplex: "half",
+    }),
+  );
+  const reader = response.body.getReader();
+  const first = await reader.read();
+  assert.equal(decoder.decode(first.value), "scheduled");
+  while (!requestCancelStarted) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  let downstreamCancelSettled = false;
+  const downstreamCancel = reader.cancel().then(() => {
+    downstreamCancelSettled = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(downstreamCancelSettled, false);
+  releaseRequestCancel();
+  await downstreamCancel;
+  assert.equal(downstreamCancelSettled, true);
+}
+
+{
+  let requestCancelled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("unsupported"));
+    },
+    cancel() {
+      requestCancelled = true;
+    },
+  });
+  const { response } = await invoke(
+    new Request("https://example.test/unknown", {
+      method: "FOO",
+      body,
+      duplex: "half",
+    }),
+  );
+  assert.equal(response.status, 501);
+  assert.equal(await response.text(), "");
+  assert.equal(requestCancelled, true);
+}
+
+{
   const env = environment();
+  let requestCancelled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("invalid"));
+    },
+    cancel() {
+      requestCancelled = true;
+    },
+  });
   const { context, tasks } = executionContext();
   await assert.rejects(
     handler(
-      new Request("https://example.test/invalid-response"),
+      new Request("https://example.test/invalid-response", {
+        method: "POST",
+        body,
+        duplex: "half",
+      }),
       env,
       context,
     ),
   );
   await Promise.all(tasks);
   assert.equal(env.responseCancelled, true);
+  assert.equal(requestCancelled, true);
 }
 
 console.log("server_fetch smoke passed");

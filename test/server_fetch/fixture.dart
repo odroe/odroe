@@ -39,6 +39,8 @@ Future<ServerResponse> _handle(
       );
     case '/request-cancel':
       return ServerResponse.bytes(await request.body.first);
+    case '/request-stream':
+      return ServerResponse(body: request.body);
     case '/abort':
       await request.cancelled!;
       return ServerResponse.text('cancelled', status: 499);
@@ -55,6 +57,8 @@ Future<ServerResponse> _handle(
       }
 
       return ServerResponse(body: body());
+    case '/error-cancel':
+      return ServerResponse(body: _errorBody(env));
     case '/head':
       return ServerResponse(body: _discardedBody(env));
     case '/wait':
@@ -73,6 +77,25 @@ Future<ServerResponse> _handle(
   }
 }
 
+Stream<List<int>> _errorBody(_Environment env) {
+  late final StreamController<List<int>> controller;
+  controller = StreamController<List<int>>(
+    onListen: () {
+      controller
+        ..add(utf8.encode('first'))
+        ..addError(StateError('response failed'));
+    },
+    onCancel: () async {
+      env.responseCancelStarted = true;
+      while (!env.releaseResponseCancel) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      env.responseCancelled = true;
+    },
+  );
+  return controller.stream;
+}
+
 Stream<List<int>> _discardedBody(_Environment env) async* {
   try {
     yield <int>[1, 2, 3];
@@ -89,4 +112,9 @@ extension type _Environment(JSObject _) implements JSObject {
 
   external bool get responseCancelled;
   external set responseCancelled(bool value);
+
+  external bool get responseCancelStarted;
+  external set responseCancelStarted(bool value);
+
+  external bool get releaseResponseCancel;
 }

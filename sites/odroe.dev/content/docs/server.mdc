@@ -40,8 +40,15 @@ final updatePost = ServerFunction<UpdatePost, Post>(
 The generated client and server manifest agree on the function identifier and
 wire types. Cross-origin requests, payload limits, streaming frames, and
 request cancellation stay visible in the transport.
+Server, route, middleware, and server-function configuration is copied into
+immutable snapshots, so runtime matching cannot drift after construction.
+Unsupported transport methods return `501`; matched routes return `405` with
+their supported methods in `Allow`.
 
 ## Runtime boundary
 
 `server_io.dart` adapts the contract to `dart:io`. Fetch-style runtimes use a
 separate adapter so shared server code does not import JavaScript interop.
+Both adapters release response bodies that HTTP semantics omit. The Fetch
+adapter also cancels unread request streams when a handler throws or the
+response ends, is cancelled, or is omitted.
