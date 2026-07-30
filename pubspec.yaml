@@ -16,8 +16,11 @@ dependencies:
     sdk: flutter
   http: ^1.5.0
   markdown: ^7.3.1
+  mysql_dart: ^3.0.0
   path: ^1.9.1
+  postgres: ^3.5.12
   roux: ^1.0.1
+  sqlite3: ^3.5.0
   web: ^1.1.1
   yaml: ^3.1.3
 

@@ -1,0 +1,81 @@
+---
+title: Deployment
+description: Build static, native, and Preview edge artifacts with explicit verification limits.
+order: 50
+language: en
+---
+# Deployment
+
+Odroe builds product artifacts; the platform configuration remains owned by
+your application.
+
+## Static web
+
+```sh
+dart run odroe build web
+```
+
+Document routes are rendered through the real server. Pure document routes
+produce semantic HTML; Flutter routes also keep their bootstrap and handoff
+state. Files from `public/` are copied without a bundler.
+
+For a document-only product such as this website:
+
+```sh
+dart run odroe build
+```
+
+## Native server
+
+```sh
+dart run odroe build --server-only
+```
+
+The result is a Dart native executable. `ODROE_HOST` and `ODROE_PORT` configure
+the listener; platforms that provide `PORT` are supported by the generated
+bootstrap.
+
+Native output is OS- and architecture-specific. Build on the target OS and
+architecture, or in a compatible builder. For a Linux container, compile in a
+Linux build stage. Do not copy a macOS executable into the image.
+
+## Edge
+
+Build the Cloudflare Workers target explicitly:
+
+```sh
+dart run odroe build --server-only --server-target cloudflare
+```
+
+Odroe writes `build/odroe/cloudflare/server.js` and a thin `worker.mjs`.
+Your application continues to own `wrangler.jsonc`; the build never overwrites
+platform configuration.
+
+```json
+{
+  "name": "my-odroe-app",
+  "main": "./build/odroe/cloudflare/worker.mjs",
+  "compatibility_date": "2026-07-29",
+  "assets": {
+    "directory": "./build/web"
+  }
+}
+```
+
+The target follows these rules:
+
+- static assets remain asset-first to avoid unnecessary Worker invocations;
+- dynamic routes use the standard Fetch `Request` and `Response` contract;
+- D1 is passed as an explicit request binding;
+- `waitUntil` tasks keep request modules alive until background work settles.
+
+The Fetch adapter passes streaming, cancellation, concurrency, compiled
+artifact, and local Wrangler/Workerd smoke tests. Local D1 binding behavior is
+also verified. This remains Preview support. No remote Cloudflare deployment
+has been verified.
+
+## This website
+
+`sites/odroe.dev` is the website source and passes local build and prerender
+checks. It is not proof of a live deployment. At this snapshot, external access
+to `odroe.dev` is blocked by Cloudflare error 526 from its SSL setup.

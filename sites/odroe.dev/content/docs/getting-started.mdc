@@ -1,0 +1,75 @@
+---
+title: Getting started
+description: Create, run, and build an Odroe product.
+order: 2
+language: en
+---
+# Getting started
+
+Odroe is currently developed from source. Use a path dependency while the
+public package is being prepared.
+
+## Add the package
+
+```yaml
+dependencies:
+  odroe:
+    path: ../odroe
+```
+
+Run dependency resolution with Flutter because the single package includes
+Flutter product entrypoints.
+
+```sh
+flutter pub get
+```
+
+## Create the first route
+
+Every route keeps its shared contract in `route.dart`. A Document is attached
+there as a platform-neutral binding.
+
+```dart
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
+
+final route =
+    AppRoute<NoParams, NoSearch, NoData>().document(
+      (_) => const RouteDocument(
+        title: 'Hello',
+        body: HtmlElement(
+          'h1',
+          children: <HtmlNode>[HtmlText('Hello from Odroe')],
+        ),
+      ),
+    );
+```
+
+The directory itself becomes the URL. A `routes/about/route.dart` file maps to
+`/about`.
+
+## Generate and run
+
+```sh
+dart run odroe generate
+dart run odroe dev --server-only
+```
+
+For a Flutter target, pass Flutter arguments after `--`.
+
+```sh
+dart run odroe dev -- -d chrome
+dart run odroe dev -- -d ios
+```
+
+## Build
+
+```sh
+dart run odroe build web
+dart run odroe build apk
+dart run odroe build --server-only
+```
+
+A document-only application can run `dart run odroe build` without a Flutter
+target. Odroe emits the native server and prerenders every known static
+location into `build/web`.

@@ -123,11 +123,17 @@ final class RouteGenerator {
       );
     }
     for (final node in nodes) {
+      final contract = node.contract;
+      final needsRouteTypes =
+          (contract?.paramsSchema ?? false) ||
+          (contract?.searchSchema ?? false);
       if (node.routeFile case final file?) {
-        buffer.writeln(
-          "import '${_importUri(file, serverOutputFile.parent.path)}' "
-          'as ${node.routeAlias};',
-        );
+        if (node.serverFile == null || needsRouteTypes) {
+          buffer.writeln(
+            "import '${_importUri(file, serverOutputFile.parent.path)}' "
+            'as ${node.routeAlias};',
+          );
+        }
       }
       if (node.serverFile case final file?) {
         buffer.writeln(
@@ -181,6 +187,7 @@ final class RouteGenerator {
       ..writeln('/// Creates the application server from generated routes.')
       ..writeln('Server createServer({')
       ..writeln('  Iterable<Module> Function()? modules,')
+      ..writeln('  InvocationModuleFactory? invocationModules,')
       ..writeln('  Iterable<Middleware> middleware = const <Middleware>[],')
       ..writeln('  Serializer? serializer,')
       ..writeln('  Renderer? renderer,')
@@ -188,6 +195,7 @@ final class RouteGenerator {
       ..writeln('  routes: serverRouteTree,')
       ..writeln('  functions: serverFunctions,')
       ..writeln('  modules: modules,')
+      ..writeln('  invocationModules: invocationModules,')
       ..writeln('  flutterRoutes: <RouteNode>[$flutterRoutes],')
       ..writeln('  middleware: middleware,')
       ..writeln('  serializer: serializer,')

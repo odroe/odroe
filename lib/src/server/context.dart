@@ -1,6 +1,7 @@
 import '../app/context.dart';
 import '../app/key.dart';
 import 'http.dart';
+import 'invocation.dart';
 
 /// Type-safe identity used to extend one request context.
 final class RequestKey<T> {
@@ -17,7 +18,13 @@ final class RequestKey<T> {
 /// Mutable request-scoped state shared by middleware and handlers.
 final class RequestContext {
   /// Creates a request context backed by an application context.
-  RequestContext({required this.request, required this.app});
+  RequestContext({
+    required this.request,
+    required this.app,
+    ServerInvocation? invocation,
+  }) {
+    if (invocation != null) set(_invocationKey, invocation);
+  }
 
   /// The incoming request.
   final ServerRequest request;
@@ -27,6 +34,14 @@ final class RequestContext {
 
   final Map<RequestKey<Object?>, Object?> _values =
       <RequestKey<Object?>, Object?>{};
+
+  static const _invocationKey = RequestKey<ServerInvocation>(
+    'server.invocation',
+  );
+
+  /// Adapter-owned state for this request.
+  ServerInvocation get invocation =>
+      get(_invocationKey) ?? ServerInvocation.empty;
 
   /// Reads an application service.
   T read<T extends Object>(ContextKey<T> key) => app.read(key);

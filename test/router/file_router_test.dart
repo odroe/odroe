@@ -47,6 +47,10 @@ void main() {
       output.serverSource,
       contains('Iterable<Module> Function()? modules'),
     );
+    expect(
+      output.serverSource,
+      contains('InvocationModuleFactory? invocationModules'),
+    );
     expect(output.serverSource, contains('flutterRoutes: <RouteNode>['));
     expect(output.serverSource, contains('path: ":postId"'));
     expect(output.source, contains('path: "docs/**:slug"'));

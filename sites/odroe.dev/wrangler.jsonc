@@ -1,0 +1,9 @@
+{
+  "name": "odroe-dev",
+  "compatibility_date": "2026-07-29",
+  "assets": {
+    "directory": "./build/web",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

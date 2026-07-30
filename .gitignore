@@ -2,3 +2,4 @@
 .pub/
 build/
 pubspec.lock
+!sites/odroe.dev/pubspec.lock

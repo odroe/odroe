@@ -1,0 +1,298 @@
+import 'package:odroe/database.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('dialects', () {
+    for (final dialect in SqlDialect.values) {
+      test('${dialect.name} compiles bound INSERT and SELECT statements', () {
+        final users = _Users();
+        final queries = SqlQueries(dialect);
+        final quote = dialect == SqlDialect.mysql ? '`' : '"';
+
+        final insert = queries.insert(users, <SqlAssignment>[
+          users.email.set('ada@example.com'),
+          users.active.set(true),
+        ]);
+        expect(insert.statement.fragments, <String>[
+          'INSERT INTO ${quote}users$quote '
+              '(${quote}email$quote, ${quote}active$quote) VALUES (',
+          ', ',
+          ')',
+        ]);
+        expect(_values(insert.statement), <Object?>['ada@example.com', true]);
+        expect(insert.statement.kind, SqlStatementKind.write);
+
+        final select = queries.selectTable(
+          users,
+          where: users.id.greaterThan(10).and(users.nickname.equals(null)),
+          orderBy: <SqlOrder>[users.email.descending],
+          limit: 5,
+          offset: 2,
+        );
+        expect(select.statement.fragments, <String>[
+          'SELECT ${quote}id$quote, ${quote}email$quote, '
+              '${quote}nickname$quote, ${quote}active$quote '
+              'FROM ${quote}users$quote WHERE (${quote}id$quote > ',
+          ' AND ${quote}nickname$quote IS NULL) '
+              'ORDER BY ${quote}email$quote DESC LIMIT 5 OFFSET 2',
+        ]);
+        expect(_values(select.statement), <Object?>[10]);
+        expect(select.statement.kind, SqlStatementKind.rowReturning);
+      });
+    }
+
+    test('quotes schema, table, and column as separate identifiers', () {
+      final sqliteTable = _NamedTable(
+        'user.logs',
+        schema: 'tenant"one',
+        columnName: 'select"value',
+      );
+      final mysqlTable = _NamedTable(
+        'user.logs',
+        schema: 'tenant`one',
+        columnName: 'select`value',
+      );
+
+      expect(
+        const SqlQueries(
+          SqlDialect.postgres,
+        ).selectTable(sqliteTable).statement.fragments.single,
+        'SELECT "select""value" FROM "tenant""one"."user.logs"',
+      );
+      expect(
+        const SqlQueries(
+          SqlDialect.mysql,
+        ).selectTable(mysqlTable).statement.fragments.single,
+        'SELECT `select``value` FROM `tenant``one`.`user.logs`',
+      );
+    });
+
+    test('uses dialect-specific empty INSERT syntax', () {
+      final users = _Users();
+
+      expect(
+        const SqlQueries(
+          SqlDialect.sqlite,
+        ).insert(users, const <SqlAssignment>[]).statement.fragments.single,
+        'INSERT INTO "users" DEFAULT VALUES',
+      );
+      expect(
+        const SqlQueries(
+          SqlDialect.postgres,
+        ).insert(users, const <SqlAssignment>[]).statement.fragments.single,
+        'INSERT INTO "users" DEFAULT VALUES',
+      );
+      expect(
+        const SqlQueries(
+          SqlDialect.mysql,
+        ).insert(users, const <SqlAssignment>[]).statement.fragments.single,
+        'INSERT INTO `users` () VALUES ()',
+      );
+    });
+
+    test('rejects MySQL RETURNING before execution', () {
+      final users = _Users();
+      final write = const SqlQueries(
+        SqlDialect.mysql,
+      ).insert(users, <SqlAssignment>[users.email.set('ada@example.com')]);
+
+      expect(
+        () => write.returning(users.projection),
+        _throwsSql(SqlErrorCode.unsupported),
+      );
+    });
+  });
+
+  group('mutations', () {
+    test('compiles UPDATE, DELETE, and RETURNING without placeholders', () {
+      final users = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      final update = queries
+          .updateWhere(users, <SqlAssignment>[
+            users.email.set('grace@example.com'),
+            users.active.set(false),
+          ], where: users.id.equals(7))
+          .returning(users.projection);
+      expect(update.statement.fragments, <String>[
+        'UPDATE "users" SET "email" = ',
+        ', "active" = ',
+        ' WHERE "id" = ',
+        ' RETURNING "id", "email", "nickname", "active"',
+      ]);
+      expect(_values(update.statement), <Object?>[
+        'grace@example.com',
+        false,
+        7,
+      ]);
+      expect(update.statement.kind, SqlStatementKind.rowReturning);
+
+      final delete = queries.deleteWhere(
+        users,
+        where: users.email.notEquals('root@example.com'),
+      );
+      expect(delete.statement.fragments, <String>[
+        'DELETE FROM "users" WHERE "email" <> ',
+        '',
+      ]);
+      expect(_values(delete.statement), <Object?>['root@example.com']);
+      expect(delete.statement.kind, SqlStatementKind.write);
+
+      for (final fragment in <String>[
+        ...update.statement.fragments,
+        ...delete.statement.fragments,
+      ]) {
+        expect(fragment, isNot(contains('?')));
+        expect(fragment, isNot(matches(RegExp(r'\$\d+'))));
+      }
+    });
+
+    test('requires visible confirmation for full-table mutations', () {
+      final users = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      final update = queries.updateAll(users, <SqlAssignment>[
+        users.active.set(false),
+      ], confirm: allRows);
+      expect(update.statement.fragments, <String>[
+        'UPDATE "users" SET "active" = ',
+        '',
+      ]);
+
+      final delete = queries.deleteAll(users, confirm: allRows);
+      expect(delete.statement.fragments.single, 'DELETE FROM "users"');
+    });
+  });
+
+  group('validation', () {
+    test('rejects columns owned by another table', () {
+      final users = _Users();
+      final other = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      expect(
+        () => queries.insert(users, <SqlAssignment>[
+          other.email.set('ada@example.com'),
+        ]),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.selectTable(users, where: other.id.equals(1)),
+        throwsArgumentError,
+      );
+      expect(
+        () =>
+            queries.selectTable(users, orderBy: <SqlOrder>[other.id.ascending]),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.select(from: users, projection: other.projection),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries
+            .insert(users, <SqlAssignment>[users.email.set('ada@example.com')])
+            .returning(other.projection),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects duplicate and empty UPDATE assignments', () {
+      final users = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      expect(
+        () => queries.updateWhere(users, <SqlAssignment>[
+          users.email.set('first@example.com'),
+          users.email.set('second@example.com'),
+        ], where: users.id.equals(1)),
+        throwsArgumentError,
+      );
+      expect(
+        () =>
+            queries.updateAll(users, const <SqlAssignment>[], confirm: allRows),
+        throwsArgumentError,
+      );
+    });
+
+    test('normalizes NULL equality and rejects ordered NULL comparisons', () {
+      final users = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      expect(
+        queries
+            .selectTable(users, where: users.nickname.equals(null))
+            .statement
+            .fragments
+            .single,
+        'SELECT "id", "email", "nickname", "active" '
+        'FROM "users" WHERE "nickname" IS NULL',
+      );
+      expect(
+        queries
+            .selectTable(users, where: users.nickname.notEquals(null))
+            .statement
+            .fragments
+            .single,
+        'SELECT "id", "email", "nickname", "active" '
+        'FROM "users" WHERE "nickname" IS NOT NULL',
+      );
+      expect(() => users.nickname.lessThan(null), throwsArgumentError);
+    });
+
+    test('rejects invalid pagination', () {
+      final users = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      expect(() => queries.selectTable(users, limit: -1), throwsArgumentError);
+      expect(
+        () => queries.selectTable(users, limit: 1, offset: -1),
+        throwsArgumentError,
+      );
+      expect(() => queries.selectTable(users, offset: 1), throwsArgumentError);
+    });
+  });
+}
+
+typedef _User = ({int id, String email, String? nickname, bool active});
+
+final class _Users extends SqlTable<_User> {
+  _Users() : super('users');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<String> email = column<String>('email', sqlText);
+  late final SqlTableColumn<String?> nickname = column<String?>(
+    'nickname',
+    nullable(sqlText),
+  );
+  late final SqlTableColumn<bool> active = column<bool>('active', sqlBool);
+
+  @override
+  late final SqlProjection<_User> projection = SqlProjection<_User>(
+    <SqlTableColumn<Object?>>[id, email, nickname, active],
+    (row) => (
+      id: id.read(row, 0),
+      email: email.read(row, 1),
+      nickname: nickname.read(row, 2),
+      active: active.read(row, 3),
+    ),
+  );
+}
+
+final class _NamedTable extends SqlTable<String> {
+  _NamedTable(super.name, {super.schema, required String columnName}) {
+    value = column<String>(columnName, sqlText);
+  }
+
+  late final SqlTableColumn<String> value;
+
+  @override
+  late final SqlProjection<String> projection = SqlProjection.column(value);
+}
+
+List<Object?> _values(BoundSql statement) => <Object?>[
+  for (final value in statement.values) value.value,
+];
+
+Matcher _throwsSql(SqlErrorCode code) =>
+    throwsA(isA<SqlException>().having((error) => error.code, 'code', code));

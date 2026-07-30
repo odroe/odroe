@@ -44,8 +44,13 @@ Future<int> runOdroe(
     )
     ..addOption(
       'server-artifact',
-      defaultsTo: 'build/odroe/server',
-      help: 'Server executable path relative to the project.',
+      help: 'Server artifact path inside the project build directory.',
+    )
+    ..addOption(
+      'server-target',
+      allowed: ServerBuildTarget.values.map((target) => target.name),
+      defaultsTo: ServerBuildTarget.native.name,
+      help: 'Server runtime to compile.',
     )
     ..addFlag(
       'prerender',
@@ -55,7 +60,7 @@ Future<int> runOdroe(
     ..addOption(
       'prerender-output',
       defaultsTo: 'build/web',
-      help: 'Static output directory relative to the project.',
+      help: 'Static output directory inside the project build directory.',
     )
     ..addOption(
       'prerender-concurrency',
@@ -111,7 +116,10 @@ Future<int> runOdroe(
         project,
         serverOnly: command.flag('server-only'),
         buildServer: command.flag('server'),
-        serverArtifact: command.option('server-artifact')!,
+        serverTarget: ServerBuildTarget.values.byName(
+          command.option('server-target')!,
+        ),
+        serverArtifact: command.option('server-artifact'),
         prerender: command.flag('prerender'),
         prerenderOutput: command.option('prerender-output')!,
         prerenderConcurrency: _positiveInt(

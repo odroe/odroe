@@ -1,0 +1,9 @@
+import 'type_fixture.dart';
+
+void invalidTypeFixture() {
+  final table = TypeFixtureTable();
+
+  table.email.set(42);
+  table.email.set(null);
+  table.active.equals('yes');
+}

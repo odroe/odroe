@@ -1,0 +1,48 @@
+---
+title: Application
+description: Compose product capabilities with explicit modules and lifecycles.
+order: 10
+language: en
+---
+# Application
+
+`AppContext` is the smallest shared composition root. It owns explicit modules,
+typed bindings, and reverse-order disposal.
+
+## Install only product capabilities
+
+```dart
+final context = await AppContext.create(<Module>[
+  AnalyticsModule(),
+  SessionModule(),
+]);
+
+final session = context.read(sessionKey);
+await context.dispose();
+```
+
+A binding must have a typed `ContextKey`. There is no string service locator
+and no implicit global registry.
+
+## Flutter composition
+
+`App` creates one application context and exposes it to a builder.
+
+```dart
+runApp(
+  App(
+    modules: <Module>[
+      QueryModule(),
+      RouterModule(routes: routeTree),
+    ],
+    builder: (app) => Product(router: app.read(routerKey)),
+  ),
+);
+```
+
+## Request scope
+
+The server creates a fresh application context for each request. Long-lived
+resources such as connection pools belong to the server adapter; a
+request-scoped module may expose a transaction or binding-backed database
+handle and will be disposed after the response lifecycle completes.

@@ -81,17 +81,32 @@ final class IoServer {
           cancelled: cancelled.future,
         ),
       );
-      incoming.response.statusCode = response.status;
-      if (response.reason case final reason?) {
-        incoming.response.reasonPhrase = reason;
-      }
-      for (final entry in response.headers.entries) {
-        incoming.response.headers.removeAll(entry.key);
-        for (final value in entry.value) {
-          incoming.response.headers.add(entry.key, value);
+      try {
+        incoming.response.statusCode = response.status;
+        if (response.reason case final reason?) {
+          incoming.response.reasonPhrase = reason;
         }
+        for (final entry in response.headers.entries) {
+          incoming.response.headers.removeAll(entry.key);
+          for (final value in entry.value) {
+            incoming.response.headers.add(entry.key, value);
+          }
+        }
+      } on Object catch (error, stackTrace) {
+        final subscription = response.body.listen(null);
+        await subscription.cancel();
+        Error.throwWithStackTrace(error, stackTrace);
       }
-      if (incoming.method != 'HEAD') {
+      final omitBody =
+          incoming.method == 'HEAD' ||
+          response.status < 200 ||
+          response.status == HttpStatus.noContent ||
+          response.status == HttpStatus.resetContent ||
+          response.status == HttpStatus.notModified;
+      if (omitBody) {
+        final subscription = response.body.listen(null);
+        await subscription.cancel();
+      } else {
         await incoming.response.addStream(response.body);
       }
     } on Object {

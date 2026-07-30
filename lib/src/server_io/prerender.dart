@@ -44,24 +44,44 @@ final class Prerenderer {
     bool crawlLinks = true,
     Duration timeout = const Duration(seconds: 30),
   }) async {
+    if (concurrency < 1) {
+      throw ArgumentError.value(
+        concurrency,
+        'concurrency',
+        'Must be at least 1.',
+      );
+    }
     final client = _client ?? HttpClient();
     output.createSync(recursive: true);
     final root = output.absolute;
     final queue = <Uri>[];
     final seen = <String>{};
+    final outputRoutes = <String, String>{};
     void enqueue(Uri uri) {
       final normalized = _localRoute(origin, uri);
-      if (normalized == null || !seen.add(normalized.toString())) return;
+      if (normalized == null) return;
+      final route = normalized.toString();
+      if (!seen.add(route)) return;
+      final file = _outputFile(root, normalized);
+      final relative = p.relative(file.path, from: root.path);
+      final outputKey = p.normalize(relative).toLowerCase();
+      final existing = outputRoutes[outputKey];
+      if (existing != null) {
+        throw StateError(
+          'Prerender routes "$existing" and "$route" both write "$relative".',
+        );
+      }
+      outputRoutes[outputKey] = route;
       queue.add(normalized);
     }
 
-    for (final route in routes) {
-      enqueue(Uri.parse(route));
-    }
     final generated = <PrerenderedRoute>[];
     var index = 0;
 
     try {
+      for (final route in routes) {
+        enqueue(Uri.parse(route));
+      }
       while (index < queue.length) {
         final end = queue.length;
         Future<void> worker() async {
@@ -115,7 +135,7 @@ final class Prerenderer {
     final status = response.statusCode;
     final generatedRedirect = _redirectStatuses.contains(status);
     if (generatedRedirect) {
-      await response.drain<void>();
+      await response.drain<void>().timeout(timeout);
       final location = response.headers.value(HttpHeaders.locationHeader);
       if (location == null) {
         throw HttpException('Redirect has no location.', uri: target);
@@ -164,7 +184,9 @@ final class Prerenderer {
     if (crawlLinks) {
       final html = utf8.decode(bytes, allowMalformed: true);
       for (final link in _extractLinks(html)) {
-        enqueue(route.resolveUri(link));
+        final discovered = route.resolveUri(link);
+        final extension = p.extension(discovered.path).toLowerCase();
+        if (extension.isEmpty || extension == '.html') enqueue(discovered);
       }
     }
     started.stop();
@@ -185,16 +207,15 @@ final class Prerenderer {
         absolute.query.isNotEmpty) {
       return null;
     }
-    final path = absolute.path.length > 1 && absolute.path.endsWith('/')
-        ? absolute.path.substring(0, absolute.path.length - 1)
-        : absolute.path;
+    var path = absolute.path;
+    while (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
     final route = Uri(path: path);
     if (!route.hasAbsolutePath ||
         route.pathSegments.any((segment) => segment == '..')) {
       return null;
     }
-    final extension = p.extension(route.path).toLowerCase();
-    if (extension.isNotEmpty && extension != '.html') return null;
     return route;
   }
 

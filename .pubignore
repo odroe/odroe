@@ -1,0 +1,7 @@
+.dart_tool/
+.pub/
+build/
+pubspec.lock
+sites/
+test/
+benchmark/

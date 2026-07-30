@@ -1,0 +1,46 @@
+---
+title: Routing
+description: Typed filesystem routes shared by client, server, and documents.
+order: 11
+language: en
+---
+# Routing
+
+The filesystem provides structure. `route.dart` provides the typed contract
+and may own a platform-neutral Document binding. Platform files attach only
+the behavior they own.
+
+```text
+lib/routes/posts/[postId]/
+├── route.dart
+├── page.dart
+└── server.dart
+```
+
+## Shared contract
+
+```dart
+typedef Params = ({int postId});
+typedef Search = ({bool preview});
+
+final route = AppRoute<Params, Search, NoData>(
+  params: const PathParams<Params>.schema(),
+  search: const SearchParams<Search>.schema(
+    defaults: (preview: false),
+  ),
+);
+```
+
+The compiler validates record field types and emits a client-safe tree plus a
+server-only tree. It does not use annotations, parts, registries, or
+`build_runner`.
+
+## Platform behavior
+
+- `page.dart` attaches a Flutter page.
+- `shell.dart` attaches a Flutter navigation shell.
+- `server.dart` attaches loaders, HTTP handlers, and server functions.
+- `route.dart` may bind a Document directly through `document.dart`.
+
+Generated route references encode params and search values through the same
+typed codec used for matching.

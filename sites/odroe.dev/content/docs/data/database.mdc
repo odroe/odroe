@@ -1,0 +1,113 @@
+---
+title: Database
+description: The honest runtime matrix and typed SQL boundary for Odroe data.
+order: 30
+language: en
+---
+# Database
+
+Odroe starts with a small typed SQL transport instead of pretending one driver
+behaves identically on every runtime.
+
+```dart
+abstract interface class SqlDatabase {
+  Future<List<T>> query<T>(
+    BoundSql statement,
+    T Function(SqlRow row) decode,
+  );
+
+  Future<SqlWriteResult> execute(BoundSql statement);
+  Future<List<SqlWriteResult>> atomicWrite(
+    List<BoundSql> statements,
+  );
+}
+```
+
+`TransactionalSqlDatabase` is a separate capability. Edge databases that only
+support atomic batches do not claim interactive transactions.
+
+## Typed queries
+
+```dart
+final class Posts extends SqlTable<String> {
+  Posts() : super('posts');
+
+  late final id = column<int>('id', sqlInt);
+  late final title = column<String>('title', sqlText);
+
+  @override
+  late final projection = SqlProjection.column(title);
+}
+
+final posts = Posts();
+const sql = SqlQueries(SqlDialect.postgres);
+
+final titles = await sql
+    .selectTable(posts, where: posts.id.equals(42))
+    .all(database);
+
+await sql.insert(
+  posts,
+  <SqlAssignment>[posts.title.set('Hello')],
+).execute(database);
+
+await sql.updateAll(
+  posts,
+  <SqlAssignment>[posts.title.set('Archived')],
+  confirm: allRows,
+).execute(database);
+```
+
+The dialect is explicit. `posts.title.set(42)` is an analyzer error.
+`updateAll` and `deleteAll` also require the `allRows` confirmation token.
+
+## BoundSql escape hatch
+
+Use `BoundSql.parts` for SQL outside the typed single-table surface.
+
+```dart
+final statement = BoundSql.parts(
+  <String>['SELECT "title" FROM "posts" WHERE "id" = ', ''],
+  <SqlValue>[sqlInt.encode(42)],
+  kind: SqlStatementKind.rowReturning,
+);
+final titles = await database.query(
+  statement,
+  (row) => row.read(0, sqlText),
+);
+```
+
+Fragments are trusted source. Values are bound. Drivers insert native
+placeholders between fragments and never scan or rewrite SQL text.
+
+Top-level calls may leave handwritten SQL as `unknown`, but a wrong terminal
+may then be detected only after the database executes it. Declare the kind
+when it is known. `atomicWrite` and transaction callbacks require an explicit
+`write` or `rowReturning` kind, so transaction control and implicitly
+committing DDL stay outside framework-managed transactions.
+
+D1 additionally requires `rowReturning` on every `query` call because its raw
+result cannot distinguish an empty query from a write. `SqlQueries` supplies
+that marker automatically.
+
+## Runtime matrix
+
+| Entrypoint | Runtime | Status | Current boundary |
+| --- | --- | --- | --- |
+| `database_sqlite.dart` | Native SQLite | Verified | Real CRUD, `RETURNING`, batches, and transactions |
+| `database_postgres.dart` | Dart VM + PostgreSQL | Verified | Real driver contract suite |
+| `database_d1.dart` | Cloudflare D1 | Preview | Verified with local Wrangler/Workerd; atomic batches, no interactive transaction |
+| `database_mysql.dart` | Dart VM + MySQL/MariaDB | Preview | Verified with real MySQL 8.4 and MariaDB 11.8 |
+| RPC | Flutter Web | Available | Calls a server-owned database; no browser SQL driver |
+
+The MySQL/MariaDB driver uses one serialized connection. It does not support
+nested transactions, multiple result sets, portable `TIME` decoding, or
+`RETURNING` through `SqlDialect.mysql`.
+
+D1 has not been verified in a remote Cloudflare deployment.
+
+## Schema and migrations
+
+Keep migrations as reviewable `.sql` files. D1 uses Wrangler migrations.
+Server databases use their native migration path. Odroe does not add code
+generation or a migration abstraction.

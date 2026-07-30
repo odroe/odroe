@@ -1,0 +1,47 @@
+---
+title: Server
+description: Typed routes and RPC behind an adapter-neutral HTTP contract.
+order: 40
+language: en
+---
+# Server
+
+`Server` matches typed routes, runs request modules and middleware, loads route
+data, and returns an adapter-neutral `ServerResponse`.
+
+```dart
+Server createServer() => generated.createServer(
+  modules: () => <Module>[
+    SessionModule(),
+  ],
+);
+```
+
+## HTTP route
+
+```dart
+final route = definition.route.server(
+  handlers: <HttpMethod, ServerRouteHandler<Params, NoSearch>>{
+    HttpMethod.get: (context) => ServerResponse.json(
+      <String, Object?>{'id': context.params.id},
+    ),
+  },
+);
+```
+
+## Typed server function
+
+```dart
+final updatePost = ServerFunction<UpdatePost, Post>(
+  handler: (context) => repository.update(context.data),
+);
+```
+
+The generated client and server manifest agree on the function identifier and
+wire types. Cross-origin requests, payload limits, streaming frames, and
+request cancellation stay visible in the transport.
+
+## Runtime boundary
+
+`server_io.dart` adapts the contract to `dart:io`. Fetch-style runtimes use a
+separate adapter so shared server code does not import JavaScript interop.

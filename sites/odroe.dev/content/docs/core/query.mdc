@@ -1,0 +1,33 @@
+---
+title: Query
+description: Cache asynchronous state without coupling it to a UI runtime.
+order: 12
+language: en
+---
+# Query
+
+Odroe Query owns asynchronous cache state. It is separate from the database
+layer: a query may call HTTP, RPC, local storage, or a typed SQL driver.
+
+## Platform-neutral client
+
+```dart
+final client = QueryClient();
+final post = await client.fetchQuery(
+  QueryOptions(
+    key: QueryKey(<Object?>['post', postId]),
+    query: (_) => repository.read(postId),
+  ),
+);
+```
+
+Queries, infinite queries, and mutations share cancellation, invalidation, and
+observer lifecycles.
+
+## Flutter
+
+Install `QueryModule` from `query_flutter.dart`, then use focused builders for
+query, infinite-query, or mutation state.
+
+Persistence is an explicit adapter. Installing Query does not silently choose
+disk storage or a network transport.

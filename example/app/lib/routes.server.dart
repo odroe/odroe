@@ -133,6 +133,7 @@ final serverFunctions = <String, ServerFunctionBinding>{
 /// Creates the application server from generated routes.
 Server createServer({
   Iterable<Module> Function()? modules,
+  InvocationModuleFactory? invocationModules,
   Iterable<Middleware> middleware = const <Middleware>[],
   Serializer? serializer,
   Renderer? renderer,
@@ -140,6 +141,7 @@ Server createServer({
   routes: serverRouteTree,
   functions: serverFunctions,
   modules: modules,
+  invocationModules: invocationModules,
   flutterRoutes: <RouteNode>[
     _serverRouteRoot,
     _serverRouteAccountSettings,

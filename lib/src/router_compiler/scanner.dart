@@ -582,7 +582,7 @@ final class RouteScanner {
   }
 
   bool _validDirectoryName(String name) =>
-      RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(name) ||
+      RegExp(r'^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$').hasMatch(name) ||
       RegExp(r'^\[[A-Za-z_][A-Za-z0-9_]*\]$').hasMatch(name) ||
       RegExp(r'^\[\.\.\.[A-Za-z_][A-Za-z0-9_]*\]$').hasMatch(name) ||
       RegExp(r'^\([A-Za-z_][A-Za-z0-9_-]*\)$').hasMatch(name);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:odroe/document.dart';
@@ -59,5 +60,63 @@ void main() {
         isNot(contains('secret')),
       );
     }
+  });
+
+  test('IO adapter cancels a body omitted by HTTP semantics', () async {
+    final cancelled = Completer<void>();
+    final server = await IoServer.bind((request) async {
+      Stream<List<int>> body() async* {
+        try {
+          yield <int>[1, 2, 3];
+        } finally {
+          cancelled.complete();
+        }
+      }
+
+      return ServerResponse(body: body());
+    }, port: 0);
+    addTearDown(server.close);
+    final client = HttpClient();
+    addTearDown(client.close);
+
+    final request = await client.openUrl(
+      'HEAD',
+      Uri.parse('http://127.0.0.1:${server.port}/'),
+    );
+    final response = await request.close();
+
+    expect(response.statusCode, HttpStatus.ok);
+    await response.drain<void>();
+    await cancelled.future.timeout(const Duration(seconds: 2));
+  });
+
+  test('IO adapter cancels a body when response metadata is invalid', () async {
+    final cancelled = Completer<void>();
+    final server = await IoServer.bind((request) async {
+      Stream<List<int>> body() async* {
+        try {
+          yield <int>[1, 2, 3];
+        } finally {
+          cancelled.complete();
+        }
+      }
+
+      return ServerResponse(
+        headers: Headers()..set('invalid\nname', 'value'),
+        body: body(),
+      );
+    }, port: 0);
+    addTearDown(server.close);
+    final client = HttpClient();
+    addTearDown(client.close);
+
+    final response = await client.getUrl(
+      Uri.parse('http://127.0.0.1:${server.port}/'),
+    );
+    final received = await response.close();
+
+    expect(received.statusCode, HttpStatus.internalServerError);
+    await received.drain<void>();
+    await cancelled.future.timeout(const Duration(seconds: 2));
   });
 }

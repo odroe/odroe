@@ -1,0 +1,51 @@
+---
+title: Overview
+description: The product model and current capabilities of Odroe.
+order: 1
+language: en
+---
+# One package, explicit layers
+
+Odroe is a composable full-stack framework for Dart and Flutter products. It
+keeps the application model shared, then places platform-specific code at the
+runtime boundary.
+
+```dart
+App(
+  modules: <Module>[
+    QueryModule(),
+    RpcModule.http(),
+    DocumentModule(),
+    RouterModule(routes: routeTree),
+  ],
+  builder: (app) => Product(router: app.read(routerKey)),
+)
+```
+
+## What is available
+
+- A small application container with deterministic module disposal.
+- Typed filesystem routing without annotations or `build_runner`.
+- Query and mutation state for Dart and Flutter.
+- Typed RPC and adapter-neutral HTTP server contracts.
+- Semantic Document rendering, SSR, SSG, and Flutter Web handoff.
+- Renderer-neutral MDC and filesystem-backed Press collections.
+- Typed single-table SQL plus explicit SQLite, PostgreSQL, MySQL/MariaDB, and
+  D1 drivers.
+- Dart VM server artifacts for local hosts and containers.
+
+## What stays explicit
+
+Odroe does not install a global database, transport, router, or cache. Import
+the product entrypoint you need and install only the corresponding module.
+
+Runtime support is documented as a matrix, not implied by a package name.
+SQLite and PostgreSQL are verified. D1 and MySQL/MariaDB remain Preview with
+documented limits. Edge Fetch is verified locally with Workerd, not remotely
+deployed.
+
+## Next
+
+Start with [Getting started](/docs/getting-started), then read the
+[support matrix](/docs/data/database#runtime-matrix) before selecting a
+database runtime.

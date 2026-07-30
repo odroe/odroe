@@ -61,6 +61,23 @@ void main() {
       contains('"location":"/posts/42?preview=true"'),
       reason: '$lastError\n$output',
     );
+    final bootstrap = await File(
+      'example/app/.dart_tool/odroe/server.dart',
+    ).readAsString();
+    expect(
+      bootstrap,
+      contains(
+        "Platform.environment['ODROE_HOST'] ??\n"
+        "      (platformPort == null ? '127.0.0.1' : '0.0.0.0')",
+      ),
+    );
+    expect(
+      bootstrap,
+      contains(
+        "Platform.environment['ODROE_PORT'] ??\n"
+        "        platformPort ??",
+      ),
+    );
 
     final id = Uri.encodeComponent(
       'lib/routes/posts/[postId]/server.dart#readTitle',

@@ -302,7 +302,7 @@ final class RouteNode {
         .replaceAll(']', '')
         .replaceAll('(', '')
         .replaceAll(')', '')
-        .split(RegExp(r'[-_]'))
+        .split(RegExp(r'[^A-Za-z0-9]+'))
         .where((part) => part.isNotEmpty)
         .map(_upperFirst)
         .join();

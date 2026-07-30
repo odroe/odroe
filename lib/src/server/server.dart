@@ -11,12 +11,17 @@ import '../rpc/function.dart';
 import '../rpc/serializer.dart';
 import 'context.dart';
 import 'http.dart';
+import 'invocation.dart';
 import 'middleware.dart';
 import 'render.dart';
 import 'route.dart';
 
 /// Handles one platform-neutral server request.
 typedef ServerHandler = Future<ServerResponse> Function(ServerRequest request);
+
+/// Creates request modules from adapter-owned invocation state.
+typedef InvocationModuleFactory =
+    Iterable<Module> Function(ServerInvocation invocation);
 
 /// Adapter-neutral runtime for typed routes and server functions.
 final class Server {
@@ -27,6 +32,7 @@ final class Server {
         const <String, ServerFunctionBinding>{},
     Iterable<Middleware> middleware = const <Middleware>[],
     Iterable<Module> Function()? modules,
+    this.invocationModules,
     Iterable<RouteNode> flutterRoutes = const <RouteNode>[],
     Serializer? serializer,
     this.renderer,
@@ -59,6 +65,12 @@ final class Server {
   /// Creates explicitly selected request-scoped modules.
   final Iterable<Module> Function() modules;
 
+  /// Creates additional modules from adapter-owned invocation state.
+  ///
+  /// These modules are installed only by [handleInvocation]. The binding-free
+  /// invocation created by [handle] installs the base [modules] only.
+  final InvocationModuleFactory? invocationModules;
+
   /// Serializer shared by server functions and renderers.
   final Serializer serializer;
 
@@ -84,10 +96,62 @@ final class Server {
   /// A handler suitable for platform adapters.
   ServerHandler get handler => handle;
 
-  /// Handles one request and disposes its modules after the body is consumed.
-  Future<ServerResponse> handle(ServerRequest request) async {
-    final app = await AppContext.create(modules());
-    final context = RequestContext(request: request, app: app);
+  /// An invocation-aware handler suitable for edge adapters.
+  ServerInvocationHandler get invocationHandler => handleInvocation;
+
+  /// Handles one request with a binding-free invocation.
+  ///
+  /// Background work registered through [RequestContext.invocation] keeps the
+  /// base request modules alive. Adapter-only [invocationModules] are omitted.
+  Future<ServerResponse> handle(ServerRequest request) => _handleInvocation(
+    request,
+    ServerInvocation(),
+    includeInvocationModules: false,
+  );
+
+  /// Handles one invocation and disposes its modules after all work completes.
+  Future<ServerResponse> handleInvocation(
+    ServerRequest request,
+    ServerInvocation invocation,
+  ) => _handleInvocation(request, invocation, includeInvocationModules: true);
+
+  Future<ServerResponse> _handleInvocation(
+    ServerRequest request,
+    ServerInvocation invocation, {
+    required bool includeInvocationModules,
+  }) async {
+    startServerInvocation(invocation);
+    late final AppContext app;
+    try {
+      final baseModules = modules();
+      final createInvocationModules = includeInvocationModules
+          ? invocationModules
+          : null;
+      final installedModules = createInvocationModules == null
+          ? baseModules
+          : baseModules.followedBy(createInvocationModules(invocation));
+      app = await AppContext.create(installedModules);
+    } on Object catch (error, stackTrace) {
+      finishServerInvocation(
+        invocation,
+        responseDone: Future<void>.value(),
+        dispose: () {},
+      );
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    final context = RequestContext(
+      request: request,
+      app: app,
+      invocation: invocation,
+    );
+    final response = await _dispatch(request, context);
+    return _withInvocationCleanup(response, app, request, invocation);
+  }
+
+  Future<ServerResponse> _dispatch(
+    ServerRequest request,
+    RequestContext context,
+  ) async {
     final rpcId = _rpcId(request.uri.path);
     late final ServerResponse response;
     try {
@@ -148,7 +212,7 @@ final class Server {
         stackTrace: stackTrace,
       );
     }
-    return _withCleanup(response, app, request);
+    return response;
   }
 
   ServerResponse _failure(
@@ -294,13 +358,6 @@ final class Server {
         routeMiddleware,
         () => routeResponse,
       );
-      if (context.request.method == HttpMethod.head) {
-        return ServerResponse(
-          status: response.status,
-          reason: response.reason,
-          headers: response.headers,
-        );
-      }
       return response;
     }
     if (context.request.method != HttpMethod.get &&
@@ -362,29 +419,48 @@ final class Server {
       ? ServerResponse.json(frame, status: status)
       : ServerResponse.redirect(location, status: status);
 
-  ServerResponse _withCleanup(
+  ServerResponse _withInvocationCleanup(
     ServerResponse response,
     AppContext app,
     ServerRequest request,
+    ServerInvocation invocation,
   ) {
-    if (request.method == HttpMethod.head) {
-      unawaited(app.dispose());
+    final omitBody =
+        request.method == HttpMethod.head ||
+        response.status < 200 ||
+        response.status == 204 ||
+        response.status == 205 ||
+        response.status == 304;
+    if (omitBody) {
+      final responseDone = _cancelResponseBody(response.body);
+      finishServerInvocation(
+        invocation,
+        responseDone: responseDone,
+        dispose: app.dispose,
+      );
       return ServerResponse(
         status: response.status,
         reason: response.reason,
         headers: response.headers,
       );
     }
+
+    final responseDone = Completer<void>();
     Stream<List<int>> body() async* {
       try {
         await for (final chunk in response.body) {
           yield chunk;
         }
       } finally {
-        await app.dispose();
+        if (!responseDone.isCompleted) responseDone.complete();
       }
     }
 
+    finishServerInvocation(
+      invocation,
+      responseDone: responseDone.future,
+      dispose: app.dispose,
+    );
     return ServerResponse(
       status: response.status,
       reason: response.reason,
@@ -392,6 +468,11 @@ final class Server {
       body: body(),
     );
   }
+}
+
+Future<void> _cancelResponseBody(Stream<List<int>> body) async {
+  final subscription = body.listen(null);
+  await subscription.cancel();
 }
 
 Iterable<Module> _emptyModules() => const <Module>[];
