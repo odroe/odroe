@@ -26,7 +26,9 @@ HtmlElement _hero() => element(
         element(
           'p',
           attributes: const <String, String?>{'class': 'eyebrow'},
-          children: <HtmlNode>[text('The product-first Dart framework')],
+          children: <HtmlNode>[
+            text('The product-first Dart framework · Source preview'),
+          ],
         ),
         element(
           'h1',
@@ -77,7 +79,7 @@ HtmlElement _hero() => element(
             _heroLayer('Web', 'Semantic', 'globe', green: true),
             _heroLayer('Server', 'Typed', 'server'),
             _heroLayer('Data', 'Typed SQL', 'database'),
-            _heroLayer('Edge', 'Deploy', 'cloud'),
+            _heroLayer('Edge', 'Cloudflare preview', 'cloud'),
           ],
         ),
       ],
@@ -206,7 +208,7 @@ HtmlElement _architecture() => element(
         _layer('Web', 'Semantic Web', 'globe', green: true),
         _layer('Server', 'Typed Routes & RPC', 'server'),
         _layer('Data', 'Typed Queries', 'database'),
-        _layer('Edge', 'Deploy', 'cloud'),
+        _layer('Edge', 'Cloudflare Preview', 'cloud'),
       ],
     ),
   ],
@@ -316,14 +318,14 @@ HtmlElement _output() => element(
         element(
           'h2',
           attributes: const <String, String?>{'id': 'output-title'},
-          children: <HtmlNode>[text('Small surface. Serious output.')],
+          children: <HtmlNode>[text('Small surface. Explicit targets.')],
         ),
         element(
           'p',
           children: <HtmlNode>[
             text(
-              'Write the product once. Odroe emits the right artifact for '
-              'each runtime.',
+              'Keep routes and contracts shared, then explicitly choose a '
+              'Flutter target, native server, or Preview Cloudflare Worker.',
             ),
           ],
         ),
@@ -356,14 +358,14 @@ HtmlElement _output() => element(
       children: <HtmlNode>[
         _artifact(
           'Static',
-          'Available',
+          'Verified locally',
           'Semantic HTML + Flutter Web',
           'Prerender document routes and copy public assets.',
           'document',
         ),
         _artifact(
           'Native',
-          'Available',
+          'Verified locally',
           'Dart server executable',
           'Run the same typed server on a VM or container.',
           'server',

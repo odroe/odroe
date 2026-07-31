@@ -30,7 +30,7 @@ RouteDocument buildSiteDocument({required bool home}) => RouteDocument(
     const DocumentMeta.property(
       'og:image:alt',
       'Odroe: One Dart package. Every layer — Flutter, Semantic Web, '
-          'Typed Server, Data, and Edge.',
+          'Typed Server, Data, and Cloudflare Preview.',
     ),
     const DocumentMeta.name('twitter:card', 'summary_large_image'),
     if (home) ...const <DocumentMeta>[

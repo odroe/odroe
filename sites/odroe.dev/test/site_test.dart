@@ -86,7 +86,7 @@ void main() {
         expect(
           ogImageAlt,
           'Odroe: One Dart package. Every layer — Flutter, Semantic Web, '
-          'Typed Server, Data, and Edge.',
+          'Typed Server, Data, and Cloudflare Preview.',
           reason: location.path,
         );
       }
@@ -118,6 +118,13 @@ void main() {
       expect(body, isNot(contains('"aggregateRating"')));
       expect(body, isNot(contains('"offers"')));
       expect(body, contains('builder: (app) =&gt;'));
+      expect(body, contains('Source preview'));
+      expect(body, contains('Cloudflare preview'));
+      expect(body, contains('Cloudflare Preview'));
+      expect(body, contains('Verified locally'));
+      expect(body, contains('explicitly choose a Flutter target'));
+      expect(body, isNot(contains('Write the product once')));
+      expect(body, isNot(contains('each runtime')));
       expect(body, isNot(contains('data models consistent')));
       expect(body, isNot(contains('Use only what you import')));
     },
@@ -125,10 +132,13 @@ void main() {
 
   test('social card is a 1200x630 PNG', () async {
     final bytes = await File('public/social-card.png').readAsBytes();
+    final source = await File('public/social-card.svg').readAsString();
 
     expect(bytes.take(8), <int>[137, 80, 78, 71, 13, 10, 26, 10]);
     expect(_uint32(bytes, 16), 1200);
     expect(_uint32(bytes, 20), 630);
+    expect(source, contains('Data · Cloudflare Preview'));
+    expect(source, isNot(contains('Data · Edge')));
   });
 
   test('getting started closes the Flutter and Document run paths', () async {
