@@ -13,6 +13,8 @@ import 'renderer.dart';
 import 'route.dart';
 
 /// Renders semantic HTML and optional Flutter hydration state.
+///
+/// Query handoff data is encoded with the active [RenderContext.serializer].
 final class DocumentRenderer {
   /// Creates a document renderer.
   const DocumentRenderer({this.flutterBootstrap, this.baseHref});
@@ -32,7 +34,9 @@ final class DocumentRenderer {
 
     if (accept.prefersJson) {
       final query = context.request.maybe(queryClientKey);
-      final state = query == null ? null : _dehydrate(query);
+      final state = query == null
+          ? null
+          : _dehydrate(query, context.serializer.encode);
       final payload = _payload(context, state);
       if (state == null ||
           !state.queries.any((query) => query.pending != null)) {
@@ -62,7 +66,9 @@ final class DocumentRenderer {
     }
 
     final query = context.request.maybe(queryClientKey);
-    final state = query == null ? null : _dehydrate(query);
+    final state = query == null
+        ? null
+        : _dehydrate(query, context.serializer.encode);
     final payload = _payload(context, state);
     final initial = _escapeScript(jsonEncode(payload));
     return ServerResponse(
@@ -81,8 +87,26 @@ final class DocumentRenderer {
     );
   }
 
-  DehydratedState _dehydrate(QueryClient query) =>
-      dehydrate(query, includePending: true);
+  DehydratedState _dehydrate(
+    QueryClient query,
+    QuerySerializeData serializeData,
+  ) {
+    try {
+      return dehydrate(
+        query,
+        includePending: true,
+        serializeData: (data) {
+          try {
+            return serializeData(data);
+          } on Object catch (error, stackTrace) {
+            throw _QueryHandoffSerializationError(error, stackTrace);
+          }
+        },
+      );
+    } on _QueryHandoffSerializationError catch (failure) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+  }
 
   Map<String, Object?> _payload(
     RenderContext context,
@@ -149,14 +173,23 @@ final class DocumentRenderer {
 
     late final StreamController<Map<String, Object?>> controller;
     var remaining = pending.length;
+    var closed = false;
+    void close() {
+      if (closed) return;
+      closed = true;
+      controller.close();
+    }
+
     void completeOne() {
-      if (--remaining == 0) controller.close();
+      if (closed) return;
+      if (--remaining == 0) close();
     }
 
     controller = StreamController<Map<String, Object?>>(sync: true);
     for (final item in pending) {
       item.pending!.then<void>(
         (data) {
+          if (closed) return;
           final now = query.scheduler.now();
           controller.add(<String, Object?>{
             'version': 1,
@@ -179,7 +212,13 @@ final class DocumentRenderer {
           });
           completeOne();
         },
-        onError: (Object _, StackTrace _) {
+        onError: (Object error, StackTrace stackTrace) {
+          if (closed) return;
+          if (error is _QueryHandoffSerializationError) {
+            controller.addError(error.error, error.stackTrace);
+            close();
+            return;
+          }
           final now = query.scheduler.now();
           controller.add(<String, Object?>{
             'version': 1,
@@ -208,6 +247,13 @@ final class DocumentRenderer {
     }
     return controller.stream;
   }
+}
+
+final class _QueryHandoffSerializationError implements Exception {
+  const _QueryHandoffSerializationError(this.error, this.stackTrace);
+
+  final Object error;
+  final StackTrace stackTrace;
 }
 
 String _escapeScript(String value) => value.replaceAllMapped(

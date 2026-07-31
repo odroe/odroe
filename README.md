@@ -105,6 +105,12 @@ void main() {
 
 删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
 
+Document SSR 会用服务端 `Server` 的 `Serializer` 编码已完成与 pending 的
+Query 数据，再由 Flutter 的 `DocumentModule` 解码。默认配置可往返
+`DateTime`、`Duration`、`Uri`、`BigInt` 与 `Uint8List`。自定义 wire 类型应从
+同一个 adapter 配置分别创建服务端与客户端 serializer，并把客户端实例同时交给
+`RpcModule.http` 与 `DocumentModule`；Odroe 不依赖隐式全局 serializer。
+
 `ContextKey`、`RouteCapability` 与 `RequestKey` 按实例身份匹配，不按名称
 匹配。自定义 key 应保存为一个顶层 `final`，并在提供、读取或附加能力时复用
 同一实例；名称只用于诊断。把旧的 `const ContextKey(...)`、

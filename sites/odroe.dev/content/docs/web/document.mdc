@@ -31,7 +31,9 @@ final route =
 ```
 
 When a route also has a Flutter page, the server emits readable HTML and
-handoff state before Flutter takes over.
+handoff state before Flutter takes over. Completed and pending Query values use
+the same explicit serializer contract; see
+[Query server handoff](/docs/core/query#server-handoff).
 
 ## Press
 

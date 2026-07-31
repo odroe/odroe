@@ -289,6 +289,19 @@ void main() {
     );
     expect(source, contains('removal of the last observer'));
     expect(source, contains('Query keeps cancellation out of error state'));
+    expect(source, contains('completed and pending Query data'));
+    expect(source, contains("through the `Server`'s `Serializer`"));
+    expect(source, contains('`DocumentModule` uses its serializer'));
+    expect(source, contains('`DateTime`, `Duration`, `Uri`'));
+    expect(source, contains('equivalent adapter sets'));
+    expect(
+      source,
+      contains(
+        'modules: () => <QueryClientModule>[QueryClientModule.server()]',
+      ),
+    );
+    expect(source, contains('RpcModule.http(serializer: serializer)'));
+    expect(source, contains('DocumentModule(serializer: serializer)'));
   });
 
   test('Database docs preserve the typed dialect boundary', () async {

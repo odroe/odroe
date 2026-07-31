@@ -9,6 +9,9 @@
   unpinned unless `dialect` is supplied.
 - Add request invocation lifetimes and a Fetch adapter for local
   Cloudflare Workers builds.
+- Serialize completed and pending Query handoff state through the application
+  `Serializer`, so built-in and custom values round-trip through Document SSR
+  instead of failing during JSON encoding.
 - Add optional stable `ServerFunction.id` wire identifiers, reject empty,
   non-literal, and duplicate IDs in file routes, and preserve the existing
   path-and-variable fallback when an ID is omitted.

@@ -15,6 +15,9 @@ import 'handoff.dart';
 /// Installs server-rendered document handoff into a Flutter application.
 final class DocumentModule extends Module {
   /// Creates a document handoff module.
+  ///
+  /// Custom [serializer] adapters must match the server serializer used to
+  /// render this application's handoff state.
   DocumentModule({Serializer? serializer})
     : handoff = Handoff(serializer: serializer);
 

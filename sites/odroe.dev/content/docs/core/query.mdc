@@ -25,6 +25,42 @@ Queries and infinite queries participate in `QueryClient` cancellation and
 invalidation. Mutations keep separate cache, observer, scope, and retry
 lifecycles; use mutation callbacks to invalidate related queries explicitly.
 
+## Server handoff
+
+When Query and Document share a server request, Document serializes completed
+and pending Query data through the `Server`'s `Serializer`. The Flutter
+`DocumentModule` uses its serializer to restore the same values before the app
+takes over. The default configuration supports `DateTime`, `Duration`, `Uri`,
+`BigInt`, and `Uint8List` in addition to JSON values.
+
+For a custom wire type, keep one small serializer factory in shared source.
+Use equivalent adapter sets on both runtime boundaries; no mutable global
+serializer is required.
+
+```dart
+Serializer createSerializer() => Serializer(
+  adapters: <SerializationAdapter<dynamic>>[MoneyAdapter()],
+);
+
+// lib/server.dart
+Server createServer() => generated.createServer(
+  modules: () => <QueryClientModule>[QueryClientModule.server()],
+  serializer: createSerializer(),
+);
+
+// lib/main.dart
+final serializer = createSerializer();
+final modules = <Module>[
+  QueryModule(),
+  RpcModule.http(serializer: serializer),
+  DocumentModule(serializer: serializer),
+];
+```
+
+The same serializer contract covers the initial handoff and later streamed
+Query frames. A custom tag available on only one side is rejected instead of
+silently changing the value type.
+
 ## Flutter
 
 Install `QueryModule` from `query_flutter.dart`, then use focused builders for
