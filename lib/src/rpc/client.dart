@@ -56,6 +56,9 @@ abstract interface class RpcTransport {
   Future<ServerResponse> send(ServerRequest request);
 }
 
+/// Creates application-owned headers immediately before one RPC request.
+typedef RpcHeadersProvider = FutureOr<Headers> Function();
+
 /// Typed client for generated server-function references.
 final class RpcClient {
   /// Creates a client for one Odroe server origin.
@@ -63,6 +66,7 @@ final class RpcClient {
     required this.baseUri,
     required this.transport,
     Serializer? serializer,
+    this.headersProvider,
     this.functionPath = '/__odroe/functions',
   }) : serializer = serializer ?? Serializer();
 
@@ -75,6 +79,11 @@ final class RpcClient {
   /// Serializer used for request and response values.
   final Serializer serializer;
 
+  /// Creates fresh application headers for every value or stream request.
+  ///
+  /// Odroe copies the result before applying its protocol-owned headers.
+  final RpcHeadersProvider? headersProvider;
+
   /// URL prefix for server-function endpoints.
   final String functionPath;
 
@@ -84,6 +93,13 @@ final class RpcClient {
     if (O == ServerResponse) return response as O;
     final contentType = response.headers.value('content-type') ?? '';
     if (contentType.startsWith('application/x-ndjson')) {
+      await _cancelBody(response.body);
+      if (!_isSuccessful(response.status)) {
+        _invalidResponse(
+          response.status,
+          'The server returned a stream for a failed value request.',
+        );
+      }
       throw const RpcProtocolException(
         'The server returned a stream for a value function.',
       );
@@ -108,29 +124,52 @@ final class RpcClient {
         'The server returned one value for a streaming function.',
       );
     }
+    if (!_isSuccessful(response.status)) {
+      await _cancelBody(response.body);
+      _invalidResponse(
+        response.status,
+        'The server returned a stream for a failed stream request.',
+      );
+    }
     return response.body
         .transform(utf8.decoder)
+        .handleError(
+          (Object _) => _invalidResponse(
+            response.status,
+            'The server returned invalid RPC stream text.',
+          ),
+          test: (error) => error is FormatException,
+        )
         .transform(const LineSplitter())
         .where((line) => line.isNotEmpty)
         .map<dynamic>((line) {
-          final frame = Map<String, Object?>.from(jsonDecode(line) as Map);
-          if (frame['type'] == 'error') {
-            throw RemoteServerException(
-              frame['message'] as String? ?? 'Server stream failed.',
-              status: response.status,
-            );
+          final frame = _parseFrame(line, response.status);
+          switch (frame['type']) {
+            case 'data':
+              final value = serializer.decode(frame['data']);
+              return function.decodeOutput?.call(value) ?? value;
+            case 'error':
+              _throwRemoteError(
+                frame,
+                response.status,
+                'Server stream failed.',
+              );
+            default:
+              _invalidResponse(
+                response.status,
+                'The server returned an unknown RPC stream frame.',
+              );
           }
-          final value = serializer.decode(frame['data']);
-          return function.decodeOutput?.call(value) ?? value;
         })
         .cast<T>();
   }
 
-  Future<ServerResponse> _send<I>(String id, HttpMethod method, I data) {
+  Future<ServerResponse> _send<I>(String id, HttpMethod method, I data) async {
     final payload = serializer.encodeJson(<String, Object?>{
       'data': data is NoServerInput ? null : data,
     });
     final path = '$functionPath/${Uri.encodeComponent(id)}';
+    final headers = _rpcHeaders(baseUri, await headersProvider?.call());
     if (method == HttpMethod.get) {
       return transport.send(
         ServerRequest.bytes(
@@ -138,26 +177,64 @@ final class RpcClient {
           uri: baseUri
               .resolve(path)
               .replace(queryParameters: <String, String>{'payload': payload}),
-          headers: _rpcHeaders(baseUri),
+          headers: headers,
         ),
       );
     }
+    headers.set('content-type', 'application/json; charset=utf-8');
     return transport.send(
       ServerRequest.bytes(
         method: method,
         uri: baseUri.resolve(path),
-        headers: _rpcHeaders(baseUri)
-          ..set('content-type', 'application/json; charset=utf-8'),
+        headers: headers,
         body: utf8.encode(payload),
       ),
     );
   }
 
   Future<Map<String, Object?>> _readFrame(ServerResponse response) async {
-    final text = await response.readText();
-    return text.isEmpty
-        ? <String, Object?>{'type': 'data', 'data': null}
-        : Map<String, Object?>.from(jsonDecode(text) as Map);
+    late final String text;
+    try {
+      text = await response.readText();
+    } on FormatException {
+      _invalidResponse(
+        response.status,
+        'The server returned invalid RPC text.',
+      );
+    }
+    if (text.isEmpty) {
+      if (_isSuccessful(response.status)) {
+        return <String, Object?>{'type': 'data', 'data': null};
+      }
+      _invalidResponse(
+        response.status,
+        'The server returned an empty RPC response.',
+      );
+    }
+    return _parseFrame(text, response.status);
+  }
+
+  Map<String, Object?> _parseFrame(String text, int status) {
+    late final Object? decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException {
+      _invalidResponse(status, 'The server returned malformed RPC JSON.');
+    }
+    if (decoded is! Map) {
+      _invalidResponse(status, 'The server returned a non-object RPC frame.');
+    }
+    return Map<String, Object?>.from(decoded);
+  }
+
+  Never _invalidResponse(int status, String protocolMessage) {
+    if (!_isSuccessful(status)) {
+      throw RemoteServerException(
+        'The server returned HTTP $status without an RPC error frame.',
+        status: status,
+      );
+    }
+    throw RpcProtocolException(protocolMessage);
   }
 
   O _decodeFrame<O>(
@@ -167,23 +244,71 @@ final class RpcClient {
   }) {
     switch (frame['type']) {
       case 'data':
+        if (!_isSuccessful(status)) {
+          _invalidResponse(
+            status,
+            'The server returned data for a failed RPC request.',
+          );
+        }
         final value = serializer.decode(frame['data']);
         return decode?.call(value) ?? value as O;
       case 'redirect':
-        throw Redirect(
-          Uri.parse(frame['location']! as String),
-          status: frame['status']! as int,
-        );
+        final location = frame['location'];
+        final redirectStatus = frame['status'];
+        if (location is! String || redirectStatus is! int) {
+          _invalidResponse(status, 'The server returned an invalid redirect.');
+        }
+        final parsedLocation = Uri.tryParse(location);
+        if (parsedLocation == null) {
+          _invalidResponse(status, 'The server returned an invalid redirect.');
+        }
+        throw Redirect(parsedLocation, status: redirectStatus);
       case 'notFound':
-        throw NotFound(frame['message'] as String? ?? 'Not found');
+        final message = frame['message'];
+        if (message != null && message is! String) {
+          _invalidResponse(
+            status,
+            'The server returned an invalid not-found frame.',
+          );
+        }
+        throw NotFound(message as String? ?? 'Not found');
+      case 'error':
+        _throwRemoteError(frame, status, 'Server function failed.');
       default:
-        throw RemoteServerException(
-          frame['message'] as String? ?? 'Server function failed.',
-          status: status,
-          remoteType: frame['errorType'] as String?,
-        );
+        _invalidResponse(status, 'The server returned an unknown RPC frame.');
     }
   }
+
+  Never _throwRemoteError(
+    Map<String, Object?> frame,
+    int status,
+    String fallbackMessage,
+  ) {
+    final message = frame['message'];
+    final remoteType = frame['errorType'];
+    if ((message != null && message is! String) ||
+        (remoteType != null && remoteType is! String)) {
+      _invalidResponse(
+        status,
+        'The server returned an invalid RPC error frame.',
+      );
+    }
+    throw RemoteServerException(
+      message as String? ?? fallbackMessage,
+      status: status,
+      remoteType: remoteType as String?,
+    );
+  }
+}
+
+Future<void> _cancelBody(Stream<List<int>> body) async {
+  final subscription = body.listen(
+    null,
+    onError: (Object _) {
+      // The response is already being rejected by its HTTP or content type.
+    },
+  );
+  await subscription.cancel();
 }
 
 /// Indicates that a response violated the RPC wire protocol.
@@ -198,11 +323,15 @@ final class RpcProtocolException implements Exception {
   String toString() => 'RpcProtocolException: $message';
 }
 
-Headers _rpcHeaders(Uri baseUri) => Headers.single(<String, String>{
-  'accept': 'application/json, application/x-ndjson',
-  'x-odroe-server-function': 'true',
-  'origin': _origin(baseUri),
-});
+Headers _rpcHeaders(Uri baseUri, Headers? applicationHeaders) {
+  final headers = applicationHeaders?.copy() ?? Headers();
+  return headers
+    ..set('accept', 'application/json, application/x-ndjson')
+    ..set('x-odroe-server-function', 'true')
+    ..set('origin', _origin(baseUri));
+}
+
+bool _isSuccessful(int status) => status >= 200 && status < 300;
 
 String _origin(Uri uri) {
   final defaultPort = uri.scheme == 'https' ? 443 : 80;
@@ -210,16 +339,16 @@ String _origin(Uri uri) {
   return '${uri.scheme}://${uri.host}$port';
 }
 
-/// Error returned by a remote server function.
+/// Error returned by a remote RPC or HTTP failure.
 final class RemoteServerException implements Exception {
-  /// Creates an exception from an RPC error frame.
+  /// Creates a classified remote failure.
   const RemoteServerException(
     this.message, {
     required this.status,
     this.remoteType,
   });
 
-  /// Error message supplied by the server.
+  /// Server-supplied or locally classified error message.
   final String message;
 
   /// HTTP response status.

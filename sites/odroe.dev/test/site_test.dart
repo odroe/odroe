@@ -238,24 +238,48 @@ void main() {
     );
   });
 
-  test(
-    'Cloudflare hybrid example preserves dynamic page navigation',
-    () async {
-      final source = await File('content/docs/deploy.mdc').readAsString();
-      final block = RegExp(r'```json\s+([\s\S]*?)\s+```').firstMatch(source);
+  test('Server docs close the authenticated RPC contract', () async {
+    final source = await File('content/docs/server.mdc').readAsString();
+    final appSource = await File('content/docs/core/app.mdc').readAsString();
 
-      expect(block, isNotNull);
-      final config = jsonDecode(block!.group(1)!) as Map<String, Object?>;
-      final assets = config['assets']! as Map<String, Object?>;
-      expect(assets['directory'], './build/web');
-      expect(assets['html_handling'], 'drop-trailing-slash');
-      expect(assets, isNot(contains('not_found_handling')));
-      expect(source, contains('generated directory indexes on canonical URLs'));
-      expect(source, contains('navigation misses can reach dynamic'));
-      expect(source, contains('For a fully prerendered SSG'));
-      expect(source, contains('assets_navigation_has_no_effect'));
-    },
-  );
+    expect(source, isNot(contains('SessionModule')));
+    expect(appSource, isNot(contains('SessionModule')));
+    expect(appSource, contains('QueryClientModule()'));
+    expect(appSource, contains('context.read(queryClientKey)'));
+    expect(source, contains('headersProvider: () async'));
+    expect(source, contains("'authorization': 'Bearer \$token'"));
+    expect(source, contains('middleware: <Middleware>[requireBearer]'));
+    expect(source, contains("throw const HttpError(401, 'Sign in required.')"));
+    expect(source, contains('context.request.require(userKey)'));
+    expect(source, contains('app.read(rpcClientKey)'));
+    expect(source, contains('RemoteServerException'));
+    expect(source, contains('error.status == 401'));
+    expect(source, contains('runs exactly once for each RPC request'));
+    expect(source, contains('does not automatically retry'));
+    expect(source, contains('Browser RPC is same-origin only'));
+    expect(source, contains('Omit `baseUri` on Web'));
+    expect(source, contains('Android, iOS, and desktop apps'));
+    expect(
+      source,
+      isNot(contains('request cancellation stay visible in the transport')),
+    );
+  });
+
+  test('Cloudflare hybrid example preserves dynamic page navigation', () async {
+    final source = await File('content/docs/deploy.mdc').readAsString();
+    final block = RegExp(r'```json\s+([\s\S]*?)\s+```').firstMatch(source);
+
+    expect(block, isNotNull);
+    final config = jsonDecode(block!.group(1)!) as Map<String, Object?>;
+    final assets = config['assets']! as Map<String, Object?>;
+    expect(assets['directory'], './build/web');
+    expect(assets['html_handling'], 'drop-trailing-slash');
+    expect(assets, isNot(contains('not_found_handling')));
+    expect(source, contains('generated directory indexes on canonical URLs'));
+    expect(source, contains('navigation misses can reach dynamic'));
+    expect(source, contains('For a fully prerendered SSG'));
+    expect(source, contains('assets_navigation_has_no_effect'));
+  });
 
   test('small secondary labels use accessible muted ink', () async {
     final css = await File('public/site.css').readAsString();

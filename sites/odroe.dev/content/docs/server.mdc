@@ -6,15 +6,11 @@ language: en
 ---
 # Server
 
-`Server` matches typed routes, runs request modules and middleware, loads route
-data, and returns an adapter-neutral `ServerResponse`.
+`Server` matches typed routes, runs application-owned request modules and
+middleware, loads route data, and returns an adapter-neutral `ServerResponse`.
 
 ```dart
-Server createServer() => generated.createServer(
-  modules: () => <Module>[
-    SessionModule(),
-  ],
-);
+Server createServer() => generated.createServer();
 ```
 
 ## HTTP route
@@ -44,9 +40,88 @@ only a non-empty string literal and rejects duplicates across the complete route
 tree. Omitting it preserves the path-and-variable fallback for gradual
 migration, but renaming either source location changes that fallback.
 
+## Authenticated calls
+
+Authentication belongs to the application. A server-function middleware can
+verify a bearer token, attach the authenticated user to the request, and return
+a protocol-shaped `401` by throwing `HttpError`:
+
+```dart
+final userKey = RequestKey<User>('authenticated-user');
+
+Future<ServerResponse> requireBearer(
+  RequestContext context,
+  Next next,
+) async {
+  final authorization = context.request.headers.value('authorization');
+  final token = authorization?.startsWith('Bearer ') == true
+      ? authorization!.substring('Bearer '.length)
+      : null;
+  final user = token == null ? null : await sessions.verify(token);
+  if (user == null) throw const HttpError(401, 'Sign in required.');
+
+  context.set(userKey, user);
+  return next();
+}
+
+final updatePost = ServerFunction<UpdatePost, Post>(
+  id: 'posts.update',
+  middleware: <Middleware>[requireBearer],
+  handler: (context) => repository.update(
+    context.request.require(userKey),
+    context.data,
+  ),
+);
+```
+
+`User`, `sessions`, and the token lifecycle above are application code, not
+global Odroe state. On the client, `headersProvider` reads that state immediately
+before every value or stream request:
+
+```dart
+final rpcModule = RpcModule.http(
+  // Native apps use an explicit API origin. Omit baseUri on Web.
+  baseUri: Uri.parse('https://api.example.com'),
+  headersProvider: () async {
+    final token = await session.validAccessToken();
+    return token == null
+        ? Headers()
+        : Headers.single(<String, String>{
+            'authorization': 'Bearer $token',
+          });
+  },
+);
+```
+
+The provider runs exactly once for each RPC request, so a refreshed token is
+used by the next call. Odroe does not automatically retry when the provider
+fails or the server returns `401`; the application owns refresh, sign-in, and
+any retry or idempotency policy.
+
+Call the generated reference with the `RpcClient` installed by the module. The
+`HttpError` above arrives as `RemoteServerException` with its HTTP status:
+
+```dart
+Future<Post> savePost(AppContext app, UpdatePost input) async {
+  final client = app.read(rpcClientKey);
+  try {
+    return await routes.posts.postId.updatePost(client, input);
+  } on RemoteServerException catch (error) {
+    if (error.status == 401) await session.signOut();
+    rethrow;
+  }
+}
+```
+
+Browser RPC is same-origin only. Omit `baseUri` on Web so
+`RpcModule.http()` uses `Uri.base`; a separate Web application and API origin
+requires an application-owned same-origin proxy. Android, iOS, and desktop apps
+may pass an explicit `baseUri` because browser CORS and credential rules do not
+apply to their native HTTP transport.
+
 The generated client and server manifest agree on the identifier and wire
-types. Cross-origin requests, payload limits, streaming frames, and request
-cancellation stay visible in the transport.
+types. Payload limits and streaming frames remain explicit at the server and
+transport boundaries.
 Server, route, middleware, and server-function configuration is copied into
 immutable snapshots, so runtime matching cannot drift after construction.
 Unsupported transport methods return `501`; matched routes return `405` with

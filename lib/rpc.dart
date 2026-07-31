@@ -6,6 +6,7 @@ export 'src/rpc/client.dart'
         ServerFunctionRef,
         ServerStreamFunctionRef,
         RpcTransport,
+        RpcHeadersProvider,
         RpcClient,
         RpcProtocolException,
         RemoteServerException;

@@ -105,7 +105,33 @@ void main() {
 
 删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
 
-Web 可让 `RpcModule.http()` 使用当前 origin；Android、iOS 与桌面应用应传入明确的服务端地址，例如 `RpcModule.http(baseUri: Uri.parse('https://api.example.com'))`。
+浏览器端 RPC 只支持同源，可让 `RpcModule.http()` 使用当前 origin。
+Android、iOS 与桌面应用应传入明确的服务端地址。应用可用
+`headersProvider` 在每个请求发送前读取最新 token：
+
+```dart
+String? accessToken;
+
+final rpcModule = RpcModule.http(
+  baseUri: Uri.parse('https://api.example.com'),
+  headersProvider: () {
+    final token = accessToken;
+    return token == null
+        ? Headers()
+        : Headers.single(<String, String>{
+            'authorization': 'Bearer $token',
+          });
+  },
+);
+```
+
+token 的获取、存储与更新由应用负责。provider 每个 RPC 请求只调用一次；
+Odroe 会复制其结果，再写入自己拥有的协议头。`RpcClient` 不会自动重试，
+因此应用可依据 `RemoteServerException.status` 决定是否刷新 token 或重试。
+非 2xx HTTP 响应若没有有效 RPC error frame，会保留状态码并归类为
+`RemoteServerException`；2xx 响应中的畸形或未知 frame 则是
+`RpcProtocolException`。返回类型明确写成 `ServerResponse` 时会跳过这些
+分类，由调用方负责读取和释放原始响应。
 
 ## 文件路由
 

@@ -13,11 +13,10 @@ typed bindings, and reverse-order disposal.
 
 ```dart
 final context = await AppContext.create(<Module>[
-  AnalyticsModule(),
-  SessionModule(),
+  QueryClientModule(),
 ]);
 
-final session = context.read(sessionKey);
+final query = context.read(queryClientKey);
 await context.dispose();
 ```
 

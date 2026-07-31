@@ -9,6 +9,9 @@
 - Add optional stable `ServerFunction.id` wire identifiers, reject empty,
   non-literal, and duplicate IDs in file routes, and preserve the existing
   path-and-variable fallback when an ID is omitted.
+- Add a per-request asynchronous RPC `headersProvider`, keep protocol headers
+  framework-owned, and classify non-protocol HTTP failures by status instead
+  of leaking JSON parsing errors.
 - Add Press collections, dynamic prerender locations, and the Odroe-built
   documentation website.
 - Change prerender defaults to fixed concurrency 4, at most 1000 routes and

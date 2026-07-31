@@ -17,10 +17,14 @@ final class RpcModule extends Module {
   RpcModule._(this.client, this._transport);
 
   /// Creates an HTTP-backed client and owns its default transport.
+  ///
+  /// [headersProvider] runs once immediately before each request. Its result is
+  /// copied before Odroe applies protocol-owned headers.
   factory RpcModule.http({
     Uri? baseUri,
     HttpTransport? transport,
     Serializer? serializer,
+    RpcHeadersProvider? headersProvider,
     String functionPath = '/__odroe/functions',
   }) {
     final resolved = transport ?? HttpTransport();
@@ -29,6 +33,7 @@ final class RpcModule extends Module {
         baseUri: baseUri ?? Uri.base,
         transport: resolved,
         serializer: serializer,
+        headersProvider: headersProvider,
         functionPath: functionPath,
       ),
       transport == null ? resolved : null,
