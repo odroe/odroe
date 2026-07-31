@@ -140,7 +140,8 @@ Uri? rpcBaseUri({
 原生运行时传入例如
 `--dart-define=ODROE_API_ORIGIN=https://api.example.com`。缺失或错误的地址会在
 应用启动时失败，不会拖到首次请求。仓库内的
-[`example/app/lib/rpc_origin.dart`](example/app/lib/rpc_origin.dart) 是同一份已测试实现。
+[`example/app/lib/rpc_origin.dart`](https://github.com/odroe/odroe/blob/main/example/app/lib/rpc_origin.dart)
+是同一份已测试实现。
 
 删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
 
@@ -585,6 +586,7 @@ dart run odroe dev -- -d <ios-device-id> --dart-define=ODROE_API_ORIGIN=https://
 dart run odroe dev -- -d chrome
 dart run odroe build -- apk --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe build web
+dart run odroe build --no-server
 dart run odroe build --server-only --server-target cloudflare
 ```
 
@@ -595,11 +597,14 @@ Web；`--` 后参数原样交给 Flutter CLI。包含 RPC 的原生运行与构�
 再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；
 带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样
 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
+`build --no-server` 不生成可部署 server artifact，但仍运行生成的 Dart
+server 源码完成 prerender，适合只部署 `build/web` 的 assets-only SSG。
 
 prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 HTML 响应
 最多 1 MiB。`--prerender-concurrency`、`--prerender-max-routes` 与
-`--prerender-max-response-bytes` 可显式调整预算。Cloudflare 构建复用生成的
-Dart server 源码完成 prerender，不再额外编译临时 native executable。
+`--prerender-max-response-bytes` 可显式调整预算。需要 Cloudflare server
+artifact 的构建也复用生成的 Dart server 源码完成 prerender，不再额外编译
+临时 native executable。
 纯文档构建会先写入同级 staging 目录，全部成功后才替换既有静态产物。
 prerender 期间 server 明确禁用静态根，旧产物与 `public/` 中的同名 HTML
 不会替代本轮真实 route 响应。

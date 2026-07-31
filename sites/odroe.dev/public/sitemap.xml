@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://odroe.dev/</loc></url>
+  <url><loc>https://odroe.dev/docs</loc></url>
+  <url><loc>https://odroe.dev/docs/core/app</loc></url>
+  <url><loc>https://odroe.dev/docs/core/query</loc></url>
+  <url><loc>https://odroe.dev/docs/core/routing</loc></url>
+  <url><loc>https://odroe.dev/docs/data/database</loc></url>
+  <url><loc>https://odroe.dev/docs/deploy</loc></url>
+  <url><loc>https://odroe.dev/docs/getting-started</loc></url>
+  <url><loc>https://odroe.dev/docs/server</loc></url>
+  <url><loc>https://odroe.dev/docs/web/document</loc></url>
+</urlset>

@@ -35,8 +35,12 @@ route response.
 For a document-only product such as this website:
 
 ```sh
-dart run odroe build
+dart run odroe build --no-server
 ```
+
+`--no-server` still starts the generated Dart server from source for
+prerendering; it only skips the deployable server artifact. Omit it when the
+deployment also needs the default native server.
 
 ## Native server
 
@@ -95,7 +99,7 @@ Build the Cloudflare Workers target explicitly:
 dart run odroe build --server-only --server-target cloudflare
 ```
 
-For a document-only application that also needs static HTML:
+For a Cloudflare Worker that also needs static HTML:
 
 ```sh
 dart run odroe build --server-target cloudflare
@@ -105,7 +109,8 @@ Odroe writes `build/odroe/cloudflare/server.js` and a thin `worker.mjs`.
 Your application continues to own `wrangler.jsonc`; the build never overwrites
 platform configuration. A non-server-only Cloudflare build runs the generated
 Dart server source for prerendering instead of compiling a second temporary
-native executable.
+native executable. An assets-only SSG instead uses `build --no-server` and
+deploys only `build/web`.
 
 ```json
 {
@@ -170,6 +175,8 @@ remote Cloudflare deployment has been verified.
 
 ## This website
 
-`sites/odroe.dev` is the website source and passes local build and prerender
-checks. It is not proof of a live deployment. At this snapshot, external access
-to `odroe.dev` is blocked by Cloudflare error 526 from its SSL setup.
+`sites/odroe.dev` is the website source. Its assets-only build uses
+`dart run odroe build --no-server` and passes local prerender checks without
+compiling an unused Worker. This is not proof of a live deployment. At this
+snapshot, external access to `odroe.dev` is blocked by Cloudflare error 526
+from its SSL setup.

@@ -78,6 +78,9 @@
 - Resolve application prerender locations before compilation, preserve the
   previous document-only output until a replacement succeeds, and avoid
   duplicate native compilation for Cloudflare builds.
+- Let `build --no-server` prerender through the generated Dart server source
+  without emitting an unused native or Cloudflare artifact, so assets-only
+  deployments and their tests avoid deployment-only compilation.
 - Revalidate native static assets with weak ETags and Last-Modified, stream
   eligible responses with optional gzip, reject ambiguous or escaped paths on
   every request, serve prerendered indexes at canonical routes with

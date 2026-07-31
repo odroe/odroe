@@ -16,6 +16,8 @@ void main() {
     final usage = output.toString();
 
     expect(code, 0);
+    expect(usage, contains('--[no-]server'));
+    expect(usage, contains('Emit a deployable Odroe server artifact.'));
     expect(usage, contains('--prerender-crawl'));
     expect(usage, contains('Discover additional same-origin HTML links.'));
     expect(usage, contains('--prerender-concurrency'));

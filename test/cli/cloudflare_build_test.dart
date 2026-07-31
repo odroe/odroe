@@ -180,11 +180,11 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
   });
 
   test(
-    'Cloudflare document build prerenders the explicit website manifest',
+    'artifact-free document build prerenders the explicit website manifest',
     () async {
       final project = Directory('sites/odroe.dev').absolute;
       final artifactDirectory = Directory(
-        '${project.path}/build/odroe/cloudflare-prerender-test',
+        p.join(project.path, 'build', 'odroe', 'artifact-free-test'),
       );
       final web = Directory('${project.path}/build/cloudflare-prerender-test')
         ..createSync(recursive: true);
@@ -202,10 +202,9 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         'build',
         '--project',
         project.path,
-        '--server-target',
-        'cloudflare',
+        '--no-server',
         '--server-artifact',
-        'build/odroe/cloudflare-prerender-test/server.js',
+        'build/odroe/artifact-free-test/server',
         '--prerender-output',
         'build/cloudflare-prerender-test',
       ]);
@@ -215,8 +214,8 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       expect(build.stdout, contains('Prerendered 11 routes.'));
       expect(build.stdout, isNot(contains('prerender-server')));
       expect(build.stdout, isNot(contains('.odroe-staging-')));
-      expect(File('${artifactDirectory.path}/server.js').existsSync(), isTrue);
-      expect(File('${artifactDirectory.path}/worker.mjs').existsSync(), isTrue);
+      expect(build.stdout, isNot(contains('Built Cloudflare Worker')));
+      expect(artifactDirectory.existsSync(), isFalse);
       expect(stale.existsSync(), isFalse);
       final notFound = await File('${web.path}/404.html').readAsString();
       expect(notFound, contains('This route ends here.'));
@@ -247,6 +246,40 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         'docs/web/document/index.html',
         'index.html',
       ]);
+      for (final asset in <String>['_redirects', 'robots.txt', 'sitemap.xml']) {
+        final source = File(p.join(project.path, 'public', asset));
+        final built = File(p.join(web.path, asset));
+        expect(
+          await built.readAsBytes(),
+          orderedEquals(await source.readAsBytes()),
+          reason: asset,
+        );
+      }
+
+      final canonicalUrls = <String>[];
+      for (final file in html) {
+        final relative = p.posix.joinAll(
+          p.split(p.relative(file.path, from: web.path)),
+        );
+        final matches = _canonicalHref.allMatches(await file.readAsString());
+        if (relative == '404.html') {
+          expect(matches, isEmpty, reason: relative);
+        } else {
+          expect(matches, hasLength(1), reason: relative);
+          canonicalUrls.add(matches.single.group(1)!);
+        }
+      }
+      canonicalUrls.sort();
+      final builtSitemap = await File(
+        p.join(web.path, 'sitemap.xml'),
+      ).readAsString();
+      final sitemapUrls =
+          RegExp(
+              r'<loc>([^<]+)</loc>',
+            ).allMatches(builtSitemap).map((match) => match.group(1)!).toList()
+            ..sort();
+      expect(sitemapUrls.toSet(), hasLength(sitemapUrls.length));
+      expect(sitemapUrls, canonicalUrls);
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
@@ -265,11 +298,18 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         project.path,
         '--server-target',
         'cloudflare',
+        '--no-server',
       ]);
       final logs = '${build.stdout}\n${build.stderr}';
 
       expect(build.exitCode, 0, reason: logs);
       expect(build.stdout, contains('Prerendered 1 routes.'));
+      expect(
+        Directory(
+          p.join(project.path, 'build', 'odroe', 'cloudflare'),
+        ).existsSync(),
+        isFalse,
+      );
       final page = await File(
         p.join(project.path, 'build', 'web', 'index.html'),
       ).readAsString();
@@ -280,21 +320,15 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
   );
 
   test(
-    'failed Cloudflare prerender preserves the previous website output',
+    'failed artifact-free prerender preserves the previous website output',
     () async {
       final project = Directory('sites/odroe.dev').absolute;
-      final artifactDirectory = Directory(
-        '${project.path}/build/odroe/cloudflare-prerender-failure-test',
-      );
       final web = Directory(
         '${project.path}/build/cloudflare-prerender-failure-test',
       )..createSync(recursive: true);
       final sentinel = File('${web.path}/sentinel.txt')
         ..writeAsStringSync('keep');
       addTearDown(() async {
-        if (artifactDirectory.existsSync()) {
-          await artifactDirectory.delete(recursive: true);
-        }
         if (web.existsSync()) await web.delete(recursive: true);
       });
 
@@ -304,10 +338,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         'build',
         '--project',
         project.path,
-        '--server-target',
-        'cloudflare',
-        '--server-artifact',
-        'build/odroe/cloudflare-prerender-failure-test/server.js',
+        '--no-server',
         '--prerender-output',
         'build/cloudflare-prerender-failure-test',
         '--prerender-max-response-bytes',
@@ -584,3 +615,5 @@ Future<void> _terminate(Process process, Future<int> exitCode) async {
 extension on String {
   String quote() => "'${replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'";
 }
+
+final _canonicalHref = RegExp(r'<link rel="canonical" href="([^"]+)">');

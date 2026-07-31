@@ -304,8 +304,91 @@ void main() {
 
       expect(assets['html_handling'], 'drop-trailing-slash');
       expect(assets['not_found_handling'], '404-page');
+      expect(config, isNot(contains('main')));
+      expect(assets, isNot(contains('run_worker_first')));
     },
   );
+
+  test('search assets match published pages and exact migrations', () async {
+    final server = Server(
+      routes: generated.serverRouteTree,
+      functions: generated.serverFunctions,
+      renderer: const DocumentRenderer(baseHref: '/').call,
+    );
+    final canonicalUrls = <String>[];
+    for (final location in <Uri>[Uri(path: '/'), ...await docs.locations()]) {
+      final response = await server.handle(
+        ServerRequest(
+          method: HttpMethod.get,
+          uri: location,
+          headers: Headers.single(<String, String>{'accept': 'text/html'}),
+        ),
+      );
+      final body = await utf8.decodeStream(response.body);
+      canonicalUrls.add(
+        _single(_canonical.allMatches(body), location, 'canonical'),
+      );
+    }
+    canonicalUrls.sort();
+
+    final sitemap = await File('public/sitemap.xml').readAsString();
+    final sitemapUrls = RegExp(
+      r'<loc>([^<]+)</loc>',
+    ).allMatches(sitemap).map((match) => match.group(1)!).toList()..sort();
+    expect(sitemapUrls, canonicalUrls);
+    expect(sitemapUrls.toSet(), hasLength(sitemapUrls.length));
+    expect(sitemapUrls, isNot(contains('https://odroe.dev/404.html')));
+    expect(
+      await File('public/robots.txt').readAsString(),
+      'User-agent: *\n'
+      'Allow: /\n'
+      '\n'
+      'Sitemap: https://odroe.dev/sitemap.xml\n',
+    );
+
+    final redirects = <String, String>{};
+    for (final line in await File('public/_redirects').readAsLines()) {
+      if (line.trim().isEmpty) continue;
+      final fields = line.trim().split(RegExp(r'\s+'));
+      expect(fields, hasLength(3), reason: line);
+      final source = fields[0];
+      final destination = fields[1];
+      expect(fields[2], '301', reason: line);
+      expect(source, startsWith('/'), reason: line);
+      expect(source, isNot(contains('*')), reason: line);
+      expect(redirects, isNot(contains(source)), reason: line);
+      redirects[source] = destination;
+    }
+    expect(redirects, _legacyRedirects);
+
+    final canonicalPaths = canonicalUrls
+        .map((url) => Uri.parse(url).path)
+        .toSet();
+    for (final entry in redirects.entries) {
+      expect(sitemapUrls, isNot(contains('https://odroe.dev${entry.key}')));
+      expect(canonicalPaths, isNot(contains(entry.key)));
+      expect(redirects, isNot(contains(entry.value)));
+      if (entry.value.startsWith('/')) {
+        expect(canonicalPaths, contains(entry.value), reason: entry.key);
+      } else {
+        final destination = Uri.parse(entry.value);
+        expect(destination.scheme, 'https', reason: entry.key);
+        expect(destination.host, isNotEmpty, reason: entry.key);
+      }
+
+      final location = Uri(path: entry.key);
+      final response = await server.handle(
+        ServerRequest(
+          method: HttpMethod.get,
+          uri: location,
+          headers: Headers.single(<String, String>{'accept': 'text/html'}),
+        ),
+      );
+      final body = await utf8.decodeStream(response.body);
+      expect(response.status, 404, reason: entry.key);
+      expect(_canonical.allMatches(body), isEmpty, reason: entry.key);
+    }
+  });
 
   test('Query docs match key and mutation lifecycle contracts', () async {
     final source = (await File(
@@ -598,6 +681,36 @@ void main() {
 
 final _title = RegExp(r'<title>([^<]+)</title>');
 final _canonical = RegExp(r'<link rel="canonical" href="([^"]+)">');
+const _legacyRedirects = <String, String>{
+  '/packages/oref': 'https://oref.medz.dev/',
+  '/packages/alien-signals':
+      'https://github.com/medz/alien-signals-dart/blob/main/docs/guide.md',
+  '/packages/oinject': 'https://pub.dev/packages/oinject',
+  '/packages/oinject/': 'https://pub.dev/packages/oinject',
+  '/packages/oncecall': 'https://pub.dev/packages/oncecall',
+  '/zh/packages/oref': 'https://oref.medz.dev/zh/',
+  '/zh/packages/alien-signals':
+      'https://github.com/medz/alien-signals-dart/blob/main/docs/guide.md',
+  '/zh/packages/oinject': 'https://pub.dev/packages/oinject',
+  '/zh/packages/oncecall': 'https://pub.dev/packages/oncecall',
+  '/zh/': '/',
+  '/docs/oinject': 'https://pub.dev/packages/oinject',
+  '/docs/oncecall': 'https://pub.dev/packages/oncecall',
+  '/docs/oref/': 'https://oref.medz.dev/zh/guide/getting-started',
+  '/docs/oref/introduction': 'https://oref.medz.dev/guide/getting-started',
+  '/docs/oref/get-started': 'https://oref.medz.dev/guide/getting-started',
+  '/docs/oref/core': 'https://oref.medz.dev/guide/core-concepts',
+  '/docs/oref/advanced': 'https://oref.medz.dev/guide/effects',
+  '/docs/oref/utils': 'https://pub.dev/documentation/oref/latest/oref/',
+  '/zh/docs/oinject': 'https://pub.dev/packages/oinject',
+  '/zh/docs/oncecall': 'https://pub.dev/packages/oncecall',
+  '/zh/docs/oref/introduction':
+      'https://oref.medz.dev/zh/guide/getting-started',
+  '/zh/docs/oref/get-started': 'https://oref.medz.dev/zh/guide/getting-started',
+  '/zh/docs/oref/core': 'https://oref.medz.dev/zh/guide/core-concepts',
+  '/zh/docs/oref/advanced': 'https://oref.medz.dev/zh/guide/effects',
+  '/zh/docs/oref/utils': 'https://pub.dev/documentation/oref/latest/oref/',
+};
 
 Iterable<RegExpMatch> _meta(String body, String property) => RegExp(
   '<meta property="${RegExp.escape(property)}" content="([^"]+)">',

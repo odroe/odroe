@@ -17,7 +17,7 @@ enum ServerBuildTarget {
   cloudflare,
 }
 
-/// Builds the selected Flutter target and Odroe server artifact.
+/// Builds the selected Flutter target and optional Odroe server artifact.
 Future<int> runBuild(
   CliProject project, {
   required bool serverOnly,
@@ -54,10 +54,6 @@ Future<int> runBuild(
       prerender &&
       !serverOnly &&
       (!generated.hasFlutter || flutterTarget == 'web');
-  if (shouldPrerender && !buildServer) {
-    err.writeln('Prerendering requires the Odroe server artifact.');
-    return 64;
-  }
   File? artifact;
   if (buildServer) {
     artifact = File(
@@ -78,18 +74,23 @@ Future<int> runBuild(
         option: '--prerender-output',
       ),
     );
-    final serverOutputs = <String>[
-      artifact!.path,
-      if (serverTarget == ServerBuildTarget.cloudflare) ...<String>[
-        p.join(artifact.parent.path, 'worker.mjs'),
-        '${artifact.path}.deps',
-      ],
-    ];
-    if (serverOutputs.any(
-      (path) => _pathsOverlap(path, outputDirectory.path),
-    )) {
-      err.writeln('--server-artifact and --prerender-output must not overlap.');
-      return 64;
+    final serverArtifactFile = artifact;
+    if (serverArtifactFile != null) {
+      final serverOutputs = <String>[
+        serverArtifactFile.path,
+        if (serverTarget == ServerBuildTarget.cloudflare) ...<String>[
+          p.join(serverArtifactFile.parent.path, 'worker.mjs'),
+          '${serverArtifactFile.path}.deps',
+        ],
+      ];
+      if (serverOutputs.any(
+        (path) => _pathsOverlap(path, outputDirectory.path),
+      )) {
+        err.writeln(
+          '--server-artifact and --prerender-output must not overlap.',
+        );
+        return 64;
+      }
     }
     try {
       routes = await loadPrerenderLocations(
@@ -129,10 +130,12 @@ Future<int> runBuild(
     renderDirectory.createSync(recursive: true);
     final assets = await _copyPublicAssets(project, renderDirectory);
     if (assets > 0) out.writeln('Copied $assets public assets.');
-    final prerenderExecutable = serverTarget == ServerBuildTarget.cloudflare
+    final prerenderFromSource =
+        !buildServer || serverTarget == ServerBuildTarget.cloudflare;
+    final prerenderExecutable = prerenderFromSource
         ? Platform.resolvedExecutable
         : artifact!.path;
-    final prerenderArguments = serverTarget == ServerBuildTarget.cloudflare
+    final prerenderArguments = prerenderFromSource
         ? <String>['run', project.bootstrap.path]
         : const <String>[];
     final code = await _prerenderBuild(
@@ -146,7 +149,7 @@ Future<int> runBuild(
       crawlLinks: prerenderCrawl,
       maxRoutes: prerenderMaxRoutes,
       maxResponseBytes: prerenderMaxResponseBytes,
-      startupTimeout: serverTarget == ServerBuildTarget.cloudflare
+      startupTimeout: prerenderFromSource
           ? const Duration(minutes: 1)
           : const Duration(seconds: 20),
       out: out,

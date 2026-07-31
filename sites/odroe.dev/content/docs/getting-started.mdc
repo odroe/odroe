@@ -126,12 +126,15 @@ Replace `<ios-device-id>` with the device identifier reported by Flutter.
 ```sh
 dart run odroe build web
 dart run odroe build apk
+dart run odroe build --no-server
 dart run odroe build --server-only
 ```
 
 `--server-only` emits only the native server. A product with no Flutter
 `page.dart` can run `dart run odroe build` without a target; Odroe emits the
 native server and prerenders every known static location into `build/web`.
+Use `--no-server` when an assets-only deployment needs the same prerendered
+output without a deployable server artifact.
 Known locations come from static file routes and `lib/prerender.dart`; link
 crawling is disabled by default. Add `--prerender-crawl` only when page links
 should discover extra same-origin HTML. See [Deployment](/docs/deploy) for

@@ -41,7 +41,7 @@ Future<int> runOdroe(
     ..addFlag(
       'server',
       defaultsTo: true,
-      help: 'Build the Odroe server artifact.',
+      help: 'Emit a deployable Odroe server artifact.',
     )
     ..addOption(
       'server-artifact',
