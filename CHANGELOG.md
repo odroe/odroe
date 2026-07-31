@@ -22,6 +22,14 @@
   before UTF-8 decoding. Applications can configure
   `RpcClient.maxResponseFrameBytes` or `RpcModule.http`, while cumulative
   stream size and explicit `ServerResponse` bodies remain caller-owned.
+- Limit server-generated typed response frames to 1 MiB by default, encode
+  them directly into bounded UTF-8 output, and expose request and response
+  budgets through generated `createServer`. Oversized values return a bounded
+  500 error frame; oversized stream items terminate with one bounded error.
+- Make the default HTTP transport's 10 MiB pre-send request body buffer
+  configurable through `HttpTransport` and `RpcModule.http`, export
+  `PayloadTooLargeException` from `rpc.dart`, and keep content framing owned by
+  the transport.
 - Make application context, route capability, and request context keys
   identity-based so independent modules cannot collide through equal constant
   type/name pairs.

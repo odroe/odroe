@@ -123,31 +123,59 @@ Future<Post> savePost(AppContext app, UpdatePost input) async {
 
 ## Payload budgets
 
-`Server.maxFunctionPayload` limits one buffered server-function request and
-defaults to 1 MiB. GET payloads and request bodies use the same byte budget.
-This server-side input limit is independent from the client response limit.
-
-`RpcClient.maxResponseFrameBytes` defaults to 1 MiB and is available directly
-through `RpcModule.http`:
+RPC has four independent byte boundaries: server request input, server typed
+output, client HTTP request bodies, and client typed responses. The generated
+server entrypoint and default HTTP module expose each one directly:
 
 ```dart
 final rpcModule = RpcModule.http(
+  maxRequestBodyBytes: 2 * 1024 * 1024,
   maxResponseFrameBytes: 2 * 1024 * 1024,
+);
+
+final server = generated.createServer(
+  maxFunctionPayload: 2 * 1024 * 1024,
+  maxFunctionResponseFrameBytes: 2 * 1024 * 1024,
 );
 ```
 
-A value response is one complete JSON frame. A stream resets the budget after
-each non-empty NDJSON frame, so the cumulative stream size is not capped.
-Odroe checks raw bytes before UTF-8 decoding and cancels the response body as
-soon as a frame exceeds the limit. A successful oversized response throws
-`RpcProtocolException`; a non-2xx response still preserves its status through
+`Server.maxFunctionPayload` limits one buffered server-function request and
+defaults to 1 MiB. GET payloads and request bodies use the same byte budget.
+Overflow returns HTTP 413; a typed client receives a `RemoteServerException`
+that preserves that status.
+
+`Server.maxFunctionResponseFrameBytes` also defaults to 1 MiB. It counts the
+UTF-8 bytes in the complete typed JSON envelope. Each stream frame receives a
+fresh budget and its NDJSON line feed is excluded. Odroe encodes directly to a
+bounded UTF-8 sink: an oversized value becomes a bounded `500` error frame; an
+oversized stream item cancels the upstream stream after one bounded terminal
+error frame. The minimum is 16 bytes so a valid `{"type":"error"}` fallback
+always fits.
+
+This server limit bounds JSON bytes retained and sent by the framework, but
+`Serializer.encode` still materializes one JSON-compatible object graph first.
+It cannot bound objects already allocated by a handler or an unbounded
+`Iterable`. Prefer pagination, multiple bounded stream items, or object storage
+for large results.
+
+`RpcClient.maxResponseFrameBytes` defaults to 1 MiB. It independently defends
+clients using an older or untrusted server. A value response is one complete
+frame; a stream resets the budget after each non-empty frame, so cumulative
+stream size is not capped. Odroe checks bytes before UTF-8 decoding and cancels
+the response body on overflow. A successful oversized response throws
+`RpcProtocolException`; a non-2xx response preserves its status through
 `RemoteServerException`.
 
+The default `HttpTransport.maxRequestBodyBytes` is 10 MiB. The transport fully
+buffers a body before `http.Client.send`; an exact-limit body is accepted, while
+overflow cancels the source and throws the public `PayloadTooLargeException`.
+This limit does not cover GET query parameters. Typed JSON has also already been
+serialized before it reaches the transport, so raising the limit does not make
+typed calls or uploads streaming. This exception is local and occurs before a
+network request starts; GET payloads only cross the server input budget.
+
 A function explicitly typed to return `ServerResponse` bypasses the typed frame
-budget. The caller then owns streaming, limits, and body release. Prefer
-pagination, multiple bounded stream items, or object storage over raising the
-limit for one large JSON value. This client budget does not bound memory used
-while a server handler serializes its own result.
+budget. The caller then owns streaming, limits, and body release.
 
 ## Cancellation
 

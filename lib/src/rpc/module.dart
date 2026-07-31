@@ -19,6 +19,9 @@ final class RpcModule extends Module {
   ///
   /// [headersProvider] runs once immediately before each request. Its result is
   /// copied before Odroe applies protocol-owned headers.
+  /// [maxRequestBodyBytes] configures the owned default [HttpTransport]. Pass
+  /// a preconfigured [transport] instead when transport ownership stays with
+  /// the caller; the two options are mutually exclusive.
   /// [maxResponseFrameBytes] limits one typed value or stream frame, not the
   /// cumulative size of a streaming response.
   factory RpcModule.http({
@@ -27,6 +30,7 @@ final class RpcModule extends Module {
     Serializer? serializer,
     RpcHeadersProvider? headersProvider,
     String functionPath = '/__odroe/functions',
+    int? maxRequestBodyBytes,
     int maxResponseFrameBytes = RpcClient.defaultMaxResponseFrameBytes,
   }) {
     if (maxResponseFrameBytes <= 0) {
@@ -36,7 +40,19 @@ final class RpcModule extends Module {
         'Must be greater than zero.',
       );
     }
-    final resolved = transport ?? HttpTransport();
+    if (transport != null && maxRequestBodyBytes != null) {
+      throw ArgumentError.value(
+        maxRequestBodyBytes,
+        'maxRequestBodyBytes',
+        'Cannot configure the body budget of a caller-owned transport.',
+      );
+    }
+    final resolved =
+        transport ??
+        HttpTransport(
+          maxRequestBodyBytes:
+              maxRequestBodyBytes ?? HttpTransport.defaultMaxRequestBodyBytes,
+        );
     return RpcModule._(
       RpcClient(
         baseUri: baseUri ?? Uri.base,

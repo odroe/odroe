@@ -340,14 +340,23 @@ void main() {
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
 
     expect(source, contains('`Server.maxFunctionPayload`'));
+    expect(source, contains('four independent byte boundaries'));
+    expect(source, contains('`Server.maxFunctionResponseFrameBytes`'));
     expect(source, contains('defaults to 1 MiB'));
+    expect(source, contains('minimum is 16 bytes'));
+    expect(source, contains('`HttpTransport.maxRequestBodyBytes`'));
+    expect(source, contains('PayloadTooLargeException'));
+    expect(source, contains('does not cover GET query parameters'));
+    expect(source, contains('Overflow returns HTTP 413'));
+    expect(source, contains('This exception is local'));
     expect(source, contains('`RpcClient.maxResponseFrameBytes`'));
+    expect(source, contains('maxRequestBodyBytes: 2 * 1024 * 1024'));
     expect(source, contains('maxResponseFrameBytes: 2 * 1024 * 1024'));
     expect(source, contains('before UTF-8 decoding'));
     expect(source, contains('cumulative stream size is not capped'));
     expect(source, contains('cancels the response body'));
     expect(source, contains('explicitly typed to return `ServerResponse`'));
-    expect(source, contains('does not bound memory used while a server'));
+    expect(source, contains('`Serializer.encode` still materializes'));
     expect(
       source,
       isNot(

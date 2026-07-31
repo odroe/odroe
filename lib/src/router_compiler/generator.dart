@@ -190,6 +190,11 @@ final class RouteGenerator {
       ..writeln('  Iterable<Middleware> middleware = const <Middleware>[],')
       ..writeln('  Serializer? serializer,')
       ..writeln('  Renderer? renderer,')
+      ..writeln('  int maxFunctionPayload = Server.defaultMaxFunctionPayload,')
+      ..writeln(
+        '  int maxFunctionResponseFrameBytes = '
+        'Server.defaultMaxFunctionResponseFrameBytes,',
+      )
       ..writeln('}) => Server(')
       ..writeln('  routes: serverRouteTree,')
       ..writeln('  functions: serverFunctions,')
@@ -198,6 +203,10 @@ final class RouteGenerator {
       ..writeln('  flutterRoutes: <RouteNode>[$flutterRoutes],')
       ..writeln('  middleware: middleware,')
       ..writeln('  serializer: serializer,')
+      ..writeln('  maxFunctionPayload: maxFunctionPayload,')
+      ..writeln(
+        '  maxFunctionResponseFrameBytes: maxFunctionResponseFrameBytes,',
+      )
       ..writeln(
         hasRenderer
             ? '  renderer: renderer ?? const DocumentRenderer('

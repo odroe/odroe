@@ -55,6 +55,26 @@ void main() {
       output.serverSource,
       contains('InvocationModuleFactory? invocationModules'),
     );
+    expect(
+      output.serverSource,
+      contains('int maxFunctionPayload = Server.defaultMaxFunctionPayload'),
+    );
+    expect(
+      output.serverSource,
+      contains('int maxFunctionResponseFrameBytes ='),
+    );
+    expect(
+      output.serverSource,
+      contains('Server.defaultMaxFunctionResponseFrameBytes'),
+    );
+    expect(
+      output.serverSource,
+      contains('maxFunctionPayload: maxFunctionPayload'),
+    );
+    expect(
+      output.serverSource,
+      contains('maxFunctionResponseFrameBytes: maxFunctionResponseFrameBytes'),
+    );
     expect(output.serverSource, contains('flutterRoutes: <RouteNode>['));
     expect(output.serverSource, contains('path: ":postId"'));
     expect(output.source, contains('path: "docs/**:slug"'));

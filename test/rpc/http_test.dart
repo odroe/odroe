@@ -6,12 +6,82 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:odroe/odroe.dart';
 import 'package:odroe/rpc.dart';
-import 'package:odroe/src/server/http.dart' show PayloadTooLargeException;
 import 'package:test/test.dart';
 
 void main() {
+  test('requires a positive buffered request body budget', () {
+    var defaultClientCreations = 0;
+    for (final maxBytes in <int>[0, -1]) {
+      http.runWithClient(
+        () {
+          expect(
+            () => HttpTransport(maxRequestBodyBytes: maxBytes),
+            throwsA(
+              isA<ArgumentError>().having(
+                (error) => error.invalidValue,
+                'invalidValue',
+                maxBytes,
+              ),
+            ),
+          );
+        },
+        () {
+          defaultClientCreations++;
+          return _RecordingHttpClient();
+        },
+      );
+    }
+    expect(defaultClientCreations, 0);
+
+    final transport = HttpTransport(client: _RecordingHttpClient());
+    expect(
+      transport.maxRequestBodyBytes,
+      HttpTransport.defaultMaxRequestBodyBytes,
+    );
+    expect(HttpTransport.defaultMaxRequestBodyBytes, 10 * 1024 * 1024);
+    expect(
+      const PayloadTooLargeException(4).toString(),
+      'Request payload exceeds 4 bytes.',
+    );
+  });
+
+  test('accepts a request body at the exact byte budget', () async {
+    const maxBytes = 4;
+    final httpClient = _RecordingHttpClient();
+    final transport = HttpTransport(
+      client: httpClient,
+      maxRequestBodyBytes: maxBytes,
+    );
+
+    await transport.send(
+      ServerRequest.bytes(
+        method: HttpMethod.post,
+        uri: Uri.parse('https://api.example.com/function'),
+        body: const <int>[1, 2, 3, 4],
+      ),
+    );
+
+    final outgoing = httpClient.request! as http.AbortableRequest;
+    expect(outgoing.bodyBytes, const <int>[1, 2, 3, 4]);
+    expect(outgoing.contentLength, maxBytes);
+  });
+
   test('validates the module response frame budget before setup', () {
     expect(() => RpcModule.http(maxResponseFrameBytes: 0), throwsArgumentError);
+  });
+
+  test('configures only the module-owned HTTP request body budget', () {
+    final module = RpcModule.http(maxRequestBodyBytes: 512);
+    final transport = module.client.transport as HttpTransport;
+    addTearDown(transport.close);
+    expect(transport.maxRequestBodyBytes, 512);
+
+    expect(() => RpcModule.http(maxRequestBodyBytes: 0), throwsArgumentError);
+    final callerOwned = HttpTransport(client: _RecordingHttpClient());
+    expect(
+      () => RpcModule.http(transport: callerOwned, maxRequestBodyBytes: 512),
+      throwsArgumentError,
+    );
   });
 
   test('default HTTP transport resolves bearer headers per request', () async {
@@ -121,7 +191,7 @@ void main() {
   });
 
   test('preserves request size errors when body cleanup fails', () async {
-    const maxBytes = 10 * 1024 * 1024;
+    const maxBytes = 4;
     final bodyCancelled = Completer<void>();
     late final StreamController<List<int>> body;
     body = StreamController<List<int>>(
@@ -137,7 +207,10 @@ void main() {
     );
     addTearDown(body.close);
     final httpClient = _RecordingHttpClient();
-    final transport = HttpTransport(client: httpClient);
+    final transport = HttpTransport(
+      client: httpClient,
+      maxRequestBodyBytes: maxBytes,
+    );
 
     await expectLater(
       transport.send(
@@ -157,6 +230,37 @@ void main() {
     );
     await expectLater(bodyCancelled.future, completes);
     expect(httpClient.request, isNull);
+  });
+
+  test('derives HTTP framing from the buffered body', () async {
+    const maxBytes = 8;
+    final httpClient = _RecordingHttpClient();
+    final transport = HttpTransport(
+      client: httpClient,
+      maxRequestBodyBytes: maxBytes,
+    );
+
+    final response = await transport.send(
+      ServerRequest(
+        method: HttpMethod.post,
+        uri: Uri.parse('https://api.example.com/function'),
+        headers: Headers.single(<String, String>{
+          'content-length': '1',
+          'transfer-encoding': 'chunked',
+        }),
+        body: Stream<List<int>>.fromIterable(const <List<int>>[
+          <int>[1, 2, 3],
+          <int>[4, 5],
+        ]),
+      ),
+    );
+
+    expect(await response.readText(), 'ok');
+    final outgoing = httpClient.request! as http.AbortableRequest;
+    expect(outgoing.bodyBytes, const <int>[1, 2, 3, 4, 5]);
+    expect(outgoing.contentLength, 5);
+    expect(outgoing.headers, isNot(contains('content-length')));
+    expect(outgoing.headers, isNot(contains('transfer-encoding')));
   });
 
   test('preserves unrelated package:http abort errors', () async {

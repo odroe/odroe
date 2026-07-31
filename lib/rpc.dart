@@ -23,4 +23,9 @@ export 'src/rpc/http.dart';
 export 'src/rpc/module.dart';
 export 'src/rpc/serializer.dart';
 export 'src/server/http.dart'
-    show Headers, HttpMethod, ServerRequest, ServerResponse;
+    show
+        Headers,
+        HttpMethod,
+        PayloadTooLargeException,
+        ServerRequest,
+        ServerResponse;

@@ -9,13 +9,24 @@ import 'client.dart';
 
 /// Cross-platform HTTP transport backed by package:http.
 final class HttpTransport implements RpcTransport {
+  /// Default maximum buffered request body size: 10 MiB.
+  static const int defaultMaxRequestBodyBytes = 10 * 1024 * 1024;
+
   /// Creates a transport, optionally reusing an existing HTTP [client].
-  HttpTransport({http.Client? client})
-    : _client = client ?? http.Client(),
-      _ownsClient = client == null;
+  HttpTransport({
+    http.Client? client,
+    int maxRequestBodyBytes = defaultMaxRequestBodyBytes,
+  }) : maxRequestBodyBytes = _positiveMaxRequestBodyBytes(maxRequestBodyBytes),
+       _client = client ?? http.Client(),
+       _ownsClient = client == null;
 
   final http.Client _client;
   final bool _ownsClient;
+
+  /// Maximum bytes buffered before one request is sent.
+  ///
+  /// The limit applies to the request body, not URI query parameters.
+  final int maxRequestBodyBytes;
 
   @override
   Future<ServerResponse> send(ServerRequest request) async {
@@ -30,10 +41,14 @@ final class HttpTransport implements RpcTransport {
       abortTrigger: abortTrigger,
     );
     for (final entry in request.headers.entries) {
+      if (_framingHeaders.contains(entry.key)) continue;
       outgoing.headers[entry.key] = entry.value.join(', ');
     }
     outgoing.bodyBytes = await runUntilRpcCancelled(
-      () => _readBytes(stopOnRpcCancellation(request.body, request.cancelled)),
+      () => _readBytes(
+        stopOnRpcCancellation(request.body, request.cancelled),
+        maxRequestBodyBytes,
+      ),
       request.cancelled,
     );
 
@@ -80,8 +95,20 @@ final class HttpTransport implements RpcTransport {
   }
 }
 
-Future<Uint8List> _readBytes(Stream<List<int>> body) {
-  const maxBytes = 10 * 1024 * 1024;
+const _framingHeaders = <String>{'content-length', 'transfer-encoding'};
+
+int _positiveMaxRequestBodyBytes(int value) {
+  if (value <= 0) {
+    throw ArgumentError.value(
+      value,
+      'maxRequestBodyBytes',
+      'Must be greater than zero.',
+    );
+  }
+  return value;
+}
+
+Future<Uint8List> _readBytes(Stream<List<int>> body, int maxBytes) {
   final result = Completer<Uint8List>();
   final builder = BytesBuilder(copy: false);
   StreamSubscription<List<int>>? input;
@@ -102,7 +129,7 @@ Future<Uint8List> _readBytes(Stream<List<int>> body) {
     try {
       length += chunk.length;
       if (length > maxBytes) {
-        throw const PayloadTooLargeException(maxBytes);
+        throw PayloadTooLargeException(maxBytes);
       }
       builder.add(chunk);
     } on Object catch (error, stackTrace) {

@@ -144,19 +144,44 @@ Odroe 会复制其结果，再写入自己拥有的协议头。`RpcClient` 不�
 `RpcProtocolException`。返回类型明确写成 `ServerResponse` 时会跳过这些
 分类，由调用方负责读取和释放原始响应。
 
-强类型响应在 UTF-8 解码前按 frame 限制字节数。
-`RpcClient.maxResponseFrameBytes` 默认是 1 MiB，也可通过
-`RpcModule.http(maxResponseFrameBytes: ...)` 配置。value 的完整 JSON
-响应算一个 frame；stream 按每个非空 NDJSON frame 重新计数，不限制整个流
-的累计大小。超限会停止并取消响应体；2xx 响应归类为
-`RpcProtocolException`，非 2xx 仍保留 `RemoteServerException.status`。
-显式 `ServerResponse` 不受 typed frame 预算约束。大结果优先分页、拆成
-多个 stream frame 或放入对象存储；使用 raw response 时由调用方负责流式
-读取和限制。
+RPC 有四个独立字节边界：服务端请求、服务端 typed 输出、客户端 HTTP 请求
+body，以及客户端 typed 响应；生成入口与默认 HTTP 模块均可直接配置：
 
-服务端的输入预算是独立设置：`Server.maxFunctionPayload` 默认 1 MiB。
-它限制 server-function 请求，不代表服务端生成 typed 响应时不会物化对象和
-JSON；提高客户端 frame 上限时仍需评估两端的实际内存成本。
+```dart
+final rpcModule = RpcModule.http(
+  maxRequestBodyBytes: 2 * 1024 * 1024,
+  maxResponseFrameBytes: 2 * 1024 * 1024,
+);
+
+final server = generated.createServer(
+  maxFunctionPayload: 2 * 1024 * 1024,
+  maxFunctionResponseFrameBytes: 2 * 1024 * 1024,
+);
+```
+
+`Server.maxFunctionPayload` 默认 1 MiB，限制一个 server-function 请求。
+服务端超限会返回 HTTP 413；typed 客户端将其归类为保留 status 的
+`RemoteServerException`。
+`Server.maxFunctionResponseFrameBytes` 也默认 1 MiB，按完整 typed JSON
+envelope 的 UTF-8 字节计数；stream 每个 frame 独立计数，换行不计入。
+服务端直接编码 UTF-8 并在超限时停止：value 改为有界 500 error frame，stream
+写入一个有界终止 error frame 并取消上游。预算最小为 16 bytes，以保证仍可发送
+合法 error frame。显式 `ServerResponse` 保持旁路，由应用负责流式读取和限制。
+
+这道服务端预算约束框架生成和发送的 JSON bytes，但 `Serializer.encode` 仍会先
+物化一个值的 JSON-compatible 对象图；它不能约束 handler 已有对象、超大或无限
+`Iterable`。大结果仍应分页、拆成多个 stream frame 或放入对象存储。
+
+`RpcClient.maxResponseFrameBytes` 默认 1 MiB，在 UTF-8 解码前再次防御旧版或
+不可信服务端。value 的完整 JSON 算一个 frame；stream 不限制累计大小。超限会
+取消响应体；2xx 归类为 `RpcProtocolException`，非 2xx 保留
+`RemoteServerException.status`。
+
+默认 `HttpTransport.maxRequestBodyBytes` 是 10 MiB。它会在调用
+`http.Client.send` 前完整缓冲 body，exact limit 可发送，超限会取消 body 并抛出
+公开的 `PayloadTooLargeException`。该预算不限制 GET query；typed RPC 也已在
+进入 transport 前生成完整 JSON，因此提高它不会把 JSON 调用或上传变成流式。
+这个异常发生在客户端、网络请求开始前；GET payload 只经过服务端输入预算。
 
 RPC value 与 stream 都接收应用拥有的取消信号。Query 不依赖 RPC；把
 `QueryCancelToken` 显式接到生成的 ref 即可在 `cancelQueries` 或最后一个

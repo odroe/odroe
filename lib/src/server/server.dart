@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import '../app/context.dart';
 import '../app/module.dart';
@@ -26,6 +27,17 @@ typedef InvocationModuleFactory =
 
 /// Adapter-neutral runtime for typed routes and server functions.
 final class Server {
+  /// Default maximum buffered server-function request size: 1 MiB.
+  static const int defaultMaxFunctionPayload = 1024 * 1024;
+
+  /// Default maximum typed server-function response frame size: 1 MiB.
+  static const int defaultMaxFunctionResponseFrameBytes = 1024 * 1024;
+
+  /// Smallest valid typed response budget.
+  ///
+  /// This fits the terminal `{"type":"error"}` protocol frame.
+  static const int minimumFunctionResponseFrameBytes = 16;
+
   /// Creates a server from explicitly selected routes and capabilities.
   Server({
     required Iterable<RouteNode> routes,
@@ -38,7 +50,8 @@ final class Server {
     Serializer? serializer,
     this.renderer,
     this.functionPath = '/__odroe/functions',
-    this.maxFunctionPayload = 1024 * 1024,
+    this.maxFunctionPayload = defaultMaxFunctionPayload,
+    this.maxFunctionResponseFrameBytes = defaultMaxFunctionResponseFrameBytes,
     this.exposeErrors = false,
     this.allowRpcWithoutOrigin = false,
   }) : routes = List<RouteNode>.unmodifiable(routes),
@@ -51,6 +64,20 @@ final class Server {
        _functionPrefix = functionPath.endsWith('/')
            ? functionPath
            : '$functionPath/' {
+    if (maxFunctionPayload <= 0) {
+      throw ArgumentError.value(
+        maxFunctionPayload,
+        'maxFunctionPayload',
+        'Must be greater than zero.',
+      );
+    }
+    if (maxFunctionResponseFrameBytes < minimumFunctionResponseFrameBytes) {
+      throw ArgumentError.value(
+        maxFunctionResponseFrameBytes,
+        'maxFunctionResponseFrameBytes',
+        'Must be at least $minimumFunctionResponseFrameBytes bytes.',
+      );
+    }
     _matcher = RouteMatcher(this.routes);
   }
 
@@ -83,6 +110,13 @@ final class Server {
 
   /// Maximum buffered server function payload size.
   final int maxFunctionPayload;
+
+  /// Maximum UTF-8 bytes in one typed server-function response frame.
+  ///
+  /// Streaming functions apply this limit independently to every JSON frame;
+  /// the NDJSON line feed is not counted. Explicit [ServerResponse] values
+  /// bypass this limit.
+  final int maxFunctionResponseFrameBytes;
 
   /// Whether failure responses may expose internal details.
   final bool exposeErrors;
@@ -247,16 +281,21 @@ final class Server {
         body: response.body,
       );
     }
-    return ServerResponse.json(
-      <String, Object?>{
-        'type': status == 404 ? 'notFound' : 'error',
-        'message': message,
-        if (exposeErrors && stackTrace != null) 'stack': '$stackTrace',
-        if (error != null) 'errorType': error.runtimeType.toString(),
-      },
-      status: status,
-      headers: responseHeaders,
-    );
+    final frame = <String, Object?>{
+      if (rpc) 'version': 1,
+      'type': status == 404 ? 'notFound' : 'error',
+      'message': message,
+      if (exposeErrors && stackTrace != null) 'stack': '$stackTrace',
+      if (error != null) 'errorType': error.runtimeType.toString(),
+    };
+    if (rpc) {
+      return _functionErrorResponse(
+        frame,
+        status: status,
+        headers: responseHeaders,
+      );
+    }
+    return ServerResponse.json(frame, status: status, headers: responseHeaders);
   }
 
   String? _rpcId(String path) {
@@ -291,7 +330,7 @@ final class Server {
       final value = await binding.execute(data, context, id);
       if (value is ServerResponse) return value;
       if (value is Stream) return _streamFunction(value);
-      return ServerResponse.json(<String, Object?>{
+      return _functionResponse(<String, Object?>{
         'version': 1,
         'type': 'data',
         'data': serializer.encode(value),
@@ -317,14 +356,23 @@ final class Server {
     Stream<List<int>> body() async* {
       try {
         await for (final value in stream) {
-          yield utf8.encode(
-            '${jsonEncode(<String, Object?>{'version': 1, 'type': 'data', 'data': serializer.encode(value)})}\n',
-          );
+          yield _encodeFunctionFrame(<String, Object?>{
+            'version': 1,
+            'type': 'data',
+            'data': serializer.encode(value),
+          }, terminateLine: true);
         }
-      } on Object catch (error) {
-        yield utf8.encode(
-          '${jsonEncode(<String, Object?>{'version': 1, 'type': 'error', 'message': exposeErrors ? '$error' : 'Server stream failed.'})}\n',
+      } on _FunctionResponseFrameTooLarge {
+        yield _encodeFunctionErrorFrame(
+          _functionResponseTooLargeFrame,
+          terminateLine: true,
         );
+      } on Object catch (error) {
+        yield _encodeFunctionErrorFrame(<String, Object?>{
+          'version': 1,
+          'type': 'error',
+          'message': exposeErrors ? '$error' : 'Server stream failed.',
+        }, terminateLine: true);
       }
     }
 
@@ -430,8 +478,61 @@ final class Server {
     required int status,
     required Uri location,
   }) => request.headers.value('x-odroe-server-function') == 'true'
-      ? ServerResponse.json(frame, status: status)
+      ? _functionResponse(frame, status: status)
       : ServerResponse.redirect(location, status: status);
+
+  Uint8List _encodeFunctionFrame(
+    Map<String, Object?> frame, {
+    bool terminateLine = false,
+  }) => _encodeJsonFrame(
+    frame,
+    maxFunctionResponseFrameBytes,
+    terminateLine: terminateLine,
+  );
+
+  Uint8List _encodeFunctionErrorFrame(
+    Map<String, Object?> frame, {
+    bool terminateLine = false,
+  }) {
+    try {
+      return _encodeFunctionFrame(frame, terminateLine: terminateLine);
+    } on _FunctionResponseFrameTooLarge {
+      return _encodeFunctionFrame(
+        _minimalFunctionErrorFrame,
+        terminateLine: terminateLine,
+      );
+    }
+  }
+
+  ServerResponse _functionResponse(
+    Map<String, Object?> frame, {
+    int status = 200,
+    Headers? headers,
+  }) {
+    try {
+      return _functionJsonResponse(
+        _encodeFunctionFrame(frame),
+        status: status,
+        headers: headers,
+      );
+    } on _FunctionResponseFrameTooLarge {
+      return _functionErrorResponse(
+        _functionResponseTooLargeFrame,
+        status: 500,
+        headers: headers,
+      );
+    }
+  }
+
+  ServerResponse _functionErrorResponse(
+    Map<String, Object?> frame, {
+    required int status,
+    Headers? headers,
+  }) => _functionJsonResponse(
+    _encodeFunctionErrorFrame(frame),
+    status: status,
+    headers: headers,
+  );
 
   ServerResponse _withInvocationCleanup(
     ServerResponse response,
@@ -509,3 +610,86 @@ Headers _varyAccept(Headers? headers) {
 
 String _text(String value) =>
     const HtmlEscape(HtmlEscapeMode.element).convert(value);
+
+final _functionFrameEncoder = JsonUtf8Encoder(null, null, 8 * 1024);
+const _minimalFunctionErrorFrame = <String, Object?>{'type': 'error'};
+const _functionResponseTooLargeFrame = <String, Object?>{
+  'version': 1,
+  'type': 'error',
+  'message': 'Server function response exceeded its byte limit.',
+};
+
+ServerResponse _functionJsonResponse(
+  Uint8List bytes, {
+  required int status,
+  Headers? headers,
+}) => ServerResponse.bytes(
+  bytes,
+  status: status,
+  contentType: 'application/json; charset=utf-8',
+  headers: headers,
+);
+
+Uint8List _encodeJsonFrame(
+  Object? value,
+  int maxBytes, {
+  bool terminateLine = false,
+}) {
+  final output = _BoundedByteSink(maxBytes);
+  _functionFrameEncoder.startChunkedConversion(output).add(value);
+  return output.takeBytes(terminateLine: terminateLine);
+}
+
+final class _BoundedByteSink extends ByteConversionSink {
+  _BoundedByteSink(this.maxBytes);
+
+  final int maxBytes;
+  final List<Uint8List> _chunks = <Uint8List>[];
+  var _length = 0;
+  var _closed = false;
+
+  @override
+  void add(List<int> chunk) => addSlice(chunk, 0, chunk.length, false);
+
+  @override
+  void addSlice(List<int> chunk, int start, int end, bool isLast) {
+    final added = end - start;
+    if (added > maxBytes - _length) {
+      throw _FunctionResponseFrameTooLarge(maxBytes);
+    }
+    final copy = Uint8List(added)..setRange(0, added, chunk, start);
+    _chunks.add(copy);
+    _length += added;
+    if (isLast) close();
+  }
+
+  @override
+  void close() => _closed = true;
+
+  Uint8List takeBytes({bool terminateLine = false}) {
+    if (!_closed) {
+      throw StateError('JSON encoder did not close its output.');
+    }
+    if (_chunks.length == 1 && !terminateLine) return _chunks.single;
+
+    final result = Uint8List(_length + (terminateLine ? 1 : 0));
+    var offset = 0;
+    for (final chunk in _chunks) {
+      final end = offset + chunk.length;
+      result.setRange(offset, end, chunk);
+      offset = end;
+    }
+    if (terminateLine) result[offset] = 0x0a;
+    return result;
+  }
+}
+
+final class _FunctionResponseFrameTooLarge implements Exception {
+  const _FunctionResponseFrameTooLarge(this.maxBytes);
+
+  final int maxBytes;
+
+  @override
+  String toString() =>
+      'Server function response frame exceeds $maxBytes bytes.';
+}

@@ -286,14 +286,14 @@ final class ServerResponse {
       encoding.decode(await readBytes());
 }
 
-/// Raised before buffering a request body beyond its configured limit.
+/// Raised when a request payload exceeds its configured byte limit.
 final class PayloadTooLargeException implements Exception {
   /// Creates an exception for the enforced [maxBytes].
   const PayloadTooLargeException(this.maxBytes);
 
-  /// The maximum accepted body size.
+  /// The maximum accepted payload size.
   final int maxBytes;
 
   @override
-  String toString() => 'Request body exceeds $maxBytes bytes.';
+  String toString() => 'Request payload exceeds $maxBytes bytes.';
 }

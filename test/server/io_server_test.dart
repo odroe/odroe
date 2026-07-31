@@ -4,10 +4,47 @@ import 'dart:io';
 
 import 'package:odroe/document.dart';
 import 'package:odroe/router.dart';
+import 'package:odroe/rpc.dart';
 import 'package:odroe/server_io.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('IO adapter sends only the bounded typed function error', () async {
+    const maxFrameBytes = 64;
+    final app = Server(
+      routes: const [],
+      functions: <String, ServerFunctionBinding>{
+        'large': ServerFunctionBinding(
+          ServerFunction<NoServerInput, String>(handler: (_) => 'x' * 4096),
+        ),
+      },
+      maxFunctionResponseFrameBytes: maxFrameBytes,
+    );
+    final server = await IoServer.bind(app.handle, port: 0);
+    addTearDown(server.close);
+    final client = HttpClient();
+    addTearDown(client.close);
+    final uri = Uri.parse(
+      'http://127.0.0.1:${server.port}/__odroe/functions/large',
+    );
+
+    final request = await client.postUrl(uri);
+    request.headers
+      ..contentType = ContentType.json
+      ..set('origin', uri.origin);
+    request.write('{"data":null}');
+    final response = await request.close();
+    final bytes = await response.fold<List<int>>(<int>[], (all, chunk) {
+      all.addAll(chunk);
+      return all;
+    });
+
+    expect(response.statusCode, HttpStatus.internalServerError);
+    expect(bytes.length, lessThanOrEqualTo(maxFrameBytes));
+    expect(jsonDecode(utf8.decode(bytes)), containsPair('type', 'error'));
+    expect(utf8.decode(bytes), isNot(contains('x' * 128)));
+  });
+
   test('IO adapter serves assets without escaping the public root', () async {
     final public = await Directory.systemTemp.createTemp('odroe-public-');
     final outside = await Directory.systemTemp.createTemp('odroe-private-');
