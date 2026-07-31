@@ -1,4 +1,5 @@
 .dart_tool/
+.wrangler/
 .pub/
 build/
 pubspec.lock

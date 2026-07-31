@@ -94,10 +94,24 @@ native executable.
   "main": "./build/odroe/cloudflare/worker.mjs",
   "compatibility_date": "2026-07-29",
   "assets": {
-    "directory": "./build/web"
+    "directory": "./build/web",
+    "html_handling": "drop-trailing-slash"
   }
 }
 ```
+
+`drop-trailing-slash` keeps generated directory indexes on canonical URLs such
+as `/docs`. This hybrid configuration deliberately leaves
+`not_found_handling` unset so browser navigation misses can reach dynamic
+Document routes in the Worker.
+
+For a fully prerendered SSG where every public navigation URL exists in
+`build/web`, add `"not_found_handling": "404-page"` to serve the generated
+`404.html`. With a compatibility date of `2025-04-01` or newer, Cloudflare
+otherwise skips the Worker for navigation misses. Hybrid applications that
+retain a static 404 can opt into `assets_navigation_has_no_effect` or scope
+`run_worker_first` to their dynamic paths. See
+[Cloudflare navigation routing](https://developers.cloudflare.com/workers/static-assets/routing/static-site-generation/#navigation-requests).
 
 The target follows these rules:
 

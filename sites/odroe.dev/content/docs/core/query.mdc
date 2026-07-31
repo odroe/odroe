@@ -15,7 +15,7 @@ layer: a query may call HTTP, RPC, local storage, or a typed SQL driver.
 final client = QueryClient();
 final post = await client.fetchQuery(
   QueryOptions(
-    key: QueryKey(<Object?>['post', postId]),
+    key: QueryKey('post', <Object?>[postId]),
     query: (_) => repository.read(postId),
   ),
 );

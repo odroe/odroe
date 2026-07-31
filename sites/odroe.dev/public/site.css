@@ -562,7 +562,7 @@ pre {
   margin: 3rem 0 0;
   border-top: 1px solid var(--line);
   padding-top: 1.2rem;
-  color: #858c87;
+  color: var(--muted);
   font-size: 0.76rem;
 }
 
@@ -602,7 +602,7 @@ pre {
 .docs-nav-group h2,
 .docs-outline h2 {
   margin: 0 0 0.55rem;
-  color: #8a918c;
+  color: var(--muted);
   font-size: 0.68rem;
   font-weight: 720;
   letter-spacing: 0.11em;
@@ -638,7 +638,7 @@ pre {
 
 .docs-breadcrumb {
   margin: 0 0 2.5rem;
-  color: #7d8580;
+  color: var(--muted);
   font-size: 0.8rem;
 }
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:odroe/document.dart';
+import 'package:odroe/query.dart';
 import 'package:odroe/server.dart';
 import 'package:odroe_dev/content.dart';
 import 'package:odroe_dev/routes.server.dart' as generated;
@@ -189,20 +190,31 @@ void main() {
     expect(_meta(body, 'og:url'), isEmpty);
   });
 
-  test('deployment serves canonical URLs without trailing slashes', () async {
-    final config =
-        jsonDecode(await File('wrangler.jsonc').readAsString())
-            as Map<String, Object?>;
-    final assets = config['assets']! as Map<String, Object?>;
+  test(
+    'website deployment preserves canonical URLs and its static 404',
+    () async {
+      final config =
+          jsonDecode(await File('wrangler.jsonc').readAsString())
+              as Map<String, Object?>;
+      final assets = config['assets']! as Map<String, Object?>;
 
-    expect(assets['html_handling'], 'drop-trailing-slash');
-  });
+      expect(assets['html_handling'], 'drop-trailing-slash');
+      expect(assets['not_found_handling'], '404-page');
+    },
+  );
 
-  test('Query docs keep mutation lifecycle boundaries explicit', () async {
+  test('Query docs match key and mutation lifecycle contracts', () async {
     final source = (await File(
       'content/docs/core/query.mdc',
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
 
+    final options = QueryOptions<int>(
+      key: QueryKey('post', <Object?>[42]),
+      query: (_) async => 42,
+    );
+    expect(options.key, QueryKey('post', <Object?>[42]));
+    expect(source, contains("key: QueryKey('post', <Object?>[postId]),"));
+    expect(source, isNot(contains("QueryKey(<Object?>['post', postId])")));
     expect(
       source,
       contains(
@@ -223,6 +235,52 @@ void main() {
       isNot(
         contains('Queries, infinite queries, and mutations share cancellation'),
       ),
+    );
+  });
+
+  test(
+    'Cloudflare hybrid example preserves dynamic page navigation',
+    () async {
+      final source = await File('content/docs/deploy.mdc').readAsString();
+      final block = RegExp(r'```json\s+([\s\S]*?)\s+```').firstMatch(source);
+
+      expect(block, isNotNull);
+      final config = jsonDecode(block!.group(1)!) as Map<String, Object?>;
+      final assets = config['assets']! as Map<String, Object?>;
+      expect(assets['directory'], './build/web');
+      expect(assets['html_handling'], 'drop-trailing-slash');
+      expect(assets, isNot(contains('not_found_handling')));
+      expect(source, contains('generated directory indexes on canonical URLs'));
+      expect(source, contains('navigation misses can reach dynamic'));
+      expect(source, contains('For a fully prerendered SSG'));
+      expect(source, contains('assets_navigation_has_no_effect'));
+    },
+  );
+
+  test('small secondary labels use accessible muted ink', () async {
+    final css = await File('public/site.css').readAsString();
+
+    expect(
+      RegExp(
+        r'\.footer-legal\s*\{[^}]*color:\s*var\(--muted\);',
+        multiLine: true,
+      ).hasMatch(css),
+      isTrue,
+    );
+    expect(
+      RegExp(
+        r'\.docs-nav-group h2,\s*\.docs-outline h2\s*\{'
+        r'[^}]*color:\s*var\(--muted\);',
+        multiLine: true,
+      ).hasMatch(css),
+      isTrue,
+    );
+    expect(
+      RegExp(
+        r'\.docs-breadcrumb\s*\{[^}]*color:\s*var\(--muted\);',
+        multiLine: true,
+      ).hasMatch(css),
+      isTrue,
     );
   });
 
