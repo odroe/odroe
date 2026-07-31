@@ -8,6 +8,7 @@ import 'route.dart' as definition;
 final route = definition.route.server(load: (context) => const NoData());
 
 final readTitle = ServerFunction<int, String>(
+  id: 'posts.read-title',
   method: HttpMethod.get,
   handler: (context) => 'Post ${context.data}',
 );

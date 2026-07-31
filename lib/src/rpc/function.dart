@@ -41,13 +41,25 @@ final class ServerFunction<I, O> {
   /// Creates a server function and its invocation policy.
   ServerFunction({
     required this.handler,
+    this.id,
     this.decodeInput,
     this.method = HttpMethod.post,
     Iterable<Middleware> middleware = const <Middleware>[],
-  }) : middleware = List<Middleware>.unmodifiable(middleware);
+  }) : middleware = List<Middleware>.unmodifiable(middleware) {
+    if (id?.isEmpty ?? false) {
+      throw ArgumentError.value(id, 'id', 'Must not be empty.');
+    }
+  }
 
   /// User implementation invoked for each request.
   final ServerFunctionHandler<I, O> handler;
+
+  /// Optional stable wire identifier consumed by the file-route compiler.
+  ///
+  /// Once published to an application, this value is part of its wire
+  /// protocol. Manually assembled server runtimes still own the keys in their
+  /// function manifest.
+  final String? id;
 
   /// Optional decoder for function input.
   final ValueDecoder<I>? decodeInput;

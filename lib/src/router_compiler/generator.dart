@@ -162,7 +162,6 @@ final class RouteGenerator {
       ..writeln('final serverFunctions = <String, ServerFunctionBinding>{');
     for (final node in nodes) {
       for (final function in node.functions) {
-        final id = _functionId(node, function);
         final input = _clientFunctionType(
           node,
           function.inputType,
@@ -170,7 +169,7 @@ final class RouteGenerator {
         );
         final decoder = wireDecoder(input, 'value');
         buffer.writeln(
-          '  ${jsonEncode(id)}: ServerFunctionBinding('
+          '  ${jsonEncode(function.wireId)}: ServerFunctionBinding('
           '${node.serverAlias}.${function.name},'
           '${decoder == null ? '' : ' decodeInput: (value) => $decoder,'}'
           '),',
@@ -363,7 +362,7 @@ final class RouteGenerator {
           '  $reference get ${function.name} => '
           '${decoder == null ? 'const ' : ''}$reference(',
         )
-        ..writeln('    id: ${jsonEncode(_functionId(node, function))},')
+        ..writeln('    id: ${jsonEncode(function.wireId)},')
         ..writeln('    method: ${function.method},');
       if (decoder != null) {
         buffer.writeln('    decodeOutput: (value) => $decoder,');
@@ -534,11 +533,6 @@ final class RouteGenerator {
     return result;
   }
 
-  String _functionId(RouteNode node, ServerFunctionDeclaration function) {
-    final path = _relative(node.serverFile!.path).split(p.separator).join('/');
-    return '$path#${function.name}';
-  }
-
   String? _resolveImport(File from, String uri) {
     final parsed = Uri.tryParse(uri);
     if (parsed != null && parsed.hasScheme) return null;
@@ -617,8 +611,6 @@ final class RouteGenerator {
     return "output.$method('${field.name}', value.${field.name}, "
         'omitIf: $defaults.${field.name});';
   }
-
-  String _relative(String path) => p.relative(path, from: projectRoot.path);
 }
 
 final class _ClientFunctionImports {

@@ -31,6 +31,7 @@ final class RouteScanner {
   ) {
     _validateTree(root, diagnostics, <RouteField>[]);
     _validateGeneratedNames(nodes, diagnostics);
+    _validateFunctionIds(nodes, diagnostics);
   }
 
   /// Flattens [root] in stable depth-first order.
@@ -546,6 +547,31 @@ final class RouteScanner {
         'Terminal route pattern "$pattern" conflicts with '
         '${_relative(samePattern.directory.path)}.',
       );
+    }
+  }
+
+  void _validateFunctionIds(
+    List<RouteNode> nodes,
+    List<FileRouteDiagnostic> diagnostics,
+  ) {
+    final ids =
+        <String, ({RouteNode node, ServerFunctionDeclaration function})>{};
+    for (final node in nodes) {
+      for (final function in node.functions) {
+        final existing = ids[function.wireId];
+        if (existing == null) {
+          ids[function.wireId] = (node: node, function: function);
+          continue;
+        }
+        _error(
+          diagnostics,
+          node.serverFile!.path,
+          'ServerFunction "${function.name}" uses duplicate id '
+          '"${function.wireId}" already declared by '
+          '"${existing.function.name}" in '
+          '${_relative(existing.node.serverFile!.path)}.',
+        );
+      }
     }
   }
 

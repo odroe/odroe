@@ -33,13 +33,20 @@ final route = definition.route.server(
 
 ```dart
 final updatePost = ServerFunction<UpdatePost, Post>(
+  id: 'posts.update',
   handler: (context) => repository.update(context.data),
 );
 ```
 
-The generated client and server manifest agree on the function identifier and
-wire types. Cross-origin requests, payload limits, streaming frames, and
-request cancellation stay visible in the transport.
+An explicit `id` is the stable wire contract shared by already shipped apps and
+new server deployments. Keep it unchanged after release. The compiler accepts
+only a non-empty string literal and rejects duplicates across the complete route
+tree. Omitting it preserves the path-and-variable fallback for gradual
+migration, but renaming either source location changes that fallback.
+
+The generated client and server manifest agree on the identifier and wire
+types. Cross-origin requests, payload limits, streaming frames, and request
+cancellation stay visible in the transport.
 Server, route, middleware, and server-function configuration is copied into
 immutable snapshots, so runtime matching cannot drift after construction.
 Unsupported transport methods return `501`; matched routes return `405` with

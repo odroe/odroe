@@ -114,9 +114,7 @@ final List<RouteNode> serverRouteTree = <RouteNode>[_serverRouteRoot];
 
 /// Server functions addressable by generated clients.
 final serverFunctions = <String, ServerFunctionBinding>{
-  "lib/routes/posts/[postId]/server.dart#readTitle": ServerFunctionBinding(
-    posts_post_id_server.readTitle,
-  ),
+  "posts.read-title": ServerFunctionBinding(posts_post_id_server.readTitle),
   "lib/routes/posts/[postId]/server.dart#watchViews": ServerFunctionBinding(
     posts_post_id_server.watchViews,
   ),

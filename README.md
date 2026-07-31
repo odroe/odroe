@@ -172,11 +172,16 @@ final route = definition.route.server(
 );
 
 final updatePost = ServerFunction<int, bool>(
+  id: 'posts.update',
   handler: (context) async => repository.update(context.data),
 );
 ```
 
 文件名只有一种心智：`definition.route.page(...)`、`definition.route.shell(...)`、`definition.route.server(...)`、`definition.route.document(...)`。
+`ServerFunction.id` 是已发布 App 与服务端共享的 wire 合同；发布后应保持稳定。
+编译器要求它是非空字符串字面量，并在整个 route tree 中拒绝重复值。省略
+`id` 时仍使用原有的 `server.dart` 路径加变量名，便于现有代码渐进迁移，但
+重命名文件或变量会改变该 fallback。
 
 ## 服务端组合
 

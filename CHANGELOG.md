@@ -6,6 +6,9 @@
   MySQL/MariaDB, and Cloudflare D1 entrypoints.
 - Add request invocation lifetimes and a Fetch adapter for local
   Cloudflare Workers builds.
+- Add optional stable `ServerFunction.id` wire identifiers, reject empty,
+  non-literal, and duplicate IDs in file routes, and preserve the existing
+  path-and-variable fallback when an ID is omitted.
 - Add Press collections, dynamic prerender locations, and the Odroe-built
   documentation website.
 - Change prerender defaults to fixed concurrency 4, at most 1000 routes and

@@ -414,6 +414,7 @@ final class ServerFunctionDeclaration {
   /// Creates a server-function declaration.
   const ServerFunctionDeclaration({
     required this.name,
+    required this.wireId,
     required this.inputType,
     required this.outputType,
     required this.streamType,
@@ -422,6 +423,9 @@ final class ServerFunctionDeclaration {
 
   /// Top-level variable name.
   final String name;
+
+  /// Stable identifier emitted into the client and server wire manifests.
+  final String wireId;
 
   /// Client-visible input type.
   final String inputType;

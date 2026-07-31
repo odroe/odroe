@@ -165,9 +165,7 @@ void main() {
       contains("developmentOriginFile == null || developmentOriginFile == ''"),
     );
 
-    final id = Uri.encodeComponent(
-      'lib/routes/posts/[postId]/server.dart#readTitle',
-    );
+    final id = Uri.encodeComponent('posts.read-title');
     final rpc = await client.getUrl(
       Uri.parse(
         'http://127.0.0.1:$port/__odroe/functions/$id'

@@ -237,7 +237,7 @@ final class AppPostsPostIdRoutes {
   /// Calls `readTitle` on the application server.
   ServerFunctionRef<int, String> get readTitle =>
       const ServerFunctionRef<int, String>(
-        id: "lib/routes/posts/[postId]/server.dart#readTitle",
+        id: "posts.read-title",
         method: HttpMethod.get,
       );
 

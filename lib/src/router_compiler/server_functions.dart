@@ -124,26 +124,51 @@ final class ServerFunctionScanner {
           );
           continue;
         }
+        String? explicitId;
         var method = 'HttpMethod.post';
         for (final argument
             in argumentList!.arguments.whereType<NamedExpression>()) {
-          if (argument.name.label.name != 'method') continue;
-          final source = argument.expression.toSource();
-          if (!RegExp(
-            r'^(?:[A-Za-z_]\w*\.)?HttpMethod\.[a-z]+$',
-          ).hasMatch(source)) {
-            _error(
-              diagnostics,
-              file.path,
-              'ServerFunction "$name" method must be a HttpMethod value.',
-            );
-          } else {
-            method = 'HttpMethod.${source.split('.').last}';
+          switch (argument.name.label.name) {
+            case 'id':
+              final expression = argument.expression;
+              final value = expression is StringLiteral
+                  ? expression.stringValue
+                  : null;
+              if (value == null) {
+                _error(
+                  diagnostics,
+                  file.path,
+                  'ServerFunction "$name" id must be a string literal.',
+                );
+              } else if (value.isEmpty) {
+                _error(
+                  diagnostics,
+                  file.path,
+                  'ServerFunction "$name" id must not be empty.',
+                );
+              } else {
+                explicitId = value;
+              }
+            case 'method':
+              final source = argument.expression.toSource();
+              if (!RegExp(
+                r'^(?:[A-Za-z_]\w*\.)?HttpMethod\.[a-z]+$',
+              ).hasMatch(source)) {
+                _error(
+                  diagnostics,
+                  file.path,
+                  'ServerFunction "$name" method must be a HttpMethod value.',
+                );
+              } else {
+                method = 'HttpMethod.${source.split('.').last}';
+              }
           }
         }
+        final relativePath = _relative(file.path).split(p.separator).join('/');
         node.functions.add(
           ServerFunctionDeclaration(
             name: name,
+            wireId: explicitId ?? '$relativePath#$name',
             inputType: input,
             outputType: output.toSource(),
             streamType: streamType,
