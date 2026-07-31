@@ -1,5 +1,4 @@
 import '../app/context.dart';
-import '../app/key.dart';
 import '../app/module.dart';
 import '../app/registry.dart';
 import 'client.dart';
@@ -7,7 +6,7 @@ import 'http.dart';
 import 'serializer.dart';
 
 /// The application context key used to read the configured [RpcClient].
-const rpcClientKey = ContextKey<RpcClient>('rpcClient');
+final rpcClientKey = ContextKey<RpcClient>('rpcClient');
 
 /// Installs an RPC client into an application context.
 final class RpcModule extends Module {
@@ -47,7 +46,7 @@ final class RpcModule extends Module {
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provide(rpcClientKey, client);
+    rpcClientKey.provide(registry, client);
   }
 
   @override

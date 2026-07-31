@@ -31,7 +31,7 @@ final class DocumentModule extends Module {
     if (initial != null) {
       handoff.apply(initial);
       final state = handoff.routerState;
-      if (state != null) registry.provide(routerInitialStateKey, state);
+      if (state != null) routerInitialStateKey.provide(registry, state);
     }
     registry.bind(const _DocumentFlutterBinding());
   }

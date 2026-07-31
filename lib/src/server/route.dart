@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import '../app/context.dart';
-import '../app/key.dart';
+import '../app/registry.dart';
 import '../router/codec.dart';
 import '../router/match.dart';
 import '../router/path.dart';

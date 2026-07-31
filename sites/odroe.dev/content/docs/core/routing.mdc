@@ -44,3 +44,15 @@ server-only tree. It does not use annotations, parts, registries, or
 
 Generated route references encode params and search values through the same
 typed codec used for matching.
+
+## Capability keys
+
+Optional entrypoints extend a neutral route with typed `RouteCapability`
+keys. Capability keys also use instance identity: keep one top-level `final`
+key and reuse it when attaching and reading the capability. Its name is only
+diagnostic, so unrelated entrypoints cannot overwrite one another merely by
+choosing the same type and name. Replace old `const RouteCapability(...)`
+declarations with `final`; constructing another key at the read site requests
+a different capability. Attach values through
+`capability.attach(route, value)` so the analyzer fixes the value type from
+the capability.

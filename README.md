@@ -105,6 +105,17 @@ void main() {
 
 删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
 
+`ContextKey`、`RouteCapability` 与 `RequestKey` 按实例身份匹配，不按名称
+匹配。自定义 key 应保存为一个顶层 `final`，并在提供、读取或附加能力时复用
+同一实例；名称只用于诊断。把旧的 `const ContextKey(...)`、
+`const RouteCapability(...)`、`const RequestKey(...)` 声明改成 `final`；
+不要在读取处重新创建 key。这样不同模块可以安全使用相同的自然名称，而不会
+静默覆盖彼此。注册值使用 `key.provide(registry, value)` 或
+`key.provideFactory(registry, create)`；可选 route 能力使用
+`key.attach(route, value)`；请求值使用 `key.set(context, value)`。这些
+key-first 实例方法会在分析期拒绝直接错型，并在 key 被泛型宽化后保留运行时
+类型校验。
+
 浏览器端 RPC 只支持同源，可让 `RpcModule.http()` 使用当前 origin。
 Android、iOS 与桌面应用应传入明确的服务端地址。应用可用
 `headersProvider` 在每个请求发送前读取最新 token：

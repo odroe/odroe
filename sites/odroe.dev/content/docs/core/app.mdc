@@ -23,6 +23,26 @@ await context.dispose();
 A binding must have a typed `ContextKey`. There is no string service locator
 and no implicit global registry.
 
+## Identity keys
+
+```dart
+final sessionKey = ContextKey<Session>('session');
+
+sessionKey.provide(registry, session);
+final current = context.read(sessionKey);
+```
+
+A key is matched by instance identity, not by its diagnostic name. Define one
+top-level `final` key and reuse that exact instance when providing and reading
+the value. Independent modules may use the same natural name without
+overwriting each other.
+
+This replaces the old `const ContextKey(...)` form. Do not reconstruct a key
+at a read site: a new instance intentionally names a different binding.
+Registration is key-first so the analyzer fixes the value type from the key
+instead of widening an incompatible key/value pair to `Object`. Lazy values
+use `sessionKey.provideFactory(registry, createSession)`.
+
 ## Flutter composition
 
 `App` creates one application context and exposes it to a builder.

@@ -6,6 +6,30 @@ typedef _OrganizationSearch = ({String tab});
 typedef _ProjectParams = ({int projectId});
 
 void main() {
+  test('same-name route capabilities keep independent values', () {
+    final first = RouteCapability<String>('document');
+    final second = RouteCapability<String>('document');
+    final firstRoute = first.attach(
+      AppRoute<NoParams, NoSearch, NoData>(),
+      'first',
+    );
+    final route = second.attach(firstRoute, 'second');
+
+    expect(first, isNot(same(second)));
+    expect(route.capability(first), 'first');
+    expect(route.capability(second), 'second');
+  });
+
+  test('widened route capabilities enforce their runtime value type', () {
+    final capability = RouteCapability<String>('document');
+    final RouteCapability<Object> widened = capability;
+
+    expect(
+      () => widened.attach(AppRoute<NoParams, NoSearch, NoData>(), 42),
+      throwsA(isA<TypeError>()),
+    );
+  });
+
   test('RouteRef composes typed nested params and search', () {
     final organization =
         AppRoute<_OrganizationParams, _OrganizationSearch, NoData>(

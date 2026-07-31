@@ -1,15 +1,23 @@
 import '../app/context.dart';
-import '../app/key.dart';
+import '../app/registry.dart';
 import 'http.dart';
 import 'invocation.dart';
 
 /// Type-safe identity used to extend one request context.
 final class RequestKey<T> {
   /// Creates a request-local key.
-  const RequestKey(this.name);
+  ///
+  /// Keys use instance identity. Keep one key and reuse that exact instance
+  /// when storing and reading a value. The name is only for diagnostics.
+  RequestKey(this.name);
 
   /// The name shown in diagnostics.
   final String name;
+
+  /// Stores [value] in [context] under this key.
+  void set(RequestContext context, T value) {
+    context._values[this as RequestKey<Object?>] = value;
+  }
 
   @override
   String toString() => 'RequestKey<$T>($name)';
@@ -23,7 +31,7 @@ final class RequestContext {
     required this.app,
     ServerInvocation? invocation,
   }) {
-    if (invocation != null) set(_invocationKey, invocation);
+    if (invocation != null) _invocationKey.set(this, invocation);
   }
 
   /// The incoming request.
@@ -35,7 +43,7 @@ final class RequestContext {
   final Map<RequestKey<Object?>, Object?> _values =
       <RequestKey<Object?>, Object?>{};
 
-  static const _invocationKey = RequestKey<ServerInvocation>(
+  static final _invocationKey = RequestKey<ServerInvocation>(
     'server.invocation',
   );
 
@@ -59,11 +67,6 @@ final class RequestContext {
       throw StateError('Missing request context: ${key.name}.');
     }
     return value;
-  }
-
-  /// Stores a request-local [value].
-  void set<T>(RequestKey<T> key, T value) {
-    _values[key as RequestKey<Object?>] = value;
   }
 
   /// Whether a request-local value exists for [key].

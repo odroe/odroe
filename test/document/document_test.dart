@@ -4,14 +4,14 @@ import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
-const _greetingKey = ContextKey<String>('greeting');
+final _greetingKey = ContextKey<String>('greeting');
 
 final class _GreetingModule extends Module {
   const _GreetingModule();
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provide(_greetingKey, 'Hello');
+    _greetingKey.provide(registry, 'Hello');
   }
 }
 

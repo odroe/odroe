@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'binding.dart';
-import 'key.dart';
 import 'module.dart';
 import 'registry.dart';
 

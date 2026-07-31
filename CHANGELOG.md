@@ -15,6 +15,18 @@
 - Add preflight-safe RPC cancellation across asynchronous headers, request
   bodies, response setup, typed value bodies, and streams, with direct Query
   cancellation bridging and no automatic timeout or retry policy.
+- Make application context, route capability, and request context keys
+  identity-based so independent modules cannot collide through equal constant
+  type/name pairs.
+  This is source-breaking: replace `const ContextKey(...)`,
+  `const RouteCapability(...)`, and `const RequestKey(...)` declarations with
+  one shared top-level `final` instance per key, then reuse it at every
+  provider and consumer. Registration now uses
+  `key.provide(registry, value)` or
+  `key.provideFactory(registry, create)`; optional route values use
+  `key.attach(route, value)`; request values use `key.set(context, value)`.
+  These key-first instance methods reject incompatible values both statically
+  and through widened generic views at runtime.
 - Add Press collections, dynamic prerender locations, and the Odroe-built
   documentation website.
 - Change prerender defaults to fixed concurrency 4, at most 1000 routes and

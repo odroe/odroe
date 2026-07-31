@@ -1,11 +1,10 @@
-import '../app/key.dart';
 import '../app/module.dart';
 import '../app/registry.dart';
 import 'component.dart';
 import 'parser.dart';
 
 /// The application context key used to read the registered [MdcParser].
-const mdcParserKey = ContextKey<MdcParser>('mdcParser');
+final mdcParserKey = ContextKey<MdcParser>('mdcParser');
 
 /// Installs MDC parsing and renderer-specific components into an application.
 final class MdcModule extends Module {
@@ -44,7 +43,7 @@ final class MdcModule extends Module {
       }
     }
 
-    registry.provide(mdcParserKey, parser);
+    mdcParserKey.provide(registry, parser);
     for (final component in components) {
       registry.bind(component);
     }

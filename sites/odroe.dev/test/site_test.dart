@@ -169,6 +169,41 @@ void main() {
     );
   });
 
+  test('extension key docs require one shared identity', () async {
+    final app = (await File(
+      'content/docs/core/app.mdc',
+    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+    final routing = (await File(
+      'content/docs/core/routing.mdc',
+    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+    final server = (await File(
+      'content/docs/server.mdc',
+    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+
+    expect(app, contains("final sessionKey = ContextKey<Session>('session');"));
+    expect(app, contains('matched by instance identity'));
+    expect(app, contains('reuse that exact instance'));
+    expect(app, contains('sessionKey.provide(registry, session)'));
+    expect(app, contains('context.read(sessionKey)'));
+    expect(app, contains('replaces the old `const ContextKey(...)` form'));
+    expect(app, contains('sessionKey.provideFactory(registry, createSession)'));
+    expect(routing, contains('Capability keys also use instance identity'));
+    expect(routing, contains('name is only diagnostic'));
+    expect(routing, contains('Replace old `const RouteCapability(...)`'));
+    expect(routing, contains('capability.attach(route, value)'));
+    expect(
+      server,
+      contains("final userKey = RequestKey<User>('authenticated-user');"),
+    );
+    expect(server, contains('`RequestKey` uses instance identity'));
+    expect(server, contains('reuse that exact instance'));
+    expect(server, contains('Replace old `const RequestKey(...)`'));
+    expect(server, contains('userKey.set(context, user)'));
+    expect(server, contains('`key.set(context, value)`'));
+    expect(server, isNot(contains('context.set(userKey, user)')));
+    expect(app, isNot(contains('const sessionKey = ContextKey')));
+  });
+
   test('unknown routes return a real 404 document', () async {
     final server = Server(
       routes: generated.serverRouteTree,

@@ -5,7 +5,7 @@ import 'package:odroe/odroe.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
-const _valueKey = ContextKey<int>('invocation.value');
+final _valueKey = ContextKey<int>('invocation.value');
 
 final class _Bindings {
   const _Bindings(this.value);
@@ -20,7 +20,7 @@ final class _ValueModule extends Module {
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provide(_valueKey, value);
+    _valueKey.provide(registry, value);
   }
 }
 

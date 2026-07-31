@@ -1,17 +1,16 @@
 import 'package:flutter/widgets.dart';
 
 import '../app/context.dart';
-import '../app/key.dart';
 import '../app/module.dart';
 import '../app/registry.dart';
 import '../router/route.dart';
 import 'router.dart';
 
 /// The application context key used to read the configured [AppRouter].
-const routerKey = ContextKey<AppRouter>('router');
+final routerKey = ContextKey<AppRouter>('router');
 
 /// Optional server-rendered state consumed by [RouterModule].
-const routerInitialStateKey = ContextKey<RouterInitialState>(
+final routerInitialStateKey = ContextKey<RouterInitialState>(
   'routerInitialState',
 );
 
@@ -50,8 +49,8 @@ final class RouterModule extends Module {
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provideFactory(
-      routerKey,
+    routerKey.provideFactory(
+      registry,
       () => _router ??= AppRouter(
         routes: routes,
         app: _app,

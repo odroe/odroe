@@ -60,7 +60,7 @@ Future<ServerResponse> requireBearer(
   final user = token == null ? null : await sessions.verify(token);
   if (user == null) throw const HttpError(401, 'Sign in required.');
 
-  context.set(userKey, user);
+  userKey.set(context, user);
   return next();
 }
 
@@ -73,6 +73,14 @@ final updatePost = ServerFunction<UpdatePost, Post>(
   ),
 );
 ```
+
+`RequestKey` uses instance identity. Define one top-level `final` key and reuse
+that exact instance when middleware stores a value and a handler reads it. Its
+name is only diagnostic, so unrelated middleware may choose the same natural
+name without overwriting one another. Replace old `const RequestKey(...)`
+declarations with `final`, and replace `context.set(key, value)` with
+`key.set(context, value)`. The key-first instance method preserves the key's
+runtime value type even through a widened generic view.
 
 `User`, `sessions`, and the token lifecycle above are application code, not
 global Odroe state. On the client, `headersProvider` reads that state immediately
