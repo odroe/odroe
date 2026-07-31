@@ -144,6 +144,20 @@ Odroe 会复制其结果，再写入自己拥有的协议头。`RpcClient` 不�
 `RpcProtocolException`。返回类型明确写成 `ServerResponse` 时会跳过这些
 分类，由调用方负责读取和释放原始响应。
 
+强类型响应在 UTF-8 解码前按 frame 限制字节数。
+`RpcClient.maxResponseFrameBytes` 默认是 1 MiB，也可通过
+`RpcModule.http(maxResponseFrameBytes: ...)` 配置。value 的完整 JSON
+响应算一个 frame；stream 按每个非空 NDJSON frame 重新计数，不限制整个流
+的累计大小。超限会停止并取消响应体；2xx 响应归类为
+`RpcProtocolException`，非 2xx 仍保留 `RemoteServerException.status`。
+显式 `ServerResponse` 不受 typed frame 预算约束。大结果优先分页、拆成
+多个 stream frame 或放入对象存储；使用 raw response 时由调用方负责流式
+读取和限制。
+
+服务端的输入预算是独立设置：`Server.maxFunctionPayload` 默认 1 MiB。
+它限制 server-function 请求，不代表服务端生成 typed 响应时不会物化对象和
+JSON；提高客户端 frame 上限时仍需评估两端的实际内存成本。
+
 RPC value 与 stream 都接收应用拥有的取消信号。Query 不依赖 RPC；把
 `QueryCancelToken` 显式接到生成的 ref 即可在 `cancelQueries` 或最后一个
 observer 离开时终止默认 HTTP 请求：

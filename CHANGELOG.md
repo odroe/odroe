@@ -18,6 +18,10 @@
 - Add preflight-safe RPC cancellation across asynchronous headers, request
   bodies, response setup, typed value bodies, and streams, with direct Query
   cancellation bridging and no automatic timeout or retry policy.
+- Limit typed RPC responses to 1 MiB per value or stream frame by default,
+  before UTF-8 decoding. Applications can configure
+  `RpcClient.maxResponseFrameBytes` or `RpcModule.http`, while cumulative
+  stream size and explicit `ServerResponse` bodies remain caller-owned.
 - Make application context, route capability, and request context keys
   identity-based so independent modules cannot collide through equal constant
   type/name pairs.

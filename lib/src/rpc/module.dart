@@ -19,13 +19,23 @@ final class RpcModule extends Module {
   ///
   /// [headersProvider] runs once immediately before each request. Its result is
   /// copied before Odroe applies protocol-owned headers.
+  /// [maxResponseFrameBytes] limits one typed value or stream frame, not the
+  /// cumulative size of a streaming response.
   factory RpcModule.http({
     Uri? baseUri,
     HttpTransport? transport,
     Serializer? serializer,
     RpcHeadersProvider? headersProvider,
     String functionPath = '/__odroe/functions',
+    int maxResponseFrameBytes = RpcClient.defaultMaxResponseFrameBytes,
   }) {
+    if (maxResponseFrameBytes <= 0) {
+      throw ArgumentError.value(
+        maxResponseFrameBytes,
+        'maxResponseFrameBytes',
+        'Must be greater than zero.',
+      );
+    }
     final resolved = transport ?? HttpTransport();
     return RpcModule._(
       RpcClient(
@@ -34,6 +44,7 @@ final class RpcModule extends Module {
         serializer: serializer,
         headersProvider: headersProvider,
         functionPath: functionPath,
+        maxResponseFrameBytes: maxResponseFrameBytes,
       ),
       transport == null ? resolved : null,
     );

@@ -28,6 +28,35 @@ void main() {
     expect(value, 'Post 42', reason: 'requests=${transport.requests.length}');
   });
 
+  testWidgets('malformed stream EOF fails inside the Flutter event loop', (
+    tester,
+  ) async {
+    final failure = await _streamFailure(
+      tester,
+      ServerResponse.bytes(const <int>[
+        0xff,
+      ], contentType: 'application/x-ndjson; charset=utf-8'),
+    );
+
+    expect(failure, isA<RpcProtocolException>());
+  });
+
+  testWidgets('stream body errors complete inside the Flutter event loop', (
+    tester,
+  ) async {
+    final failure = await _streamFailure(
+      tester,
+      ServerResponse(
+        headers: Headers.single(<String, String>{
+          'content-type': 'application/x-ndjson; charset=utf-8',
+        }),
+        body: Stream<List<int>>.error(StateError('response failed')),
+      ),
+    );
+
+    expect(failure, isA<StateError>());
+  });
+
   testWidgets('post page loads through Query and its generated RPC ref', (
     tester,
   ) async {
@@ -81,6 +110,45 @@ final class _ExampleTransport implements RpcTransport {
       'data': 'Post ${payload['data']}',
     });
   }
+}
+
+final class _StaticResponseTransport implements RpcTransport {
+  const _StaticResponseTransport(this.response);
+
+  final ServerResponse response;
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async => response;
+}
+
+Future<Object?> _streamFailure(
+  WidgetTester tester,
+  ServerResponse response,
+) async {
+  final client = RpcClient(
+    baseUri: Uri.parse('https://api.example.com'),
+    transport: _StaticResponseTransport(response),
+  );
+  final cancelled = Completer<void>();
+  final stream = await const ServerStreamFunctionRef<NoServerInput, Object?>(
+    id: 'watch',
+  )(client, const NoServerInput(), cancelled: cancelled.future);
+  Object? failure;
+  var completed = false;
+  unawaited(
+    stream.toList().then<void>(
+      (_) => completed = true,
+      onError: (Object error, StackTrace _) {
+        failure = error;
+        completed = true;
+      },
+    ),
+  );
+
+  await tester.pump();
+
+  expect(completed, isTrue);
+  return failure;
 }
 
 Future<_ExampleTransport> _pumpPostPage(

@@ -334,6 +334,31 @@ void main() {
     );
   });
 
+  test('Server docs define bounded typed RPC frames', () async {
+    final source = (await File(
+      'content/docs/server.mdc',
+    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+
+    expect(source, contains('`Server.maxFunctionPayload`'));
+    expect(source, contains('defaults to 1 MiB'));
+    expect(source, contains('`RpcClient.maxResponseFrameBytes`'));
+    expect(source, contains('maxResponseFrameBytes: 2 * 1024 * 1024'));
+    expect(source, contains('before UTF-8 decoding'));
+    expect(source, contains('cumulative stream size is not capped'));
+    expect(source, contains('cancels the response body'));
+    expect(source, contains('explicitly typed to return `ServerResponse`'));
+    expect(source, contains('does not bound memory used while a server'));
+    expect(
+      source,
+      isNot(
+        contains(
+          'Payload limits and streaming frames remain explicit at the '
+          'server and transport boundaries',
+        ),
+      ),
+    );
+  });
+
   test('Cloudflare hybrid example preserves dynamic page navigation', () async {
     final source = await File('content/docs/deploy.mdc').readAsString();
     final block = RegExp(r'```json\s+([\s\S]*?)\s+```').firstMatch(source);

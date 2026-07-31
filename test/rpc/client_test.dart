@@ -7,6 +7,25 @@ import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('requires a positive typed response frame budget', () {
+    expect(
+      () => RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: _RecordingTransport(const <ServerResponse>[]),
+        maxResponseFrameBytes: 0,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: _RecordingTransport(const <ServerResponse>[]),
+      ).maxResponseFrameBytes,
+      RpcClient.defaultMaxResponseFrameBytes,
+    );
+    expect(RpcClient.defaultMaxResponseFrameBytes, 1024 * 1024);
+  });
+
   test('resolves fresh application headers once per RPC request', () async {
     final applicationHeaders = Headers.single(<String, String>{
       'accept': 'text/plain',
@@ -398,10 +417,293 @@ void main() {
     );
   });
 
+  test('accepts a typed value frame exactly at its byte budget', () async {
+    final frame = _encodedDataFrame('café');
+    final exactClient = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse.bytes(
+          frame,
+          contentType: 'application/json; charset=utf-8',
+        ),
+      ]),
+      maxResponseFrameBytes: frame.length,
+    );
+
+    expect(
+      await const ServerFunctionRef<NoServerInput, String>(id: 'read')(
+        exactClient,
+        const NoServerInput(),
+      ),
+      'café',
+    );
+
+    final undersizedClient = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse.bytes(
+          frame,
+          contentType: 'application/json; charset=utf-8',
+        ),
+      ]),
+      maxResponseFrameBytes: frame.length - 1,
+    );
+    await expectLater(
+      const ServerFunctionRef<NoServerInput, String>(id: 'read')(
+        undersizedClient,
+        const NoServerInput(),
+      ),
+      throwsA(isA<RpcProtocolException>()),
+    );
+  });
+
+  test('rejects and cancels an oversized typed value frame', () async {
+    final bodyCancelled = Completer<void>();
+    late final StreamController<List<int>> body;
+    body = StreamController<List<int>>(
+      onListen: () {
+        body
+          ..add(List<int>.filled(32, 0x20))
+          ..add(List<int>.filled(33, 0x20));
+      },
+      onCancel: () {
+        bodyCancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
+    );
+    addTearDown(body.close);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-length': '1',
+            'content-type': 'application/json; charset=utf-8',
+          }),
+          body: body.stream,
+        ),
+      ]),
+      maxResponseFrameBytes: 64,
+    );
+
+    await expectLater(
+      const ServerFunctionRef<NoServerInput, Object?>(id: 'read')(
+        client,
+        const NoServerInput(),
+      ),
+      throwsA(
+        isA<RpcProtocolException>().having(
+          (error) => error.message,
+          'message',
+          contains('larger than 64 bytes'),
+        ),
+      ),
+    );
+    await expectLater(bodyCancelled.future, completes);
+  });
+
+  test('rejects an oversized error without losing its status', () async {
+    final bodyCancelled = Completer<void>();
+    late final StreamController<List<int>> body;
+    body = StreamController<List<int>>(
+      onListen: () => body.add(List<int>.filled(65, 0x20)),
+      onCancel: bodyCancelled.complete,
+    );
+    addTearDown(body.close);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          status: 502,
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/json; charset=utf-8',
+          }),
+          body: body.stream,
+        ),
+      ]),
+      maxResponseFrameBytes: 64,
+    );
+
+    await expectLater(
+      const ServerFunctionRef<NoServerInput, Object?>(id: 'read')(
+        client,
+        const NoServerInput(),
+      ),
+      throwsA(
+        isA<RemoteServerException>().having(
+          (error) => error.status,
+          'status',
+          502,
+        ),
+      ),
+    );
+    await expectLater(bodyCancelled.future, completes);
+  });
+
+  test('limits each stream frame instead of the complete stream', () async {
+    final first = _encodedStreamFrame('café');
+    final second = _encodedStreamFrame('again');
+    final maxFrameBytes = [
+      first.length - 1,
+      second.length - 1,
+    ].reduce((left, right) => left > right ? left : right);
+    final body = <int>[...first, ...second];
+    final split = first.length + 3;
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/x-ndjson; charset=utf-8',
+          }),
+          body: Stream<List<int>>.fromIterable(<List<int>>[
+            body.sublist(0, split),
+            body.sublist(split),
+          ]),
+        ),
+      ]),
+      maxResponseFrameBytes: maxFrameBytes,
+    );
+
+    final stream = await const ServerStreamFunctionRef<NoServerInput, String>(
+      id: 'watch',
+    )(client, const NoServerInput());
+
+    expect(await stream.toList(), <String>['café', 'again']);
+    expect(body.length, greaterThan(maxFrameBytes));
+  });
+
+  test('accepts exact-sized CRLF and CR stream frames', () async {
+    final first = _encodedDataFrame('first');
+    final second = _encodedDataFrame('second');
+    final maxFrameBytes = [
+      first.length,
+      second.length,
+    ].reduce((left, right) => left > right ? left : right);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/x-ndjson; charset=utf-8',
+          }),
+          body: Stream<List<int>>.fromIterable(<List<int>>[
+            <int>[...first, 0x0d],
+            <int>[0x0a, ...second, 0x0d],
+          ]),
+        ),
+      ]),
+      maxResponseFrameBytes: maxFrameBytes,
+    );
+
+    final stream = await const ServerStreamFunctionRef<NoServerInput, String>(
+      id: 'watch',
+    )(client, const NoServerInput());
+
+    expect(await stream.toList(), <String>['first', 'second']);
+  });
+
+  test('emits complete frames before cancelling an oversized frame', () async {
+    final bodyCancelled = Completer<void>();
+    final first = _encodedStreamFrame(1);
+    late final StreamController<List<int>> body;
+    body = StreamController<List<int>>(
+      onListen: () {
+        body.add(<int>[...first, ...List<int>.filled(65, 0x20)]);
+      },
+      onCancel: () {
+        bodyCancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
+    );
+    addTearDown(body.close);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/x-ndjson; charset=utf-8',
+          }),
+          body: body.stream,
+        ),
+      ]),
+      maxResponseFrameBytes: 64,
+    );
+
+    final stream = await const ServerStreamFunctionRef<NoServerInput, int>(
+      id: 'watch',
+    )(client, const NoServerInput());
+
+    await expectLater(
+      stream,
+      emitsInOrder(<Object>[
+        1,
+        emitsError(
+          isA<RpcProtocolException>().having(
+            (error) => error.message,
+            'message',
+            contains('larger than 64 bytes'),
+          ),
+        ),
+      ]),
+    );
+    await expectLater(bodyCancelled.future, completes);
+  });
+
+  test('does not flush an oversized unterminated stream frame', () async {
+    final bodyCancelled = Completer<void>();
+    final encoded = _encodedDataFrame(7);
+    late final StreamController<List<int>> body;
+    body = StreamController<List<int>>(
+      onListen: () {
+        body
+          ..add(encoded)
+          ..add(List<int>.filled(65 - encoded.length, 0x20));
+      },
+      onCancel: bodyCancelled.complete,
+    );
+    addTearDown(body.close);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/x-ndjson; charset=utf-8',
+          }),
+          body: body.stream,
+        ),
+      ]),
+      maxResponseFrameBytes: 64,
+    );
+    final stream = await const ServerStreamFunctionRef<NoServerInput, int>(
+      id: 'watch',
+    )(client, const NoServerInput());
+    final values = <int>[];
+    final errors = <Object>[];
+    final done = Completer<void>();
+    final subscription = stream.listen(
+      values.add,
+      onError: errors.add,
+      onDone: done.complete,
+      cancelOnError: false,
+    );
+    addTearDown(subscription.cancel);
+
+    await expectLater(done.future, completes);
+
+    expect(values, isEmpty);
+    expect(errors, hasLength(1));
+    expect(errors.single, isA<RpcProtocolException>());
+    await expectLater(bodyCancelled.future, completes);
+  });
+
   test('cancels a stream body rejected by a value function', () async {
     final cancelled = Completer<void>();
     final controller = StreamController<List<int>>(
-      onCancel: cancelled.complete,
+      onCancel: () {
+        cancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
     );
     addTearDown(controller.close);
     final transport = _RecordingTransport(<ServerResponse>[
@@ -427,6 +729,44 @@ void main() {
     await expectLater(cancelled.future, completes);
   });
 
+  test('preserves HTTP status when rejected body cleanup fails', () async {
+    final cancelled = Completer<void>();
+    final controller = StreamController<List<int>>(
+      onCancel: () {
+        cancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
+    );
+    addTearDown(controller.close);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          status: 503,
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/x-ndjson; charset=utf-8',
+          }),
+          body: controller.stream,
+        ),
+      ]),
+    );
+
+    await expectLater(
+      const ServerStreamFunctionRef<NoServerInput, Object?>(id: 'watch')(
+        client,
+        const NoServerInput(),
+      ),
+      throwsA(
+        isA<RemoteServerException>().having(
+          (error) => error.status,
+          'status',
+          503,
+        ),
+      ),
+    );
+    await expectLater(cancelled.future, completes);
+  });
+
   test('classifies invalid stream UTF-8 as a protocol error', () async {
     final client = RpcClient(
       baseUri: Uri.parse('https://api.example.com'),
@@ -444,12 +784,97 @@ void main() {
     await expectLater(stream.toList(), throwsA(isA<RpcProtocolException>()));
   });
 
+  test(
+    'consumer cancellation immediately releases an idle stream body',
+    () async {
+      final bodyStarted = Completer<void>();
+      final bodyCancelled = Completer<void>();
+      final body = StreamController<List<int>>(
+        onListen: bodyStarted.complete,
+        onCancel: bodyCancelled.complete,
+      );
+      addTearDown(body.close);
+      final client = RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: _RecordingTransport(<ServerResponse>[
+          ServerResponse(
+            headers: Headers.single(<String, String>{
+              'content-type': 'application/x-ndjson; charset=utf-8',
+            }),
+            body: body.stream,
+          ),
+        ]),
+      );
+
+      final stream =
+          await const ServerStreamFunctionRef<NoServerInput, Object?>(
+            id: 'watch',
+          )(client, const NoServerInput());
+      final subscription = stream.listen(null);
+      await bodyStarted.future;
+
+      await subscription.cancel().timeout(const Duration(seconds: 1));
+      await expectLater(bodyCancelled.future, completes);
+    },
+  );
+
+  test(
+    'consumer cancellation stops decoding the current stream chunk',
+    () async {
+      final bodyCancelled = Completer<void>();
+      final body = StreamController<List<int>>(
+        sync: true,
+        onCancel: bodyCancelled.complete,
+      );
+      addTearDown(body.close);
+      var decoded = 0;
+      final client = RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: _RecordingTransport(<ServerResponse>[
+          ServerResponse(
+            headers: Headers.single(<String, String>{
+              'content-type': 'application/x-ndjson; charset=utf-8',
+            }),
+            body: body.stream,
+          ),
+        ]),
+      );
+
+      final stream = await ServerStreamFunctionRef<NoServerInput, int>(
+        id: 'watch',
+        decodeOutput: (value) {
+          decoded++;
+          return value as int;
+        },
+      )(client, const NoServerInput());
+      final values = <int>[];
+      final subscriptionCancelled = Completer<void>();
+      late final StreamSubscription<int> subscription;
+      subscription = stream.listen((value) {
+        values.add(value);
+        unawaited(
+          subscription.cancel().then((_) => subscriptionCancelled.complete()),
+        );
+      });
+
+      body.add(<int>[..._encodedStreamFrame(1), ..._encodedStreamFrame(2)]);
+
+      await subscriptionCancelled.future.timeout(const Duration(seconds: 1));
+      await expectLater(bodyCancelled.future, completes);
+      expect(values, <int>[1]);
+      expect(decoded, 1);
+    },
+  );
+
   test('cancels a value body from a custom transport', () async {
     final bodyStarted = Completer<void>();
     final bodyCancelled = Completer<void>();
     final body = StreamController<List<int>>(
       onListen: bodyStarted.complete,
-      onCancel: bodyCancelled.complete,
+      onCancel: () {
+        bodyCancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
     );
     addTearDown(body.close);
     final client = RpcClient(
@@ -465,16 +890,78 @@ void main() {
     );
     final cancelled = Completer<void>();
 
+    final uncaught = <Object>[];
+    await runZonedGuarded<Future<void>>(() async {
+      final call = const ServerFunctionRef<NoServerInput, Object?>(id: 'read')(
+        client,
+        const NoServerInput(),
+        cancelled: cancelled.future,
+      );
+      await bodyStarted.future;
+      cancelled.complete();
+
+      await expectLater(call, throwsA(isA<RpcCancelledException>()));
+      await expectLater(bodyCancelled.future, completes);
+    }, (error, _) => uncaught.add(error));
+    await Future<void>.delayed(Duration.zero);
+    expect(uncaught, isEmpty);
+  });
+
+  test(
+    'reports a synchronous response listen failure without hanging',
+    () async {
+      final body = StreamController<List<int>>();
+      final firstSubscription = body.stream.listen(null);
+      addTearDown(() async {
+        await firstSubscription.cancel();
+        await body.close();
+      });
+      final client = RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: _RecordingTransport(<ServerResponse>[
+          ServerResponse(
+            headers: Headers.single(<String, String>{
+              'content-type': 'application/json; charset=utf-8',
+            }),
+            body: body.stream,
+          ),
+        ]),
+      );
+      final cancelled = Completer<void>();
+
+      final call = const ServerFunctionRef<NoServerInput, Object?>(id: 'read')(
+        client,
+        const NoServerInput(),
+        cancelled: cancelled.future,
+      );
+      await expectLater(
+        call.timeout(const Duration(seconds: 1)),
+        throwsA(isA<StateError>()),
+      );
+    },
+  );
+
+  test('reports invalid response bytes without hanging', () async {
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/json; charset=utf-8',
+          }),
+          body: Stream<List<int>>.value(_ThrowingByteList()),
+        ),
+      ]),
+    );
+
     final call = const ServerFunctionRef<NoServerInput, Object?>(id: 'read')(
       client,
       const NoServerInput(),
-      cancelled: cancelled.future,
     );
-    await bodyStarted.future;
-    cancelled.complete();
-
-    await expectLater(call, throwsA(isA<RpcCancelledException>()));
-    await expectLater(bodyCancelled.future, completes);
+    await expectLater(
+      call.timeout(const Duration(seconds: 1)),
+      throwsA(isA<StateError>()),
+    );
   });
 
   test('cancels a stream body from a custom transport', () async {
@@ -482,7 +969,10 @@ void main() {
     final bodyCancelled = Completer<void>();
     final body = StreamController<List<int>>(
       onListen: bodyStarted.complete,
-      onCancel: bodyCancelled.complete,
+      onCancel: () {
+        bodyCancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
     );
     addTearDown(body.close);
     final client = RpcClient(
@@ -497,21 +987,26 @@ void main() {
       ]),
     );
     final cancelled = Completer<void>();
-    final stream = await const ServerStreamFunctionRef<NoServerInput, Object?>(
-      id: 'watch',
-    )(client, const NoServerInput(), cancelled: cancelled.future);
-    final error = Completer<Object>();
-    final subscription = stream.listen(
-      null,
-      onError: (Object value) => error.complete(value),
-    );
-    addTearDown(subscription.cancel);
-    await bodyStarted.future;
+    final uncaught = <Object>[];
+    await runZonedGuarded<Future<void>>(() async {
+      final stream =
+          await const ServerStreamFunctionRef<NoServerInput, Object?>(
+            id: 'watch',
+          )(client, const NoServerInput(), cancelled: cancelled.future);
+      final error = Completer<Object>();
+      final subscription = stream.listen(
+        null,
+        onError: (Object value) => error.complete(value),
+      );
+      addTearDown(subscription.cancel);
+      await bodyStarted.future;
 
-    cancelled.complete();
-
-    expect(await error.future, isA<RpcCancelledException>());
-    await expectLater(bodyCancelled.future, completes);
+      cancelled.complete();
+      expect(await error.future, isA<RpcCancelledException>());
+      await expectLater(bodyCancelled.future, completes);
+    }, (error, _) => uncaught.add(error));
+    await Future<void>.delayed(Duration.zero);
+    expect(uncaught, isEmpty);
   });
 
   test('leaves raw server responses to the caller', () async {
@@ -519,6 +1014,7 @@ void main() {
     final client = RpcClient(
       baseUri: Uri.parse('https://api.example.com'),
       transport: _RecordingTransport(<ServerResponse>[response]),
+      maxResponseFrameBytes: 1,
     );
 
     final result = await const ServerFunctionRef<NoServerInput, ServerResponse>(
@@ -536,6 +1032,15 @@ ServerResponse _dataResponse(Object? data, {int status = 200}) =>
       'type': 'data',
       'data': data,
     }, status: status);
+
+List<int> _encodedDataFrame(Object? data) => utf8.encode(
+  jsonEncode(<String, Object?>{'version': 1, 'type': 'data', 'data': data}),
+);
+
+List<int> _encodedStreamFrame(Object? data) => <int>[
+  ..._encodedDataFrame(data),
+  0x0a,
+];
 
 ServerResponse _streamResponse(
   Object? data, {
@@ -588,6 +1093,21 @@ final class _RecordingTransport implements RpcTransport {
     );
     return _responses.removeFirst();
   }
+}
+
+final class _ThrowingByteList extends ListBase<int> {
+  @override
+  int get length => 1;
+
+  @override
+  set length(int value) => throw UnsupportedError('immutable');
+
+  @override
+  int operator [](int index) => throw StateError('invalid response bytes');
+
+  @override
+  void operator []=(int index, int value) =>
+      throw UnsupportedError('immutable');
 }
 
 final class _ServerTransport implements RpcTransport {

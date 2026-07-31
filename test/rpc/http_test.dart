@@ -1,13 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:odroe/odroe.dart';
 import 'package:odroe/rpc.dart';
+import 'package:odroe/src/server/http.dart' show PayloadTooLargeException;
 import 'package:test/test.dart';
 
 void main() {
+  test('validates the module response frame budget before setup', () {
+    expect(() => RpcModule.http(maxResponseFrameBytes: 0), throwsArgumentError);
+  });
+
   test('default HTTP transport resolves bearer headers per request', () async {
     final authorizations = <String?>[];
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -37,6 +43,7 @@ void main() {
           host: server.address.address,
           port: server.port,
         ),
+        maxResponseFrameBytes: 512,
         headersProvider: () async {
           providerCalls++;
           await Future<void>.delayed(Duration.zero);
@@ -48,6 +55,7 @@ void main() {
     ]);
     addTearDown(context.dispose);
     final client = context.read(rpcClientKey);
+    expect(client.maxResponseFrameBytes, 512);
     const function = ServerFunctionRef<NoServerInput, int>(id: 'session.read');
 
     expect(await function(client, const NoServerInput()), 1);
@@ -86,7 +94,10 @@ void main() {
     final bodyCancelled = Completer<void>();
     final body = StreamController<List<int>>(
       onListen: bodyStarted.complete,
-      onCancel: bodyCancelled.complete,
+      onCancel: () {
+        bodyCancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
     );
     addTearDown(body.close);
     final cancelled = Completer<void>();
@@ -105,6 +116,45 @@ void main() {
     cancelled.complete();
 
     await expectLater(send, throwsA(isA<RpcCancelledException>()));
+    await expectLater(bodyCancelled.future, completes);
+    expect(httpClient.request, isNull);
+  });
+
+  test('preserves request size errors when body cleanup fails', () async {
+    const maxBytes = 10 * 1024 * 1024;
+    final bodyCancelled = Completer<void>();
+    late final StreamController<List<int>> body;
+    body = StreamController<List<int>>(
+      onListen: () {
+        body
+          ..add(Uint8List(maxBytes))
+          ..add(const <int>[0]);
+      },
+      onCancel: () {
+        bodyCancelled.complete();
+        return Future<void>.error(StateError('cleanup failed'));
+      },
+    );
+    addTearDown(body.close);
+    final httpClient = _RecordingHttpClient();
+    final transport = HttpTransport(client: httpClient);
+
+    await expectLater(
+      transport.send(
+        ServerRequest(
+          method: HttpMethod.post,
+          uri: Uri.parse('https://api.example.com/function'),
+          body: body.stream,
+        ),
+      ),
+      throwsA(
+        isA<PayloadTooLargeException>().having(
+          (error) => error.maxBytes,
+          'maxBytes',
+          maxBytes,
+        ),
+      ),
+    );
     await expectLater(bodyCancelled.future, completes);
     expect(httpClient.request, isNull);
   });
@@ -190,6 +240,35 @@ void main() {
       throwsA(isA<RpcCancelledException>()),
     );
     release.complete();
+  });
+
+  test('uses decoded response bytes instead of compressed length', () async {
+    final frame = utf8.encode(
+      jsonEncode(<String, Object?>{'version': 1, 'type': 'data', 'data': 1}),
+    );
+    final compressed = gzip.encode(frame);
+    expect(compressed.length, greaterThan(frame.length));
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      await request.drain<void>();
+      request.response.headers
+        ..contentType = ContentType.json
+        ..set(HttpHeaders.contentEncodingHeader, 'gzip');
+      request.response
+        ..contentLength = compressed.length
+        ..add(compressed);
+      await request.response.close();
+    });
+    final transport = HttpTransport();
+    addTearDown(transport.close);
+    final client = RpcClient(
+      baseUri: _baseUri(server),
+      transport: transport,
+      maxResponseFrameBytes: frame.length,
+    );
+
+    expect(await const ServerFunctionRef<int, int>(id: 'read')(client, 1), 1);
   });
 
   test('cancels a stream after its first frame', () async {

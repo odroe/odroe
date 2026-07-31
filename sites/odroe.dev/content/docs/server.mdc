@@ -121,6 +121,34 @@ Future<Post> savePost(AppContext app, UpdatePost input) async {
 }
 ```
 
+## Payload budgets
+
+`Server.maxFunctionPayload` limits one buffered server-function request and
+defaults to 1 MiB. GET payloads and request bodies use the same byte budget.
+This server-side input limit is independent from the client response limit.
+
+`RpcClient.maxResponseFrameBytes` defaults to 1 MiB and is available directly
+through `RpcModule.http`:
+
+```dart
+final rpcModule = RpcModule.http(
+  maxResponseFrameBytes: 2 * 1024 * 1024,
+);
+```
+
+A value response is one complete JSON frame. A stream resets the budget after
+each non-empty NDJSON frame, so the cumulative stream size is not capped.
+Odroe checks raw bytes before UTF-8 decoding and cancels the response body as
+soon as a frame exceeds the limit. A successful oversized response throws
+`RpcProtocolException`; a non-2xx response still preserves its status through
+`RemoteServerException`.
+
+A function explicitly typed to return `ServerResponse` bypasses the typed frame
+budget. The caller then owns streaming, limits, and body release. Prefer
+pagination, multiple bounded stream items, or object storage over raising the
+limit for one large JSON value. This client budget does not bound memory used
+while a server handler serializes its own result.
+
 ## Cancellation
 
 Value and stream references accept one application-owned cancellation signal.
@@ -170,8 +198,8 @@ the desired Flutter runner to that application before selecting a native
 device.
 
 The generated client and server manifest agree on the identifier and wire
-types. Payload limits and streaming frames remain explicit at the server and
-transport boundaries.
+types. Request and typed response budgets are independent and explicit at
+their owning server or client boundary.
 Server, route, middleware, and server-function configuration is copied into
 immutable snapshots, so runtime matching cannot drift after construction.
 Unsupported transport methods return `501`; matched routes return `405` with

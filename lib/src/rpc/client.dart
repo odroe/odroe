@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import '../server/context.dart';
 import '../server/http.dart';
@@ -72,6 +73,9 @@ typedef RpcHeadersProvider = FutureOr<Headers> Function();
 
 /// Typed client for generated server-function references.
 final class RpcClient {
+  /// Default maximum size of one typed response frame: 1 MiB.
+  static const int defaultMaxResponseFrameBytes = 1024 * 1024;
+
   /// Creates a client for one Odroe server origin.
   RpcClient({
     required this.baseUri,
@@ -79,7 +83,16 @@ final class RpcClient {
     Serializer? serializer,
     this.headersProvider,
     this.functionPath = '/__odroe/functions',
-  }) : serializer = serializer ?? Serializer();
+    this.maxResponseFrameBytes = defaultMaxResponseFrameBytes,
+  }) : serializer = serializer ?? Serializer() {
+    if (maxResponseFrameBytes <= 0) {
+      throw ArgumentError.value(
+        maxResponseFrameBytes,
+        'maxResponseFrameBytes',
+        'Must be greater than zero.',
+      );
+    }
+  }
 
   /// Origin used to resolve server-function URLs.
   final Uri baseUri;
@@ -97,6 +110,12 @@ final class RpcClient {
 
   /// URL prefix for server-function endpoints.
   final String functionPath;
+
+  /// Maximum bytes accepted for one typed value or stream response frame.
+  ///
+  /// This does not cap the cumulative size of a streaming response. Functions
+  /// whose output type is [ServerResponse] leave body limits to the caller.
+  final int maxResponseFrameBytes;
 
   /// Calls a value-returning server [function].
   ///
@@ -165,37 +184,11 @@ final class RpcClient {
         'The server returned a stream for a failed stream request.',
       );
     }
-    return stopOnRpcCancellation(response.body, cancelled)
-        .transform(utf8.decoder)
-        .handleError(
-          (Object _) => _invalidResponse(
-            response.status,
-            'The server returned invalid RPC stream text.',
-          ),
-          test: (error) => error is FormatException,
-        )
-        .transform(const LineSplitter())
-        .where((line) => line.isNotEmpty)
-        .map<dynamic>((line) {
-          final frame = _parseFrame(line, response.status);
-          switch (frame['type']) {
-            case 'data':
-              final value = serializer.decode(frame['data']);
-              return function.decodeOutput?.call(value) ?? value;
-            case 'error':
-              _throwRemoteError(
-                frame,
-                response.status,
-                'Server stream failed.',
-              );
-            default:
-              _invalidResponse(
-                response.status,
-                'The server returned an unknown RPC stream frame.',
-              );
-          }
-        })
-        .cast<T>();
+    return _decodeResponseFrames(
+      stopOnRpcCancellation(response.body, cancelled),
+      response.status,
+      function.decodeOutput,
+    );
   }
 
   Future<ServerResponse> _send<I>(
@@ -246,11 +239,18 @@ final class RpcClient {
     ServerResponse response,
     Future<void>? cancelled,
   ) async {
+    late final Uint8List bytes;
+    try {
+      bytes = await _readResponseFrame(
+        stopOnRpcCancellation(response.body, cancelled),
+        maxResponseFrameBytes,
+      );
+    } on _RpcFrameTooLarge {
+      _invalidResponse(response.status, _oversizedFrameMessage);
+    }
     late final String text;
     try {
-      text = await utf8.decodeStream(
-        stopOnRpcCancellation(response.body, cancelled),
-      );
+      text = utf8.decode(bytes);
     } on FormatException {
       _invalidResponse(
         response.status,
@@ -269,6 +269,153 @@ final class RpcClient {
     return _parseFrame(text, response.status);
   }
 
+  String get _oversizedFrameMessage =>
+      'The server returned an RPC frame larger than '
+      '$maxResponseFrameBytes bytes.';
+
+  Stream<T> _decodeResponseFrames<T>(
+    Stream<List<int>> body,
+    int status,
+    ValueDecoder<T>? decode,
+  ) {
+    late final StreamController<T> output;
+    StreamSubscription<List<int>>? input;
+    final builder = BytesBuilder(copy: false);
+    var frameLength = 0;
+    var previousWasCarriageReturn = false;
+    var stopped = false;
+
+    void stop(Object error, StackTrace stackTrace) {
+      if (stopped) return;
+      final subscription = input;
+      input = null;
+      stopped = true;
+      unawaited(_cancelSubscription(subscription));
+      output.addError(error, stackTrace);
+      unawaited(output.close());
+    }
+
+    void emitFrame() {
+      final bytes = builder.takeBytes();
+      frameLength = 0;
+      if (bytes.isEmpty) return;
+      late final String text;
+      try {
+        text = utf8.decode(bytes);
+      } on FormatException {
+        throw _invalidResponseError(
+          status,
+          'The server returned invalid RPC stream text.',
+        );
+      }
+      final frame = _parseFrame(text, status);
+      switch (frame['type']) {
+        case 'data':
+          final value = serializer.decode(frame['data']);
+          final decoder = decode;
+          output.add(decoder == null ? value as T : decoder(value));
+        case 'error':
+          _throwRemoteError(frame, status, 'Server stream failed.');
+        default:
+          _invalidResponse(
+            status,
+            'The server returned an unknown RPC stream frame.',
+          );
+      }
+    }
+
+    void add(List<int> chunk) {
+      if (stopped) return;
+      try {
+        var start = 0;
+        for (var index = 0; index < chunk.length; index++) {
+          if (stopped) return;
+          final byte = chunk[index];
+          if (byte != 0x0a && byte != 0x0d) {
+            previousWasCarriageReturn = false;
+            frameLength++;
+            if (frameLength > maxResponseFrameBytes) {
+              throw const _RpcFrameTooLarge();
+            }
+            continue;
+          }
+          if (index > start) builder.add(chunk.sublist(start, index));
+          start = index + 1;
+          if (byte == 0x0a && previousWasCarriageReturn) {
+            previousWasCarriageReturn = false;
+            continue;
+          }
+          previousWasCarriageReturn = byte == 0x0d;
+          emitFrame();
+        }
+        if (!stopped && start < chunk.length) {
+          builder.add(start == 0 ? chunk : chunk.sublist(start));
+        }
+      } on _RpcFrameTooLarge catch (_, stackTrace) {
+        stop(_invalidResponseError(status, _oversizedFrameMessage), stackTrace);
+      } on Object catch (error, stackTrace) {
+        stop(error, stackTrace);
+      }
+    }
+
+    void close() {
+      if (stopped) return;
+      input = null;
+      try {
+        emitFrame();
+      } on Object catch (error, stackTrace) {
+        stop(error, stackTrace);
+        return;
+      }
+      stopped = true;
+      unawaited(output.close());
+    }
+
+    void listen() {
+      if (stopped) return;
+      try {
+        final subscription = body.listen(
+          add,
+          onError: stop,
+          onDone: close,
+          cancelOnError: false,
+        );
+        input = subscription;
+        if (stopped) unawaited(_cancelSubscription(subscription));
+      } on Object catch (error, stackTrace) {
+        stop(error, stackTrace);
+      }
+    }
+
+    output = StreamController<T>(
+      sync: true,
+      onListen: listen,
+      onPause: () => input?.pause(),
+      onResume: () => input?.resume(),
+      onCancel: () {
+        final subscription = input;
+        input = null;
+        stopped = true;
+        return _cancelSubscription(subscription);
+      },
+    );
+    return output.stream;
+  }
+
+  Object _invalidResponseError(int status, String protocolMessage) {
+    if (!_isSuccessful(status)) {
+      return RemoteServerException(
+        'The server returned HTTP $status without an RPC error frame.',
+        status: status,
+      );
+    }
+    return RpcProtocolException(protocolMessage);
+  }
+
+  Never _invalidResponse(int status, String protocolMessage) {
+    throw _invalidResponseError(status, protocolMessage);
+  }
+
   Map<String, Object?> _parseFrame(String text, int status) {
     late final Object? decoded;
     try {
@@ -280,16 +427,6 @@ final class RpcClient {
       _invalidResponse(status, 'The server returned a non-object RPC frame.');
     }
     return Map<String, Object?>.from(decoded);
-  }
-
-  Never _invalidResponse(int status, String protocolMessage) {
-    if (!_isSuccessful(status)) {
-      throw RemoteServerException(
-        'The server returned HTTP $status without an RPC error frame.',
-        status: status,
-      );
-    }
-    throw RpcProtocolException(protocolMessage);
   }
 
   O _decodeFrame<O>(
@@ -356,14 +493,80 @@ final class RpcClient {
   }
 }
 
+Future<Uint8List> _readResponseFrame(Stream<List<int>> body, int maxBytes) {
+  final result = Completer<Uint8List>();
+  final builder = BytesBuilder(copy: false);
+  StreamSubscription<List<int>>? input;
+  var length = 0;
+  var stopped = false;
+
+  void stop(Object error, StackTrace stackTrace) {
+    if (stopped) return;
+    final subscription = input;
+    input = null;
+    stopped = true;
+    unawaited(_cancelSubscription(subscription));
+    result.completeError(error, stackTrace);
+  }
+
+  void add(List<int> chunk) {
+    if (stopped) return;
+    try {
+      length += chunk.length;
+      if (length > maxBytes) {
+        throw const _RpcFrameTooLarge();
+      }
+      builder.add(chunk);
+    } on Object catch (error, stackTrace) {
+      stop(error, stackTrace);
+    }
+  }
+
+  void close() {
+    if (stopped) return;
+    stopped = true;
+    result.complete(builder.takeBytes());
+  }
+
+  try {
+    final subscription = body.listen(
+      add,
+      onError: stop,
+      onDone: close,
+      cancelOnError: false,
+    );
+    input = subscription;
+    if (stopped) unawaited(_cancelSubscription(subscription));
+  } on Object catch (error, stackTrace) {
+    stop(error, stackTrace);
+  }
+  return result.future;
+}
+
+Future<void> _cancelSubscription<T>(StreamSubscription<T>? subscription) async {
+  try {
+    await subscription?.cancel();
+  } on Object {
+    // Cancellation cleanup cannot replace the RPC result.
+  }
+}
+
+final class _RpcFrameTooLarge implements Exception {
+  const _RpcFrameTooLarge();
+}
+
 Future<void> _cancelBody(Stream<List<int>> body) async {
-  final subscription = body.listen(
-    null,
-    onError: (Object _) {
-      // The response is already being rejected by its HTTP or content type.
-    },
-  );
-  await subscription.cancel();
+  try {
+    final subscription = body.listen(
+      null,
+      onError: (Object _) {
+        // The response is already being rejected by its HTTP or content type.
+      },
+    );
+    await _cancelSubscription(subscription);
+  } on Object {
+    // Body cleanup cannot replace the protocol or HTTP error.
+  }
 }
 
 /// Indicates that a response violated the RPC wire protocol.

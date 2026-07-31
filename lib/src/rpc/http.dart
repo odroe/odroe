@@ -80,16 +80,63 @@ final class HttpTransport implements RpcTransport {
   }
 }
 
-Future<Uint8List> _readBytes(Stream<List<int>> body) async {
+Future<Uint8List> _readBytes(Stream<List<int>> body) {
   const maxBytes = 10 * 1024 * 1024;
+  final result = Completer<Uint8List>();
   final builder = BytesBuilder(copy: false);
+  StreamSubscription<List<int>>? input;
   var length = 0;
-  await for (final chunk in body) {
-    length += chunk.length;
-    if (length > maxBytes) throw const PayloadTooLargeException(maxBytes);
-    builder.add(chunk);
+  var stopped = false;
+
+  void stop(Object error, StackTrace stackTrace) {
+    if (stopped) return;
+    final subscription = input;
+    input = null;
+    stopped = true;
+    unawaited(_cancelSubscription(subscription));
+    result.completeError(error, stackTrace);
   }
-  return builder.takeBytes();
+
+  void add(List<int> chunk) {
+    if (stopped) return;
+    try {
+      length += chunk.length;
+      if (length > maxBytes) {
+        throw const PayloadTooLargeException(maxBytes);
+      }
+      builder.add(chunk);
+    } on Object catch (error, stackTrace) {
+      stop(error, stackTrace);
+    }
+  }
+
+  void close() {
+    if (stopped) return;
+    stopped = true;
+    result.complete(builder.takeBytes());
+  }
+
+  try {
+    final subscription = body.listen(
+      add,
+      onError: stop,
+      onDone: close,
+      cancelOnError: false,
+    );
+    input = subscription;
+    if (stopped) unawaited(_cancelSubscription(subscription));
+  } on Object catch (error, stackTrace) {
+    stop(error, stackTrace);
+  }
+  return result.future;
+}
+
+Future<void> _cancelSubscription<T>(StreamSubscription<T>? subscription) async {
+  try {
+    await subscription?.cancel();
+  } on Object {
+    // Request body cleanup cannot replace the buffering result.
+  }
 }
 
 void _cancelBody(Stream<List<int>> body) {
