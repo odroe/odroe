@@ -102,6 +102,99 @@ void main() {
     expect(transport.requests, isEmpty);
   });
 
+  test('forwards cancellation to value and stream requests', () async {
+    final getCancelled = Completer<void>();
+    final postCancelled = Completer<void>();
+    final streamCancelled = Completer<void>();
+    final transport = _RecordingTransport(<ServerResponse>[
+      _dataResponse('get'),
+      _dataResponse('post'),
+      _streamResponse('stream'),
+    ]);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: transport,
+    );
+
+    await const ServerFunctionRef<NoServerInput, String>(
+      id: 'read',
+      method: HttpMethod.get,
+    )(client, const NoServerInput(), cancelled: getCancelled.future);
+    await const ServerFunctionRef<int, String>(id: 'write')(
+      client,
+      42,
+      cancelled: postCancelled.future,
+    );
+    final stream = await const ServerStreamFunctionRef<NoServerInput, String>(
+      id: 'watch',
+    )(client, const NoServerInput(), cancelled: streamCancelled.future);
+    await stream.drain<void>();
+
+    expect(transport.requests[0].cancelled, same(getCancelled.future));
+    expect(transport.requests[1].cancelled, same(postCancelled.future));
+    expect(transport.requests[2].cancelled, same(streamCancelled.future));
+  });
+
+  test('cancels while resolving application headers', () async {
+    final providerStarted = Completer<void>();
+    final providerRelease = Completer<Headers>();
+    final cancelled = Completer<void>();
+    final transport = _RecordingTransport(<ServerResponse>[
+      _dataResponse(null),
+    ]);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: transport,
+      headersProvider: () {
+        providerStarted.complete();
+        return providerRelease.future;
+      },
+    );
+
+    final call = const ServerFunctionRef<NoServerInput, Object?>(id: 'read')(
+      client,
+      const NoServerInput(),
+      cancelled: cancelled.future,
+    );
+    await providerStarted.future;
+    cancelled.complete();
+
+    await expectLater(call, throwsA(isA<RpcCancelledException>()));
+    expect(transport.requests, isEmpty);
+
+    providerRelease.complete(Headers());
+    await Future<void>.delayed(Duration.zero);
+    expect(transport.requests, isEmpty);
+  });
+
+  test('pre-cancelled calls do not start providers or transports', () async {
+    final cancelled = Completer<void>()..complete();
+    var providerCalls = 0;
+    final transport = _RecordingTransport(<ServerResponse>[
+      _dataResponse(null),
+    ]);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: transport,
+      headersProvider: () {
+        providerCalls++;
+        return Headers();
+      },
+    );
+
+    await expectLater(
+      const ServerFunctionRef<Object, Object?>(id: 'read')(
+        client,
+        Object(),
+        cancelled: cancelled.future,
+      ),
+      throwsA(isA<RpcCancelledException>()),
+    );
+
+    expect(providerCalls, 0);
+    expect(transport.requests, isEmpty);
+  });
+
   test('passes bearer headers through function middleware', () async {
     Future<ServerResponse> requireSession(RequestContext context, Next next) {
       if (context.request.headers.value('authorization') != 'Bearer fresh') {
@@ -351,6 +444,76 @@ void main() {
     await expectLater(stream.toList(), throwsA(isA<RpcProtocolException>()));
   });
 
+  test('cancels a value body from a custom transport', () async {
+    final bodyStarted = Completer<void>();
+    final bodyCancelled = Completer<void>();
+    final body = StreamController<List<int>>(
+      onListen: bodyStarted.complete,
+      onCancel: bodyCancelled.complete,
+    );
+    addTearDown(body.close);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/json; charset=utf-8',
+          }),
+          body: body.stream,
+        ),
+      ]),
+    );
+    final cancelled = Completer<void>();
+
+    final call = const ServerFunctionRef<NoServerInput, Object?>(id: 'read')(
+      client,
+      const NoServerInput(),
+      cancelled: cancelled.future,
+    );
+    await bodyStarted.future;
+    cancelled.complete();
+
+    await expectLater(call, throwsA(isA<RpcCancelledException>()));
+    await expectLater(bodyCancelled.future, completes);
+  });
+
+  test('cancels a stream body from a custom transport', () async {
+    final bodyStarted = Completer<void>();
+    final bodyCancelled = Completer<void>();
+    final body = StreamController<List<int>>(
+      onListen: bodyStarted.complete,
+      onCancel: bodyCancelled.complete,
+    );
+    addTearDown(body.close);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(
+          headers: Headers.single(<String, String>{
+            'content-type': 'application/x-ndjson; charset=utf-8',
+          }),
+          body: body.stream,
+        ),
+      ]),
+    );
+    final cancelled = Completer<void>();
+    final stream = await const ServerStreamFunctionRef<NoServerInput, Object?>(
+      id: 'watch',
+    )(client, const NoServerInput(), cancelled: cancelled.future);
+    final error = Completer<Object>();
+    final subscription = stream.listen(
+      null,
+      onError: (Object value) => error.complete(value),
+    );
+    addTearDown(subscription.cancel);
+    await bodyStarted.future;
+
+    cancelled.complete();
+
+    expect(await error.future, isA<RpcCancelledException>());
+    await expectLater(bodyCancelled.future, completes);
+  });
+
   test('leaves raw server responses to the caller', () async {
     final response = ServerResponse.text('Unauthorized', status: 401);
     final client = RpcClient(
@@ -395,12 +558,14 @@ final class _RecordedRequest {
     required this.uri,
     required this.headers,
     required this.body,
+    required this.cancelled,
   });
 
   final HttpMethod method;
   final Uri uri;
   final Headers headers;
   final String body;
+  final Future<void>? cancelled;
 }
 
 final class _RecordingTransport implements RpcTransport {
@@ -418,6 +583,7 @@ final class _RecordingTransport implements RpcTransport {
         uri: request.uri,
         headers: request.headers.copy(),
         body: await request.readText(),
+        cancelled: request.cancelled,
       ),
     );
     return _responses.removeFirst();

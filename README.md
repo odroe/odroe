@@ -133,6 +133,32 @@ Odroe 会复制其结果，再写入自己拥有的协议头。`RpcClient` 不�
 `RpcProtocolException`。返回类型明确写成 `ServerResponse` 时会跳过这些
 分类，由调用方负责读取和释放原始响应。
 
+RPC value 与 stream 都接收应用拥有的取消信号。Query 不依赖 RPC；把
+`QueryCancelToken` 显式接到生成的 ref 即可在 `cancelQueries` 或最后一个
+observer 离开时终止默认 HTTP 请求：
+
+```dart
+final title = await routes.posts.postId.readTitle(
+  app.read(rpcClientKey),
+  postId,
+  cancelled: context.cancelToken.whenCancelled.then<void>((_) {}),
+);
+```
+
+信号完成后客户端抛出 `RpcCancelledException`。预先取消的调用不会启动
+`headersProvider` 或 transport；provider 尚未返回时也不会发送请求。
+`RpcClient` 会停止读取 typed value/stream 并取消上游订阅，默认
+`HttpTransport` 还会中止请求体、响应头与响应体。自定义 `RpcTransport`
+仍必须观察 `ServerRequest.cancelled`，以释放自身拥有的 I/O；调用方注入的
+自定义 `http.Client` 可能不支持物理中止，但不会阻止 typed 调用及时结束。
+需要总超时时可直接传入
+`Future<void>.delayed(const Duration(seconds: 10))`，Odroe 不预设 total、
+setup 或 stream idle timeout。
+
+取消只表示调用方不再等待，不能回滚已经开始的 POST、事务或其他服务端副作用；
+需要协作式停止时，handler 应观察底层 `ServerRequest.cancelled`。Odroe 不因
+取消自动重试。
+
 ## 文件路由
 
 `route.dart` 承载跨平台的强类型合同，以及可选的 Document 中立绑定。

@@ -236,6 +236,14 @@ void main() {
         contains('Queries, infinite queries, and mutations share cancellation'),
       ),
     );
+    expect(
+      source,
+      contains(
+        'cancelled: context.cancelToken.whenCancelled.then<void>((_) {})',
+      ),
+    );
+    expect(source, contains('removal of the last observer'));
+    expect(source, contains('Query keeps cancellation out of error state'));
   });
 
   test('Server docs close the authenticated RPC contract', () async {
@@ -256,9 +264,19 @@ void main() {
     expect(source, contains('error.status == 401'));
     expect(source, contains('runs exactly once for each RPC request'));
     expect(source, contains('does not automatically retry'));
+    expect(source, contains('RpcCancelledException'));
+    expect(source, contains('ServerRequest.cancelled'));
+    expect(
+      source,
+      contains('Future<void>.delayed(const Duration(seconds: 10))'),
+    );
+    expect(source, contains('Aborting a POST does not roll back'));
     expect(source, contains('Browser RPC is same-origin only'));
     expect(source, contains('Omit `baseUri` on Web'));
     expect(source, contains('Android, iOS, and desktop apps'));
+    expect(source, contains('ODROE_API_ORIGIN'));
+    expect(source, contains('A pre-cancelled call does not start'));
+    expect(source, contains('upstream subscription'));
     expect(
       source,
       isNot(contains('request cancellation stay visible in the transport')),

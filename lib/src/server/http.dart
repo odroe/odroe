@@ -133,11 +133,13 @@ final class ServerRequest {
     required Uri uri,
     Headers? headers,
     List<int> body = const <int>[],
+    Future<void>? cancelled,
   }) => ServerRequest(
     method: method,
     uri: uri,
     headers: headers,
     body: Stream<List<int>>.value(body),
+    cancelled: cancelled,
   );
 
   /// The request method.
@@ -152,7 +154,7 @@ final class ServerRequest {
   /// The request body chunks.
   final Stream<List<int>> body;
 
-  /// Completes when the adapter observes client disconnection.
+  /// Completes when the caller cancels or an adapter observes disconnection.
   ///
   /// Some transports can observe this only after response delivery begins.
   final Future<void>? cancelled;

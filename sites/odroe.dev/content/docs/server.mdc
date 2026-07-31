@@ -113,11 +113,53 @@ Future<Post> savePost(AppContext app, UpdatePost input) async {
 }
 ```
 
+## Cancellation
+
+Value and stream references accept one application-owned cancellation signal.
+Completing it stops the call with `RpcCancelledException`:
+
+```dart
+final title = await routes.posts.postId.readTitle(
+  app.read(rpcClientKey),
+  postId,
+  cancelled: cancelButton.future,
+);
+```
+
+A pre-cancelled call does not start its `headersProvider` or transport. If an
+asynchronous provider is still running, the RPC stops waiting and no request is
+sent. `RpcClient` stops typed value and stream consumption and cancels the
+upstream subscription. The default `HttpTransport` additionally aborts request
+bodies, response setup, and response bodies. A custom `RpcTransport` must
+observe `ServerRequest.cancelled` to release the I/O it owns. A caller-supplied
+`http.Client` may not support the physical abort trigger, but a typed call still
+ends promptly.
+
+The same signal can express a total timeout without a second API:
+
+```dart
+final title = await routes.posts.postId.readTitle(
+  app.read(rpcClientKey),
+  postId,
+  cancelled: Future<void>.delayed(const Duration(seconds: 10)),
+);
+```
+
+Odroe does not choose total, setup, or stream-idle timeout semantics and does
+not retry a cancelled call. Aborting a POST does not roll back work that the
+server already started. A handler that can stop cooperatively should observe
+its underlying `ServerRequest.cancelled`; an adapter can only report a remote
+disconnect when its runtime exposes one.
+
 Browser RPC is same-origin only. Omit `baseUri` on Web so
 `RpcModule.http()` uses `Uri.base`; a separate Web application and API origin
 requires an application-owned same-origin proxy. Android, iOS, and desktop apps
 may pass an explicit `baseUri` because browser CORS and credential rules do not
-apply to their native HTTP transport.
+apply to their native HTTP transport. The official app example reads
+`ODROE_API_ORIGIN` from `--dart-define` for native targets and rejects a missing
+or non-HTTP(S) origin instead of silently using a non-network `Uri.base`; add
+the desired Flutter runner to that application before selecting a native
+device.
 
 The generated client and server manifest agree on the identifier and wire
 types. Payload limits and streaming frames remain explicit at the server and

@@ -28,7 +28,34 @@ lifecycles; use mutation callbacks to invalidate related queries explicitly.
 ## Flutter
 
 Install `QueryModule` from `query_flutter.dart`, then use focused builders for
-query, infinite-query, or mutation state.
+query, infinite-query, or mutation state. The query function can call a
+generated RPC ref without coupling either subsystem:
+
+```dart
+QueryBuilder<String>(
+  options: QueryOptions<String>(
+    key: QueryKey('post', <Object?>[postId]),
+    query: (context) => routes.posts.postId.readTitle(
+      app.read(rpcClientKey),
+      postId,
+      cancelled: context.cancelToken.whenCancelled.then<void>((_) {}),
+    ),
+  ),
+  builder: (_, result) {
+    if (result.isError && !result.hasData) {
+      return const Text('Unable to load post');
+    }
+    if (!result.hasData) return const CircularProgressIndicator();
+    return Text(result.requireData);
+  },
+)
+```
+
+Reading `context.cancelToken` marks the operation as cancellation-aware. An
+explicit `cancelQueries` call, or removal of the last observer while the fetch
+is active, then reaches `HttpTransport` and aborts the request. RPC exposes the
+result as `RpcCancelledException`, while Query keeps cancellation out of error
+state.
 
 Persistence is an explicit adapter. Installing Query does not silently choose
 disk storage or a network transport.

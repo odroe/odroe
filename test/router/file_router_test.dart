@@ -1,8 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/query_flutter.dart';
 import 'package:odroe/router_flutter.dart';
+import 'package:odroe/rpc.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 
 // ignore: avoid_relative_lib_imports
@@ -61,13 +65,28 @@ void main() {
   });
 
   testWidgets('push crosses a real filesystem shell', (tester) async {
-    final router = AppRouter(
-      routes: fixture.routeTree,
-      initialLocation: Uri.parse('/'),
+    late AppRouter router;
+    await tester.pumpWidget(
+      App(
+        modules: <Module>[
+          QueryModule(),
+          RpcModule(
+            RpcClient(
+              baseUri: Uri.parse('https://api.example.com'),
+              transport: const _FixtureTransport(),
+            ),
+          ),
+          RouterModule(
+            routes: fixture.routeTree,
+            initialLocation: Uri.parse('/'),
+          ),
+        ],
+        builder: (app) {
+          router = app.read(routerKey);
+          return MaterialApp.router(routerConfig: router);
+        },
+      ),
     );
-    addTearDown(router.dispose);
-
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
 
     final result = router.push<Object?>(
@@ -85,4 +104,20 @@ void main() {
     expect(await result, isNull);
     expect(router.location.path, '/');
   });
+}
+
+final class _FixtureTransport implements RpcTransport {
+  const _FixtureTransport();
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async {
+    final payload =
+        jsonDecode(request.uri.queryParameters['payload']!)
+            as Map<String, Object?>;
+    return ServerResponse.json(<String, Object?>{
+      'version': 1,
+      'type': 'data',
+      'data': 'Post ${payload['data']}',
+    });
+  }
 }

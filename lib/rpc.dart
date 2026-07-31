@@ -10,6 +10,7 @@ export 'src/rpc/client.dart'
         RpcClient,
         RpcProtocolException,
         RemoteServerException;
+export 'src/rpc/cancellation.dart' show RpcCancelledException;
 export 'src/rpc/function.dart'
     show
         NoServerInput,

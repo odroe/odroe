@@ -5,6 +5,7 @@ import 'package:odroe/query_flutter.dart';
 import 'package:odroe/router_flutter.dart';
 import 'package:odroe/rpc.dart';
 
+import 'rpc_origin.dart';
 import 'routes.dart';
 
 void main() {
@@ -12,7 +13,7 @@ void main() {
     App(
       modules: <Module>[
         QueryModule(),
-        RpcModule.http(),
+        RpcModule.http(baseUri: rpcBaseUri()),
         DocumentModule(),
         RouterModule(routes: routeTree),
       ],

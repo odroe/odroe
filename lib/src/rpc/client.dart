@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import '../server/context.dart';
 import '../server/http.dart';
+import 'cancellation.dart';
 import 'function.dart';
 import 'serializer.dart';
 
@@ -25,7 +26,10 @@ final class ServerFunctionRef<I, O> {
   final ValueDecoder<O>? decodeOutput;
 
   /// Invokes this function through [client].
-  Future<O> call(RpcClient client, I data) => client.call(this, data);
+  ///
+  /// Completing [cancelled] stops the request with [RpcCancelledException].
+  Future<O> call(RpcClient client, I data, {Future<void>? cancelled}) =>
+      client.call(this, data, cancelled: cancelled);
 }
 
 /// Typed reference to a server function that returns a stream.
@@ -47,12 +51,19 @@ final class ServerStreamFunctionRef<I, T> {
   final ValueDecoder<T>? decodeOutput;
 
   /// Invokes this function through [client].
-  Future<Stream<T>> call(RpcClient client, I data) => client.stream(this, data);
+  ///
+  /// Completing [cancelled] stops request and response streaming with
+  /// [RpcCancelledException].
+  Future<Stream<T>> call(RpcClient client, I data, {Future<void>? cancelled}) =>
+      client.stream(this, data, cancelled: cancelled);
 }
 
 /// Sends RPC requests without coupling the client to an HTTP implementation.
 abstract interface class RpcTransport {
   /// Sends [request] and returns its response.
+  ///
+  /// Implementations must stop request and response work when
+  /// [ServerRequest.cancelled] completes.
   Future<ServerResponse> send(ServerRequest request);
 }
 
@@ -88,8 +99,19 @@ final class RpcClient {
   final String functionPath;
 
   /// Calls a value-returning server [function].
-  Future<O> call<I, O>(ServerFunctionRef<I, O> function, I data) async {
-    final response = await _send(function.id, function.method, data);
+  ///
+  /// Completing [cancelled] stops the request with [RpcCancelledException].
+  Future<O> call<I, O>(
+    ServerFunctionRef<I, O> function,
+    I data, {
+    Future<void>? cancelled,
+  }) async {
+    final response = await _send(
+      function.id,
+      function.method,
+      data,
+      cancelled: cancelled,
+    );
     if (O == ServerResponse) return response as O;
     final contentType = response.headers.value('content-type') ?? '';
     if (contentType.startsWith('application/x-ndjson')) {
@@ -105,21 +127,33 @@ final class RpcClient {
       );
     }
     return _decodeFrame<O>(
-      await _readFrame(response),
+      await _readFrame(response, cancelled),
       response.status,
       decode: function.decodeOutput,
     );
   }
 
   /// Calls a streaming server [function].
+  ///
+  /// Completing [cancelled] stops request and response streaming with
+  /// [RpcCancelledException].
   Future<Stream<T>> stream<I, T>(
     ServerStreamFunctionRef<I, T> function,
-    I data,
-  ) async {
-    final response = await _send(function.id, function.method, data);
+    I data, {
+    Future<void>? cancelled,
+  }) async {
+    final response = await _send(
+      function.id,
+      function.method,
+      data,
+      cancelled: cancelled,
+    );
     final contentType = response.headers.value('content-type') ?? '';
     if (!contentType.startsWith('application/x-ndjson')) {
-      _decodeFrame<Object?>(await _readFrame(response), response.status);
+      _decodeFrame<Object?>(
+        await _readFrame(response, cancelled),
+        response.status,
+      );
       throw const RpcProtocolException(
         'The server returned one value for a streaming function.',
       );
@@ -131,7 +165,7 @@ final class RpcClient {
         'The server returned a stream for a failed stream request.',
       );
     }
-    return response.body
+    return stopOnRpcCancellation(response.body, cancelled)
         .transform(utf8.decoder)
         .handleError(
           (Object _) => _invalidResponse(
@@ -164,38 +198,59 @@ final class RpcClient {
         .cast<T>();
   }
 
-  Future<ServerResponse> _send<I>(String id, HttpMethod method, I data) async {
-    final payload = serializer.encodeJson(<String, Object?>{
-      'data': data is NoServerInput ? null : data,
-    });
+  Future<ServerResponse> _send<I>(
+    String id,
+    HttpMethod method,
+    I data, {
+    Future<void>? cancelled,
+  }) async {
+    final setup = await runUntilRpcCancelled(
+      () async => (
+        payload: serializer.encodeJson(<String, Object?>{
+          'data': data is NoServerInput ? null : data,
+        }),
+        headers: await headersProvider?.call(),
+      ),
+      cancelled,
+    );
+    final payload = setup.payload;
     final path = '$functionPath/${Uri.encodeComponent(id)}';
-    final headers = _rpcHeaders(baseUri, await headersProvider?.call());
+    final headers = _rpcHeaders(baseUri, setup.headers);
+    late final ServerRequest request;
     if (method == HttpMethod.get) {
-      return transport.send(
-        ServerRequest.bytes(
-          method: method,
-          uri: baseUri
-              .resolve(path)
-              .replace(queryParameters: <String, String>{'payload': payload}),
-          headers: headers,
-        ),
+      request = ServerRequest.bytes(
+        method: method,
+        uri: baseUri
+            .resolve(path)
+            .replace(queryParameters: <String, String>{'payload': payload}),
+        headers: headers,
+        cancelled: cancelled,
       );
-    }
-    headers.set('content-type', 'application/json; charset=utf-8');
-    return transport.send(
-      ServerRequest.bytes(
+    } else {
+      headers.set('content-type', 'application/json; charset=utf-8');
+      request = ServerRequest.bytes(
         method: method,
         uri: baseUri.resolve(path),
         headers: headers,
         body: utf8.encode(payload),
-      ),
+        cancelled: cancelled,
+      );
+    }
+    return runUntilRpcCancelled<ServerResponse>(
+      () => transport.send(request),
+      cancelled,
     );
   }
 
-  Future<Map<String, Object?>> _readFrame(ServerResponse response) async {
+  Future<Map<String, Object?>> _readFrame(
+    ServerResponse response,
+    Future<void>? cancelled,
+  ) async {
     late final String text;
     try {
-      text = await response.readText();
+      text = await utf8.decodeStream(
+        stopOnRpcCancellation(response.body, cancelled),
+      );
     } on FormatException {
       _invalidResponse(
         response.status,

@@ -12,6 +12,9 @@
 - Add a per-request asynchronous RPC `headersProvider`, keep protocol headers
   framework-owned, and classify non-protocol HTTP failures by status instead
   of leaking JSON parsing errors.
+- Add preflight-safe RPC cancellation across asynchronous headers, request
+  bodies, response setup, typed value bodies, and streams, with direct Query
+  cancellation bridging and no automatic timeout or retry policy.
 - Add Press collections, dynamic prerender locations, and the Odroe-built
   documentation website.
 - Change prerender defaults to fixed concurrency 4, at most 1000 routes and
