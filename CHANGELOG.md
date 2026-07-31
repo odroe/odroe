@@ -18,6 +18,9 @@
 - Add a per-request asynchronous RPC `headersProvider`, keep protocol headers
   framework-owned, and classify non-protocol HTTP failures by status instead
   of leaking JSON parsing errors.
+- Reject non-HTTP(S), hostless, and credential-bearing `RpcModule.http`
+  base URIs during setup, while keeping omitted URIs for same-origin Web RPC.
+  Cross-platform examples now require an explicit native API origin.
 - Add preflight-safe RPC cancellation across asynchronous headers, request
   bodies, response setup, typed value bodies, and streams, with direct Query
   cancellation bridging and no automatic timeout or retry policy.

@@ -14,13 +14,18 @@ runtime boundary.
 App(
   modules: <Module>[
     QueryModule(),
-    RpcModule.http(),
+    RpcModule.http(baseUri: rpcBaseUri()),
     DocumentModule(),
     RouterModule(routes: routeTree),
   ],
   builder: (app) => Product(router: app.read(routerKey)),
 )
 ```
+
+`rpcBaseUri()` keeps browser RPC on the current origin and requires native
+applications to supply `ODROE_API_ORIGIN`. Copy the validated helper from
+[Client origin](/docs/server#client-origin); a native build never falls back to
+a non-network `Uri.base`.
 
 ## What is available
 

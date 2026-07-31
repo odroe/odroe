@@ -17,6 +17,11 @@ final class RpcModule extends Module {
 
   /// Creates an HTTP-backed client and owns its default transport.
   ///
+  /// [baseUri] must be an absolute HTTP(S) URI with a host and no user
+  /// information. It may be omitted only for same-origin Web RPC, where
+  /// [Uri.base] supplies the current browser location. Native applications
+  /// must pass their server URI explicitly.
+  ///
   /// [headersProvider] runs once immediately before each request. Its result is
   /// copied before Odroe applies protocol-owned headers.
   /// [maxRequestBodyBytes] configures the owned default [HttpTransport]. Pass
@@ -47,6 +52,15 @@ final class RpcModule extends Module {
         'Cannot configure the body budget of a caller-owned transport.',
       );
     }
+    final resolvedBaseUri = baseUri ?? Uri.base;
+    if (!_isValidHttpBaseUri(resolvedBaseUri)) {
+      throw ArgumentError.value(
+        resolvedBaseUri,
+        'baseUri',
+        'Must be an absolute HTTP(S) URI with a host and no user information. '
+            'Omit only for same-origin Web RPC.',
+      );
+    }
     final resolved =
         transport ??
         HttpTransport(
@@ -55,7 +69,7 @@ final class RpcModule extends Module {
         );
     return RpcModule._(
       RpcClient(
-        baseUri: baseUri ?? Uri.base,
+        baseUri: resolvedBaseUri,
         transport: resolved,
         serializer: serializer,
         headersProvider: headersProvider,
@@ -81,3 +95,9 @@ final class RpcModule extends Module {
     _transport?.close();
   }
 }
+
+bool _isValidHttpBaseUri(Uri value) =>
+    value.hasAuthority &&
+    value.host.isNotEmpty &&
+    (value.scheme == 'http' || value.scheme == 'https') &&
+    value.userInfo.isEmpty;

@@ -52,10 +52,16 @@ Server createServer() => generated.createServer(
 final serializer = createSerializer();
 final modules = <Module>[
   QueryModule(),
-  RpcModule.http(serializer: serializer),
+  RpcModule.http(
+    baseUri: rpcBaseUri(),
+    serializer: serializer,
+  ),
   DocumentModule(serializer: serializer),
 ];
 ```
+
+The client uses the same [cross-platform RPC origin helper](/docs/server#client-origin)
+as the application composition root.
 
 The same serializer contract covers the initial handoff and later streamed
 Query frames. A custom tag available on only one side is rejected instead of

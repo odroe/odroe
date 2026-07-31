@@ -44,6 +44,55 @@ only a non-empty string literal and rejects duplicates across the complete route
 tree. Omitting it preserves the path-and-variable fallback for gradual
 migration, but renaming either source location changes that fallback.
 
+## Client origin
+
+Browser RPC is same-origin only. Return `null` on Web so `RpcModule.http`
+uses `Uri.base`; a separate Web application and API origin requires an
+application-owned same-origin proxy. Android, iOS, and desktop apps must pass
+an explicit HTTP(S) origin. The official application example keeps that policy
+in application code:
+
+```dart
+import 'package:flutter/foundation.dart';
+
+Uri? rpcBaseUri({
+  bool isWeb = kIsWeb,
+  String nativeOrigin = const String.fromEnvironment('ODROE_API_ORIGIN'),
+}) {
+  if (isWeb) return null;
+  if (nativeOrigin.isEmpty) {
+    throw StateError('Set ODROE_API_ORIGIN with --dart-define for native RPC.');
+  }
+
+  final uri = Uri.tryParse(nativeOrigin);
+  if (uri == null ||
+      !uri.hasAuthority ||
+      uri.host.isEmpty ||
+      (uri.scheme != 'http' && uri.scheme != 'https') ||
+      uri.userInfo.isNotEmpty ||
+      (uri.path.isNotEmpty && uri.path != '/') ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    throw FormatException(
+      'ODROE_API_ORIGIN must be an absolute HTTP(S) origin.',
+      nativeOrigin,
+    );
+  }
+  return uri;
+}
+```
+
+Pass the native origin through to Flutter:
+
+```sh
+dart run odroe dev -- -d <device-id> \
+  --dart-define=ODROE_API_ORIGIN=https://api.example.com
+```
+
+The helper rejects a missing or malformed origin during startup instead of
+waiting for the first request. Add the desired Flutter runner to the example
+application before selecting a native device.
+
 ## Authenticated calls
 
 Authentication belongs to the application. A server-function middleware can
@@ -92,8 +141,7 @@ before every value or stream request:
 
 ```dart
 final rpcModule = RpcModule.http(
-  // Native apps use an explicit API origin. Omit baseUri on Web.
-  baseUri: Uri.parse('https://api.example.com'),
+  baseUri: rpcBaseUri(),
   headersProvider: () async {
     final token = await session.validAccessToken();
     return token == null
@@ -133,6 +181,7 @@ server entrypoint and default HTTP module expose each one directly:
 
 ```dart
 final rpcModule = RpcModule.http(
+  baseUri: rpcBaseUri(),
   maxRequestBodyBytes: 2 * 1024 * 1024,
   maxResponseFrameBytes: 2 * 1024 * 1024,
 );
@@ -298,16 +347,6 @@ not retry a cancelled call. Aborting a POST does not roll back work that the
 server already started. A handler that can stop cooperatively should observe
 its underlying `ServerRequest.cancelled`; an adapter can only report a remote
 disconnect when its runtime exposes one.
-
-Browser RPC is same-origin only. Omit `baseUri` on Web so
-`RpcModule.http()` uses `Uri.base`; a separate Web application and API origin
-requires an application-owned same-origin proxy. Android, iOS, and desktop apps
-may pass an explicit `baseUri` because browser CORS and credential rules do not
-apply to their native HTTP transport. The official app example reads
-`ODROE_API_ORIGIN` from `--dart-define` for native targets and rejects a missing
-or non-HTTP(S) origin instead of silently using a non-network `Uri.base`; add
-the desired Flutter runner to that application before selecting a native
-device.
 
 The generated client and server manifest agree on the identifier and wire
 types. Request and typed response budgets are independent and explicit at

@@ -116,7 +116,9 @@ HtmlElement _codeWindow() => element(
             element(
               'span',
               attributes: const <String, String?>{'class': 'code-blue'},
-              children: <HtmlNode>[text('    RpcModule.http()')],
+              children: <HtmlNode>[
+                text('    RpcModule.http(baseUri: rpcBaseUri())'),
+              ],
             ),
             text(',\n'),
             element(
@@ -335,7 +337,7 @@ HtmlElement _output() => element(
           children: <HtmlNode>[
             element(
               'code',
-              children: <HtmlNode>[text(r'$ dart run odroe dev')],
+              children: <HtmlNode>[text(r'$ dart run odroe dev -- -d chrome')],
             ),
             element(
               'code',

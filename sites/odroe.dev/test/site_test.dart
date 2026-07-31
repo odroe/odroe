@@ -118,6 +118,7 @@ void main() {
       expect(body, isNot(contains('"aggregateRating"')));
       expect(body, isNot(contains('"offers"')));
       expect(body, contains('builder: (app) =&gt;'));
+      expect(body, contains('RpcModule.http(baseUri: rpcBaseUri())'));
       expect(body, contains('Source preview'));
       expect(body, contains('Cloudflare preview'));
       expect(body, contains('Cloudflare Preview'));
@@ -177,6 +178,64 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('cross-platform RPC examples require a native HTTP origin', () async {
+    final readme = await File('../../README.md').readAsString();
+    final overview = await File('content/docs/index.mdc').readAsString();
+    final gettingStarted = await File(
+      'content/docs/getting-started.mdc',
+    ).readAsString();
+    final query = await File('content/docs/core/query.mdc').readAsString();
+    final server = await File('content/docs/server.mdc').readAsString();
+    final homepage = await File('lib/site/home.dart').readAsString();
+
+    expect(readme, contains("import 'rpc_origin.dart';"));
+    expect(readme, contains('Uri? rpcBaseUri('));
+    expect(readme, contains('RpcModule.http(baseUri: rpcBaseUri())'));
+    expect(readme, isNot(contains('\ndart run odroe dev\n')));
+    expect(
+      readme,
+      contains(
+        'dart run odroe dev -- -d <ios-device-id> '
+        '--dart-define=ODROE_API_ORIGIN=https://api.example.com',
+      ),
+    );
+    expect(
+      readme,
+      contains(
+        'dart run odroe build -- apk '
+        '--dart-define=ODROE_API_ORIGIN=https://api.example.com',
+      ),
+    );
+    expect(overview, contains('RpcModule.http(baseUri: rpcBaseUri())'));
+    expect(overview, contains('ODROE_API_ORIGIN'));
+    expect(query, contains('baseUri: rpcBaseUri(),'));
+    expect(server, contains('## Client origin'));
+    expect(server, contains('Android, iOS, and desktop apps must pass'));
+    expect(server, contains('baseUri: rpcBaseUri(),'));
+    expect(homepage, contains('RpcModule.http(baseUri: rpcBaseUri())'));
+    expect(homepage, contains(r'$ dart run odroe dev -- -d chrome'));
+
+    for (final entry in <String, String>{
+      'README': readme,
+      'Overview': overview,
+      'Getting started': gettingStarted,
+      'Query': query,
+      'Server': server,
+    }.entries) {
+      for (final match in RegExp(
+        r'```dart\s+([\s\S]*?)\s+```',
+      ).allMatches(entry.value)) {
+        for (final call in _rpcModuleCalls(match.group(1)!)) {
+          expect(
+            call,
+            contains('baseUri: rpcBaseUri()'),
+            reason: '${entry.key} contains a native-unsafe RPC example.',
+          );
+        }
+      }
+    }
   });
 
   test('extension key docs require one shared identity', () async {
@@ -300,7 +359,8 @@ void main() {
         'modules: () => <QueryClientModule>[QueryClientModule.server()]',
       ),
     );
-    expect(source, contains('RpcModule.http(serializer: serializer)'));
+    expect(source, contains('baseUri: rpcBaseUri(),'));
+    expect(source, contains('serializer: serializer'));
     expect(source, contains('DocumentModule(serializer: serializer)'));
   });
 
@@ -346,8 +406,9 @@ void main() {
     );
     expect(source, contains('Aborting a POST does not roll back'));
     expect(source, contains('Browser RPC is same-origin only'));
-    expect(source, contains('Omit `baseUri` on Web'));
+    expect(source, contains('Return `null` on Web'));
     expect(source, contains('Android, iOS, and desktop apps'));
+    expect(source, contains('apps must pass'));
     expect(source, contains('ODROE_API_ORIGIN'));
     expect(source, contains('A pre-cancelled call does not start'));
     expect(source, contains('upstream subscription'));
@@ -553,3 +614,24 @@ int _uint32(List<int> bytes, int offset) =>
     (bytes[offset + 1] << 16) |
     (bytes[offset + 2] << 8) |
     bytes[offset + 3];
+
+Iterable<String> _rpcModuleCalls(String source) sync* {
+  const prefix = 'RpcModule.http(';
+  var offset = 0;
+  while (true) {
+    final start = source.indexOf(prefix, offset);
+    if (start < 0) return;
+
+    var depth = 1;
+    var end = start + prefix.length;
+    while (end < source.length && depth > 0) {
+      final character = source.codeUnitAt(end);
+      if (character == 0x28) depth++;
+      if (character == 0x29) depth--;
+      end++;
+    }
+    if (depth != 0) throw FormatException('Unclosed RpcModule.http example.');
+    yield source.substring(start, end);
+    offset = end;
+  }
+}

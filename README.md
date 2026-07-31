@@ -59,6 +59,7 @@ flutter pub get
 ```text
 lib/
 ├── main.dart
+├── rpc_origin.dart
 ├── routes/
 │   ├── route.dart
 │   ├── shell.dart
@@ -84,6 +85,7 @@ import 'package:odroe/query_flutter.dart';
 import 'package:odroe/router_flutter.dart';
 import 'package:odroe/rpc.dart';
 
+import 'rpc_origin.dart';
 import 'routes.dart';
 
 void main() {
@@ -91,7 +93,7 @@ void main() {
     App(
       modules: <Module>[
         QueryModule(),
-        RpcModule.http(),
+        RpcModule.http(baseUri: rpcBaseUri()),
         DocumentModule(),
         RouterModule(routes: routeTree),
       ],
@@ -102,6 +104,43 @@ void main() {
   );
 }
 ```
+
+其中 `rpc_origin.dart` 让 Web 保持同源，并要求原生应用明确选择服务端：
+
+```dart
+import 'package:flutter/foundation.dart';
+
+Uri? rpcBaseUri({
+  bool isWeb = kIsWeb,
+  String nativeOrigin = const String.fromEnvironment('ODROE_API_ORIGIN'),
+}) {
+  if (isWeb) return null;
+  if (nativeOrigin.isEmpty) {
+    throw StateError('Set ODROE_API_ORIGIN with --dart-define for native RPC.');
+  }
+
+  final uri = Uri.tryParse(nativeOrigin);
+  if (uri == null ||
+      !uri.hasAuthority ||
+      uri.host.isEmpty ||
+      (uri.scheme != 'http' && uri.scheme != 'https') ||
+      uri.userInfo.isNotEmpty ||
+      (uri.path.isNotEmpty && uri.path != '/') ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    throw FormatException(
+      'ODROE_API_ORIGIN must be an absolute HTTP(S) origin.',
+      nativeOrigin,
+    );
+  }
+  return uri;
+}
+```
+
+原生运行时传入例如
+`--dart-define=ODROE_API_ORIGIN=https://api.example.com`。缺失或错误的地址会在
+应用启动时失败，不会拖到首次请求。仓库内的
+[`example/app/lib/rpc_origin.dart`](example/app/lib/rpc_origin.dart) 是同一份已测试实现。
 
 删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
 
@@ -122,15 +161,16 @@ Query 数据，再由 Flutter 的 `DocumentModule` 解码。默认配置可往�
 key-first 实例方法会在分析期拒绝直接错型，并在 key 被泛型宽化后保留运行时
 类型校验。
 
-浏览器端 RPC 只支持同源，可让 `RpcModule.http()` 使用当前 origin。
-Android、iOS 与桌面应用应传入明确的服务端地址。应用可用
+浏览器端 RPC 只支持同源，可让 `rpcBaseUri()` 返回 `null`，由
+`RpcModule.http` 使用当前 origin。Android、iOS 与桌面应用必须传入明确的
+HTTP(S) 服务端地址。应用可用
 `headersProvider` 在每个请求发送前读取最新 token：
 
 ```dart
 String? accessToken;
 
 final rpcModule = RpcModule.http(
-  baseUri: Uri.parse('https://api.example.com'),
+  baseUri: rpcBaseUri(),
   headersProvider: () {
     final token = accessToken;
     return token == null
@@ -157,6 +197,7 @@ body，以及客户端 typed 响应；生成入口与默认 HTTP 模块均可直
 import 'routes.server.dart' as generated;
 
 final rpcModule = RpcModule.http(
+  baseUri: rpcBaseUri(),
   maxRequestBodyBytes: 2 * 1024 * 1024,
   maxResponseFrameBytes: 2 * 1024 * 1024,
 );
@@ -538,18 +579,18 @@ callback 必须声明 `write` 或 `rowReturning`，因此 transaction control
 
 ```sh
 dart run odroe generate
-dart run odroe dev
 dart run odroe dev --server-only
 flutter devices
-dart run odroe dev -- -d <ios-device-id>
+dart run odroe dev -- -d <ios-device-id> --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe dev -- -d chrome
-dart run odroe build apk
+dart run odroe build -- apk --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe build web
 dart run odroe build --server-only --server-target cloudflare
 ```
 
 将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
-Web；`--` 后参数原样交给 Flutter CLI。开发 server 直接挂载源码 `public/`，
+Web；`--` 后参数原样交给 Flutter CLI。包含 RPC 的原生运行与构建必须传入
+`ODROE_API_ORIGIN`，Web 继续使用同源。开发 server 直接挂载源码 `public/`，
 不读取旧 `build/web`。`build web` 会构建 Flutter Web 与 server artifact，
 再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；
 带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样

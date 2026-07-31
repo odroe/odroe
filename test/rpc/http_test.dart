@@ -70,13 +70,80 @@ void main() {
     expect(() => RpcModule.http(maxResponseFrameBytes: 0), throwsArgumentError);
   });
 
+  test('rejects an invalid HTTP base URI before creating a transport', () {
+    var defaultClientCreations = 0;
+    http.runWithClient(
+      () {
+        expect(
+          () => RpcModule.http(),
+          throwsA(
+            isA<ArgumentError>()
+                .having((error) => error.invalidValue, 'invalidValue', Uri.base)
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains('Omit only for same-origin Web RPC.'),
+                ),
+          ),
+        );
+        for (final value in <Uri>[
+          Uri.parse('/api'),
+          Uri.parse('http:///rpc'),
+          Uri.parse('ftp://api.example.com'),
+          Uri.parse('https://user@api.example.com'),
+        ]) {
+          expect(
+            () => RpcModule.http(baseUri: value),
+            throwsA(
+              isA<ArgumentError>()
+                  .having((error) => error.invalidValue, 'invalidValue', value)
+                  .having(
+                    (error) => error.message,
+                    'message',
+                    contains('Omit only for same-origin Web RPC.'),
+                  ),
+            ),
+            reason: value.toString(),
+          );
+        }
+      },
+      () {
+        defaultClientCreations++;
+        return _RecordingHttpClient();
+      },
+    );
+    expect(defaultClientCreations, 0);
+  });
+
+  test('accepts explicit HTTP and HTTPS module base URIs', () {
+    final transport = HttpTransport(client: _RecordingHttpClient());
+    addTearDown(transport.close);
+
+    for (final value in <Uri>[
+      Uri.parse('http://localhost:8080'),
+      Uri.parse('https://api.example.com/app?tenant=one#section'),
+    ]) {
+      final module = RpcModule.http(baseUri: value, transport: transport);
+      expect(module.client.baseUri, value);
+    }
+  });
+
   test('configures only the module-owned HTTP request body budget', () {
-    final module = RpcModule.http(maxRequestBodyBytes: 512);
+    final module = RpcModule.http(
+      baseUri: Uri.parse('https://api.example.com'),
+      maxRequestBodyBytes: 512,
+    );
     final transport = module.client.transport as HttpTransport;
     addTearDown(transport.close);
     expect(transport.maxRequestBodyBytes, 512);
 
-    expect(() => RpcModule.http(maxRequestBodyBytes: 0), throwsArgumentError);
+    expect(
+      () => RpcModule.http(
+        baseUri: Uri.parse('https://api.example.com'),
+        maxRequestBodyBytes: 0,
+      ),
+      throwsArgumentError,
+    );
     final callerOwned = HttpTransport(client: _RecordingHttpClient());
     expect(
       () => RpcModule.http(transport: callerOwned, maxRequestBodyBytes: 512),
