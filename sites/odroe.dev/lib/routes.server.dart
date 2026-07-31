@@ -52,6 +52,7 @@ Server createServer({
   Iterable<Middleware> middleware = const <Middleware>[],
   Serializer? serializer,
   Renderer? renderer,
+  ServerErrorHandler? onError,
   int maxFunctionPayload = Server.defaultMaxFunctionPayload,
   int maxFunctionResponseFrameBytes =
       Server.defaultMaxFunctionResponseFrameBytes,
@@ -63,6 +64,7 @@ Server createServer({
   flutterRoutes: <RouteNode>[],
   middleware: middleware,
   serializer: serializer,
+  onError: onError,
   maxFunctionPayload: maxFunctionPayload,
   maxFunctionResponseFrameBytes: maxFunctionResponseFrameBytes,
   renderer:

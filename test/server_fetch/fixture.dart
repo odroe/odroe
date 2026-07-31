@@ -7,6 +7,7 @@ import 'package:odroe/server_fetch.dart';
 void main() {
   final server = Server(
     routes: const [],
+    onError: (_, _, _) {},
     middleware: <Middleware>[
       (context, _) => _handle(context.request, context.invocation),
     ],

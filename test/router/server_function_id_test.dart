@@ -79,10 +79,7 @@ ${_serverFunction(name: 'updatePost', id: "'posts.read'")}
           .join('\n');
 
       expect(output.hasErrors, isTrue);
-      expect(
-        messages,
-        contains('lib/routes/child/server.dart#readChild'),
-      );
+      expect(messages, contains('lib/routes/child/server.dart#readChild'));
       expect(messages, contains('rootFunction'));
       expect(messages, contains('readChild'));
       expect(messages, contains('lib/routes/server.dart'));
@@ -140,12 +137,29 @@ ${_serverFunction(name: 'readPost', id: 'functionId')}
         contains('"$fallback": ServerFunctionBinding('),
       );
     });
+
+    test('eagerly validates Iterable input before the handler starts', () {
+      project.writeFunctions(
+        _serverFunction(name: 'readValues', input: 'Iterable<int>'),
+      );
+
+      final output = project.compile();
+
+      expect(output.diagnostics, isEmpty);
+      expect(output.serverSource, contains('value as List'));
+      expect(output.serverSource, contains('item as int'));
+      expect(output.serverSource, contains('.toList(growable: false)'));
+    });
   });
 }
 
-String _serverFunction({required String name, String? id}) =>
+String _serverFunction({
+  required String name,
+  String? id,
+  String input = 'int',
+}) =>
     '''
-final $name = ServerFunction<int, String>(
+final $name = ServerFunction<$input, String>(
   ${id == null ? '' : 'id: $id,'}
   handler: (_) => 'ok',
 );

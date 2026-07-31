@@ -17,7 +17,14 @@ final class AppContext {
   bool _disposed = false;
 
   /// Registers and initializes [modules] in declaration order.
-  static Future<AppContext> create(Iterable<Module> modules) async {
+  ///
+  /// When initialization fails, [onCleanupError] observes each secondary
+  /// failure while disposing initialized modules. It cannot replace the original
+  /// initialization error.
+  static Future<AppContext> create(
+    Iterable<Module> modules, {
+    void Function(Object error, StackTrace stackTrace)? onCleanupError,
+  }) async {
     final installed = List<Module>.of(modules, growable: false);
     final registry = ModuleRegistry();
     for (final module in installed) {
@@ -34,7 +41,7 @@ final class AppContext {
       return context;
     } on Object catch (error, stackTrace) {
       try {
-        await context._dispose(initialized);
+        await context._dispose(initialized, onError: onCleanupError);
       } on Object {
         // Initialization is the primary failure presented to the caller.
       }
@@ -54,7 +61,10 @@ final class AppContext {
   /// Disposes modules in reverse registration order.
   Future<void> dispose() => _dispose(_modules.length);
 
-  Future<void> _dispose(int count) async {
+  Future<void> _dispose(
+    int count, {
+    void Function(Object error, StackTrace stackTrace)? onError,
+  }) async {
     if (_disposed) return;
     _disposed = true;
     Object? firstError;
@@ -63,6 +73,11 @@ final class AppContext {
       try {
         await _modules[index].dispose(this);
       } on Object catch (error, stackTrace) {
+        try {
+          onError?.call(error, stackTrace);
+        } on Object {
+          // Cleanup reporting cannot replace the primary failure.
+        }
         firstError ??= error;
         firstStackTrace ??= stackTrace;
       }

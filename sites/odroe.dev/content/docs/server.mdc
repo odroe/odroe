@@ -10,6 +10,10 @@ language: en
 middleware, loads route data, and returns an adapter-neutral `ServerResponse`.
 
 ```dart
+import 'package:odroe/server.dart';
+
+import 'routes.server.dart' as generated;
+
 Server createServer() => generated.createServer();
 ```
 
@@ -152,6 +156,11 @@ oversized stream item cancels the upstream stream after one bounded terminal
 error frame. The minimum is 16 bytes so a valid `{"type":"error"}` fallback
 always fits.
 
+Malformed JSON, unknown serializer tags, and values that do not match the
+generated input type return a controlled HTTP 400 before the handler starts.
+They do not trigger `Server.onError`; the same exception thrown by a handler is
+still an unexpected 500 and is reported.
+
 This server limit bounds JSON bytes retained and sent by the framework, but
 `Serializer.encode` still materializes one JSON-compatible object graph first.
 It cannot bound objects already allocated by a handler or an unbounded
@@ -176,6 +185,58 @@ network request starts; GET payloads only cross the server input budget.
 
 A function explicitly typed to return `ServerResponse` bypasses the typed frame
 budget. The caller then owns streaming, limits, and body release.
+
+## Error reporting
+
+Unexpected module setup and rollback cleanup, middleware, handler, loader,
+renderer, RPC encoding, and response-stream failures are reported through
+`Server.onError`. A module setup failure is reported and rethrown with its
+original stack before a response exists. Request execution failures still
+return a safe `500`, typed streams still end with their bounded error frame,
+and raw stream consumers still receive the original error. The default
+reporter writes the error and stack trace to the current Dart `Zone`.
+
+The generated entrypoint accepts an application reporter directly. Configure
+it from the `lib/server.dart` entrypoint used by the CLI:
+
+```dart
+import 'package:odroe/server.dart';
+
+import 'routes.server.dart' as generated;
+
+Server createServer() => generated.createServer(
+  onError: (request, error, stackTrace) => telemetry.capture(
+    method: request.method.wire,
+    path: request.uri.path,
+    error: error,
+    stackTrace: stackTrace,
+  ),
+);
+```
+
+The callback may finish synchronously or return a bounded `Future`. Odroe joins
+that future to the current invocation lifetime without delaying the response.
+Payload and typed-frame budget overflow, plus normal cancellation, are always
+controlled and are not reported. During request dispatch, before a response
+starts, `Redirect`, `NotFound`, and `HttpError` are controlled too. Those and
+other errors thrown by a response stream are reported, except typed-frame
+overflow. `exposeErrors` only controls client disclosure; it does not change
+the original error and stack trace delivered to `onError`. A synchronously or
+asynchronously failing reporter cannot replace the original outcome and falls
+back to the default Zone log.
+
+The callback receives the same `ServerRequest` for method, path, and
+application trace-header correlation. Its body may already be consumed and
+must not be read again. The framework itself adds only method and path to the
+default log, not query, headers, or body. The error and stack trace are written
+verbatim, so applications must not put sensitive data in exceptions. This hook
+covers failures consumed by the `Server` runtime; IO-adapter static serving,
+development proxy, and response-metadata failures remain outside this contract.
+
+`ServerInvocation.onError` is the separate adapter-lifetime fallback for
+background and cleanup failures that no host owns, plus synchronous host
+`waitUntil` registration failures. Once a host accepts a task, the host owns
+any later rejection.
 
 ## Cancellation
 

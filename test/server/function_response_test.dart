@@ -242,6 +242,7 @@ Server _server<O>({
   maxFunctionResponseFrameBytes: maxResponseBytes,
   exposeErrors: exposeErrors,
   allowRpcWithoutOrigin: true,
+  onError: (_, _, _) {},
 );
 
 ServerRequest _request() => ServerRequest.bytes(

@@ -296,7 +296,8 @@ String _decodeWireValue(_WireType type, String value) {
           '${_decodeWireValue(type.arguments.single, 'item')}).toSet()',
     'Iterable' =>
       '($value as List).map((item) => '
-          '${_decodeWireValue(type.arguments.single, 'item')})',
+          '${_decodeWireValue(type.arguments.single, 'item')})'
+          '.toList(growable: false)',
     'Map' =>
       '<String, ${type.arguments[1].source}>{'
           'for (final entry in ($value as Map).entries) '

@@ -71,17 +71,31 @@ final class ServerFunction<I, O> {
   final List<Middleware> middleware;
 
   /// Decodes [data] and invokes [handler].
+  ///
+  /// Malformed wire values fail as a controlled HTTP 400 before [handler]
+  /// starts. Errors thrown by [handler] retain their original semantics.
   FutureOr<Object?> execute(
     Object? data,
     RequestContext request,
     String id, {
     ValueDecoder<Object?>? generatedDecoder,
   }) {
-    final input = I == NoServerInput && data == null
-        ? const NoServerInput() as I
-        : generatedDecoder != null
-        ? generatedDecoder(data) as I
-        : decodeInput?.call(data) ?? data as I;
+    late final I input;
+    try {
+      input = I == NoServerInput && data == null
+          ? const NoServerInput() as I
+          : generatedDecoder != null
+          ? generatedDecoder(data) as I
+          : decodeInput?.call(data) ?? data as I;
+    } on FormatException {
+      throw const HttpError(400, 'Invalid server function payload.');
+    } on TypeError {
+      throw const HttpError(400, 'Invalid server function payload.');
+    } on RangeError {
+      throw const HttpError(400, 'Invalid server function payload.');
+    } on ArgumentError {
+      throw const HttpError(400, 'Invalid server function payload.');
+    }
     return handler(
       ServerFunctionContext<I>(data: input, request: request, id: id),
     );

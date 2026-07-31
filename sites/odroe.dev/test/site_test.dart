@@ -368,6 +368,42 @@ void main() {
     );
   });
 
+  test('Server docs define unexpected error reporting', () async {
+    final document = await File('content/docs/server.mdc').readAsString();
+    final firstDartBlock = RegExp(
+      r'```dart\s+([\s\S]*?)\s+```',
+    ).firstMatch(document)!.group(1)!;
+    final source = document.replaceAll(RegExp(r'\s+'), ' ');
+
+    expect(firstDartBlock, contains("import 'package:odroe/server.dart';"));
+    expect(
+      firstDartBlock,
+      contains("import 'routes.server.dart' as generated;"),
+    );
+    expect(source, contains('through `Server.onError`'));
+    expect(source, contains('default reporter writes'));
+    expect(source, contains('current Dart `Zone`'));
+    expect(source, contains('onError: (request, error, stackTrace)'));
+    expect(source, contains('module setup failure is reported and rethrown'));
+    expect(source, contains('return a bounded `Future`'));
+    expect(source, contains('without delaying the response'));
+    expect(source, contains('same `ServerRequest`'));
+    expect(source, contains('not query, headers, or body'));
+    expect(source, contains('error and stack trace are written verbatim'));
+    expect(source, contains('must not put sensitive data in exceptions'));
+    expect(source, contains('failures consumed by the `Server` runtime'));
+    expect(source, contains('remain outside this contract'));
+    expect(source, contains('controlled HTTP 400 before the handler starts'));
+    expect(source, contains('do not trigger `Server.onError`'));
+    expect(source, contains('before a response starts'));
+    expect(source, contains('except typed-frame overflow'));
+    expect(source, contains('`exposeErrors` only controls client disclosure'));
+    expect(source, contains('failing reporter cannot replace the original'));
+    expect(source, contains('`ServerInvocation.onError` is the separate'));
+    expect(source, contains('Once a host accepts a task'));
+    expect(source, contains('controlled and are not reported'));
+  });
+
   test('Cloudflare hybrid example preserves dynamic page navigation', () async {
     final source = await File('content/docs/deploy.mdc').readAsString();
     final block = RegExp(r'```json\s+([\s\S]*?)\s+```').firstMatch(source);

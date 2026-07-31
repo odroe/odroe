@@ -148,6 +148,8 @@ RPC 有四个独立字节边界：服务端请求、服务端 typed 输出、客
 body，以及客户端 typed 响应；生成入口与默认 HTTP 模块均可直接配置：
 
 ```dart
+import 'routes.server.dart' as generated;
+
 final rpcModule = RpcModule.http(
   maxRequestBodyBytes: 2 * 1024 * 1024,
   maxResponseFrameBytes: 2 * 1024 * 1024,
@@ -167,6 +169,10 @@ envelope 的 UTF-8 字节计数；stream 每个 frame 独立计数，换行不�
 服务端直接编码 UTF-8 并在超限时停止：value 改为有界 500 error frame，stream
 写入一个有界终止 error frame 并取消上游。预算最小为 16 bytes，以保证仍可发送
 合法 error frame。显式 `ServerResponse` 保持旁路，由应用负责流式读取和限制。
+
+畸形 JSON、未知 serializer tag 或不符合生成类型的 RPC 输入会在 handler 启动前
+返回受控 HTTP 400，不触发 `Server.onError`；handler 自身抛出的同类异常仍属于
+unexpected failure，并按 500 上报。
 
 这道服务端预算约束框架生成和发送的 JSON bytes，但 `Serializer.encode` 仍会先
 物化一个值的 JSON-compatible 对象图；它不能约束 handler 已有对象、超大或无限
@@ -208,6 +214,48 @@ setup 或 stream idle timeout。
 取消只表示调用方不再等待，不能回滚已经开始的 POST、事务或其他服务端副作用；
 需要协作式停止时，handler 应观察底层 `ServerRequest.cancelled`。Odroe 不因
 取消自动重试。
+
+服务端会把 unexpected module setup/rollback cleanup、middleware、handler、
+loader、renderer、RPC 编码和 response stream 异常报告给 `Server.onError`。
+module setup 失败会在 response 创建前报告并原样抛出；request execution 失败
+仍返回安全 500；typed stream 仍发送有界终止 frame，raw stream consumer 仍
+收到原始 error。默认 reporter 把 error 与 stack trace 写入当前 Dart `Zone`。
+生产应用可在 `lib/server.dart` 入口直接接入自己的 telemetry：
+
+```dart
+import 'package:odroe/server.dart';
+
+import 'routes.server.dart' as generated;
+
+Server createServer() => generated.createServer(
+  onError: (request, error, stackTrace) => telemetry.capture(
+    method: request.method.wire,
+    path: request.uri.path,
+    error: error,
+    stackTrace: stackTrace,
+  ),
+);
+```
+
+callback 可同步完成，也可返回有界的 `Future`；Odroe 会把 Future 加入当前
+invocation 生命周期，但不会延迟 response。payload/frame 预算超限和正常取消
+始终属于受控结果，不会上报。在 response 开始前的 request dispatch 中，
+`Redirect`、`NotFound` 与 `HttpError` 也属于受控结果；若这些或其他 error 从
+response stream 抛出，则会上报（typed frame overflow 除外）。`exposeErrors`
+只决定是否向客户端披露内部细节，不影响 reporter 收到原始 error 与 stack
+trace。reporter 自身同步或异步失败都不会替换原始结果；Odroe 会退回默认 Zone
+日志。
+
+callback 收到同一个 `ServerRequest`，可用 method、path 和应用自己的 trace header
+关联 telemetry；此时 body 可能已被消费，不应再次读取。默认日志由框架主动附加的
+请求字段只有 method 与 path，不含 query、header 或 body；error 与 stack trace
+仍会原样记录，因此应用不应把敏感信息写入异常。该 hook 只覆盖 `Server` runtime
+消费的异常；IO adapter 自己的 static serving、development proxy 与 response
+metadata 阶段不在本轮合同内。
+
+`ServerInvocation.onError` 是独立的 adapter-lifetime fallback，只观察没有 host
+接管的 background/cleanup failure，以及 host `waitUntil` 的同步注册失败。host
+成功接收 task 后，其后续 rejection 归 host 处理。
 
 ## 文件路由
 

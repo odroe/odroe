@@ -21,6 +21,14 @@ import 'route.dart';
 /// Handles one platform-neutral server request.
 typedef ServerHandler = Future<ServerResponse> Function(ServerRequest request);
 
+/// Observes one unexpected server failure without changing its outcome.
+typedef ServerErrorHandler =
+    FutureOr<void> Function(
+      ServerRequest request,
+      Object error,
+      StackTrace stackTrace,
+    );
+
 /// Creates request modules from adapter-owned invocation state.
 typedef InvocationModuleFactory =
     Iterable<Module> Function(ServerInvocation invocation);
@@ -49,6 +57,7 @@ final class Server {
     Iterable<RouteNode> flutterRoutes = const <RouteNode>[],
     Serializer? serializer,
     this.renderer,
+    ServerErrorHandler? onError,
     this.functionPath = '/__odroe/functions',
     this.maxFunctionPayload = defaultMaxFunctionPayload,
     this.maxFunctionResponseFrameBytes = defaultMaxFunctionResponseFrameBytes,
@@ -59,6 +68,7 @@ final class Server {
        middleware = List<Middleware>.unmodifiable(middleware),
        modules = modules ?? _emptyModules,
        serializer = serializer ?? Serializer(),
+       onError = onError ?? _defaultServerErrorHandler,
        _flutterRoutes = HashSet<Object>.identity()
          ..addAll(flutterRoutes.map((route) => route.identity)),
        _functionPrefix = functionPath.endsWith('/')
@@ -104,6 +114,20 @@ final class Server {
 
   /// Optional renderer used by GET and HEAD routes without a direct handler.
   final Renderer? renderer;
+
+  /// Reports unexpected module setup, request execution, and response stream
+  /// failures.
+  ///
+  /// [ServerRequest.body] may already be consumed when this callback runs; use
+  /// request metadata for correlation rather than reading the body again.
+  ///
+  /// During request dispatch, controlled results such as [Redirect],
+  /// [NotFound], [HttpError], payload limits, and normal cancellation are not
+  /// reported. Typed frame overflows are never reported. Other response stream
+  /// failures are unexpected. Reporter failures fall back to the default Zone
+  /// logger and never replace the original outcome. A returned future joins the
+  /// invocation lifetime without delaying the response.
+  final ServerErrorHandler onError;
 
   /// Prefix used by generated server functions.
   final String functionPath;
@@ -165,8 +189,13 @@ final class Server {
       final installedModules = createInvocationModules == null
           ? baseModules
           : baseModules.followedBy(createInvocationModules(invocation));
-      app = await AppContext.create(installedModules);
+      app = await AppContext.create(
+        installedModules,
+        onCleanupError: (error, stackTrace) =>
+            _reportUnexpected(request, error, stackTrace, invocation),
+      );
     } on Object catch (error, stackTrace) {
+      _reportUnexpected(request, error, stackTrace, invocation);
       finishServerInvocation(
         invocation,
         responseDone: Future<void>.value(),
@@ -237,6 +266,7 @@ final class Server {
         error: error,
       );
     } on Object catch (error, stackTrace) {
+      _reportUnexpected(request, error, stackTrace, context.invocation);
       response = _failure(
         request,
         rpc: rpcId != null,
@@ -324,12 +354,25 @@ final class Server {
       );
     }
     final payload = await _readFunctionPayload(context.request);
-    final decoded = serializer.decode(payload);
+    late final Object? decoded;
+    try {
+      decoded = serializer.decode(payload);
+    } on FormatException {
+      throw const HttpError(400, 'Invalid server function payload.');
+    } on TypeError {
+      throw const HttpError(400, 'Invalid server function payload.');
+    } on RangeError {
+      throw const HttpError(400, 'Invalid server function payload.');
+    } on ArgumentError {
+      throw const HttpError(400, 'Invalid server function payload.');
+    }
     final data = decoded is Map ? decoded['data'] : null;
     return runMiddleware(context, binding.middleware, () async {
       final value = await binding.execute(data, context, id);
       if (value is ServerResponse) return value;
-      if (value is Stream) return _streamFunction(value);
+      if (value is Stream) {
+        return _streamFunction(value, context.request, context.invocation);
+      }
       return _functionResponse(<String, Object?>{
         'version': 1,
         'type': 'data',
@@ -338,21 +381,33 @@ final class Server {
     });
   }
 
-  Future<Object?> _readFunctionPayload(ServerRequest request) {
+  Future<Object?> _readFunctionPayload(ServerRequest request) async {
     if (request.method != HttpMethod.get) {
-      return request.readJson(maxBytes: maxFunctionPayload);
+      try {
+        return await request.readJson(maxBytes: maxFunctionPayload);
+      } on FormatException {
+        throw const HttpError(400, 'Invalid server function payload.');
+      }
     }
     final payload = request.uri.queryParameters['payload'];
     if (payload == null || payload.isEmpty) {
-      return Future<Object?>.value(<String, Object?>{});
+      return <String, Object?>{};
     }
     if (utf8.encode(payload).length > maxFunctionPayload) {
       throw PayloadTooLargeException(maxFunctionPayload);
     }
-    return Future<Object?>.value(jsonDecode(payload));
+    try {
+      return jsonDecode(payload);
+    } on FormatException {
+      throw const HttpError(400, 'Invalid server function payload.');
+    }
   }
 
-  ServerResponse _streamFunction(Stream<dynamic> stream) {
+  ServerResponse _streamFunction(
+    Stream<dynamic> stream,
+    ServerRequest request,
+    ServerInvocation invocation,
+  ) {
     Stream<List<int>> body() async* {
       try {
         await for (final value in stream) {
@@ -367,7 +422,8 @@ final class Server {
           _functionResponseTooLargeFrame,
           terminateLine: true,
         );
-      } on Object catch (error) {
+      } on Object catch (error, stackTrace) {
+        _reportUnexpected(request, error, stackTrace, invocation);
         yield _encodeFunctionErrorFrame(<String, Object?>{
           'version': 1,
           'type': 'error',
@@ -432,10 +488,21 @@ final class Server {
     }
     return runMiddleware(context, routeMiddleware, () async {
       final loads = await _load(context, matches);
-      final firstError = loads.values
+      final failedLoads = loads.values
           .where((result) => result.isLoaded && !result.hasData)
-          .firstOrNull;
+          .toList(growable: false);
+      final firstError = failedLoads.firstOrNull;
       if (firstError != null) {
+        for (final failure in failedLoads.skip(1)) {
+          final error = failure.error!;
+          if (_isControlledDispatchError(error)) continue;
+          _reportUnexpected(
+            context.request,
+            error,
+            failure.stackTrace!,
+            context.invocation,
+          );
+        }
         Error.throwWithStackTrace(firstError.error!, firstError.stackTrace!);
       }
       return render(
@@ -547,7 +614,12 @@ final class Server {
         response.status == 205 ||
         response.status == 304;
     if (omitBody) {
-      final responseDone = _cancelResponseBody(response.body);
+      final responseDone = _cancelResponseBody(response.body).then<void>(
+        (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          _reportUnexpected(request, error, stackTrace, invocation);
+        },
+      );
       finishServerInvocation(
         invocation,
         responseDone: responseDone,
@@ -566,6 +638,9 @@ final class Server {
         await for (final chunk in response.body) {
           yield chunk;
         }
+      } on Object catch (error, stackTrace) {
+        _reportUnexpected(request, error, stackTrace, invocation);
+        Error.throwWithStackTrace(error, stackTrace);
       } finally {
         if (!responseDone.isCompleted) responseDone.complete();
       }
@@ -583,6 +658,41 @@ final class Server {
       body: body(),
     );
   }
+
+  void _reportUnexpected(
+    ServerRequest request,
+    Object error,
+    StackTrace stackTrace,
+    ServerInvocation invocation,
+  ) {
+    try {
+      final report = onError(request, error, stackTrace);
+      if (report is Future<void>) {
+        invocation.waitUntil(
+          report.then<void>(
+            (_) {},
+            onError: (Object reporterError, StackTrace reporterStackTrace) {
+              _reportReporterFailure(
+                request,
+                error,
+                stackTrace,
+                reporterError,
+                reporterStackTrace,
+              );
+            },
+          ),
+        );
+      }
+    } on Object catch (reporterError, reporterStackTrace) {
+      _reportReporterFailure(
+        request,
+        error,
+        stackTrace,
+        reporterError,
+        reporterStackTrace,
+      );
+    }
+  }
 }
 
 Future<void> _cancelResponseBody(Stream<List<int>> body) async {
@@ -591,6 +701,41 @@ Future<void> _cancelResponseBody(Stream<List<int>> body) async {
 }
 
 Iterable<Module> _emptyModules() => const <Module>[];
+
+bool _isControlledDispatchError(Object error) =>
+    error is Redirect ||
+    error is NotFound ||
+    error is HttpError ||
+    error is PayloadTooLargeException ||
+    error is _FunctionResponseFrameTooLarge;
+
+void _defaultServerErrorHandler(
+  ServerRequest request,
+  Object error,
+  StackTrace stackTrace,
+) {
+  Zone.current.print(
+    'Unexpected Odroe server error for '
+    '${request.method.wire} ${request.uri.path}: $error\n$stackTrace',
+  );
+}
+
+void _reportReporterFailure(
+  ServerRequest request,
+  Object error,
+  StackTrace stackTrace,
+  Object reporterError,
+  StackTrace reporterStackTrace,
+) {
+  try {
+    _defaultServerErrorHandler(request, error, stackTrace);
+    Zone.current.print(
+      'Odroe Server.onError failed: $reporterError\n$reporterStackTrace',
+    );
+  } on Object {
+    // Error reporting must never replace the original outcome.
+  }
+}
 
 Headers _varyAccept(Headers? headers) {
   final result = headers?.copy() ?? Headers();

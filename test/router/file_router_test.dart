@@ -55,6 +55,8 @@ void main() {
       output.serverSource,
       contains('InvocationModuleFactory? invocationModules'),
     );
+    expect(output.serverSource, contains('ServerErrorHandler? onError'));
+    expect(output.serverSource, contains('onError: onError'));
     expect(
       output.serverSource,
       contains('int maxFunctionPayload = Server.defaultMaxFunctionPayload'),

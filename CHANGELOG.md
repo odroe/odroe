@@ -30,6 +30,12 @@
   configurable through `HttpTransport` and `RpcModule.http`, export
   `PayloadTooLargeException` from `rpc.dart`, and keep content framing owned by
   the transport.
+- Report unexpected module, request execution, RPC encoding, and response
+  stream failures through configurable `Server.onError`, with a dependency-free
+  Zone logger by default. Module setup failures remain rethrown, request and
+  stream outcomes remain unchanged, and synchronous or asynchronous reporter
+  failures cannot replace the original outcome. Malformed server-function
+  inputs remain controlled HTTP 400 results instead of producing error logs.
 - Make application context, route capability, and request context keys
   identity-based so independent modules cannot collide through equal constant
   type/name pairs.
