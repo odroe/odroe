@@ -112,12 +112,35 @@ native executable.
   "name": "my-odroe-app",
   "main": "./build/odroe/cloudflare/worker.mjs",
   "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["enable_request_signal"],
   "assets": {
     "directory": "./build/web",
     "html_handling": "drop-trailing-slash"
   }
 }
 ```
+
+`enable_request_signal` lets a real incoming client disconnect abort the Fetch
+`Request.signal`, which completes `ServerRequest.cancelled`. A Node test can
+abort a synthetic `Request` without proving this Cloudflare runtime
+configuration.
+
+The generated Fetch bootstrap creates the application `Server` once and
+forwards both its invocation handler and reporter. Handwritten entrypoints
+should preserve the same ownership:
+
+```dart
+final appServer = createServer();
+exportFetchHandler(
+  appServer.invocationHandler,
+  onError: appServer.onError,
+);
+```
+
+The adapter reports its own status, header, `Response` construction, and
+response-byte conversion failures once. Handler and source-stream failures
+remain `Server`-owned. A bounded asynchronous reporter is registered through
+the host `waitUntil` and does not delay the response.
 
 `drop-trailing-slash` keeps generated directory indexes on canonical URLs such
 as `/docs`. This hybrid configuration deliberately leaves
@@ -140,10 +163,10 @@ The target follows these rules:
 - D1 is passed as an explicit request binding;
 - `waitUntil` tasks keep request modules alive until background work settles.
 
-The Fetch adapter passes streaming, cancellation, concurrency, compiled
-artifact, and local Wrangler/Workerd smoke tests. Local D1 binding behavior is
-also verified. This remains Preview support. No remote Cloudflare deployment
-has been verified.
+The required Node smoke covers streaming, synthetic cancellation, concurrency,
+and the compiled artifact. Optional local Wrangler/Workerd and D1 integration
+tests run when `ODROE_WRANGLER` is configured. This remains Preview support. No
+remote Cloudflare deployment has been verified.
 
 ## This website
 

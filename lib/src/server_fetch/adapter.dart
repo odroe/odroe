@@ -2,6 +2,7 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
+import '../server/error_reporter.dart';
 import '../server/invocation.dart';
 import 'http.dart';
 
@@ -15,14 +16,28 @@ final class FetchBindings {
 }
 
 /// Registers [handler] as `globalThis.__odroeFetch`.
-void exportFetchHandler(ServerInvocationHandler handler) {
+///
+/// [onError] reports unexpected response conversion failures owned by this
+/// adapter. Handler and response source-stream failures remain owned by
+/// [handler]. The default writes to the current Dart Zone; pass an explicit
+/// no-op to disable reporting.
+void exportFetchHandler(
+  ServerInvocationHandler handler, {
+  ServerErrorHandler? onError,
+}) {
+  final reporter = onError ?? defaultServerErrorHandler;
   _globalThis.__odroeFetch =
       ((web.Request request, JSObject bindings, _ExecutionContext context) {
         final invocation = ServerInvocation(
           bindings: FetchBindings(bindings),
           waitUntil: (task) => context.waitUntil(task.toJS),
         );
-        return handleFetchInvocation(handler, request, invocation).toJS;
+        return handleFetchInvocation(
+          handler,
+          request,
+          invocation,
+          onError: reporter,
+        ).toJS;
       }).toJS;
 }
 

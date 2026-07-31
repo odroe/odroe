@@ -416,6 +416,9 @@ void main() {
     expect(source, contains('error and stack trace are written verbatim'));
     expect(source, contains('must not put sensitive data in exceptions'));
     expect(source, contains('generated native bootstrap creates one `Server`'));
+    expect(source, contains('generated Fetch bootstrap also creates one'));
+    expect(source, contains('response-byte conversion failures'));
+    expect(source, contains('registered with the host `waitUntil`'));
     expect(source, contains('adapter-owned static files'));
     expect(source, contains('HTTP framing'));
     expect(source, contains('metadata-only diagnostic `ServerRequest`'));
@@ -457,6 +460,7 @@ void main() {
     expect(block, isNotNull);
     final config = jsonDecode(block!.group(1)!) as Map<String, Object?>;
     final assets = config['assets']! as Map<String, Object?>;
+    expect(config['compatibility_flags'], <String>['enable_request_signal']);
     expect(assets['directory'], './build/web');
     expect(assets['html_handling'], 'drop-trailing-slash');
     expect(assets, isNot(contains('not_found_handling')));
@@ -464,6 +468,11 @@ void main() {
     expect(source, contains('navigation misses can reach dynamic'));
     expect(source, contains('For a fully prerendered SSG'));
     expect(source, contains('assets_navigation_has_no_effect'));
+    expect(source, contains('completes `ServerRequest.cancelled`'));
+    expect(source, contains('appServer.invocationHandler'));
+    expect(source, contains('onError: appServer.onError'));
+    expect(source, contains('response-byte conversion failures once'));
+    expect(source, contains('host `waitUntil`'));
   });
 
   test('small secondary labels use accessible muted ink', () async {

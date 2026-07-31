@@ -25,6 +25,13 @@ void main() {
       final worker = File('${output.path}/worker.mjs');
       expect(server.existsSync(), isTrue);
       expect(worker.existsSync(), isTrue);
+      final bootstrap = await File(
+        p.join(project.path, '.dart_tool', 'odroe', 'server_fetch.dart'),
+      ).readAsString();
+      expect(bootstrap, contains('final appServer = app.createServer();'));
+      expect(bootstrap, contains('appServer.invocationHandler'));
+      expect(bootstrap, contains('onError: appServer.onError'));
+      expect('app.createServer()'.allMatches(bootstrap), hasLength(1));
       final javaScript = await server.readAsString();
       expect(javaScript, isNot(matches(RegExp(r'\beval\s*\('))));
       expect(javaScript, isNot(matches(RegExp(r'\bnew\s+Function\s*\('))));
@@ -352,6 +359,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
           'name': 'odroe-cloudflare-build-test',
           'main': 'worker.mjs',
           'compatibility_date': '2026-07-29',
+          'compatibility_flags': <String>['enable_request_signal'],
         }),
       );
 

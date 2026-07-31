@@ -236,6 +236,10 @@ import 'package:odroe/server_fetch.dart';
 import 'package:$packageName/${customServer ? 'server.dart' : 'routes.server.dart'}' as app;
 
 void main() {
-  exportFetchHandler(app.createServer().invocationHandler);
+  final appServer = app.createServer();
+  exportFetchHandler(
+    appServer.invocationHandler,
+    onError: appServer.onError,
+  );
 }
 ''';

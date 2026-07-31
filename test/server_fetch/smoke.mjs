@@ -9,6 +9,14 @@ assert.equal(typeof handler, "function");
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+Object.assign(globalThis, {
+  reportCount: 0,
+  reportMethod: "",
+  reportPath: "",
+  reportError: "",
+  reportStack: "",
+  reportCompleted: false,
+});
 
 function environment() {
   return {
@@ -36,6 +44,13 @@ async function invoke(request, env = environment()) {
   const response = await handler(request, env, context);
   assert.ok(response instanceof Response);
   return { response, env, tasks };
+}
+
+async function rejection(promise) {
+  return promise.then(
+    () => assert.fail("expected promise to reject"),
+    (error) => error,
+  );
 }
 
 {
@@ -175,7 +190,9 @@ async function invoke(request, env = environment()) {
 
 {
   const env = environment();
-  const { response } = await invoke(
+  globalThis.reportCount = 0;
+  globalThis.reportCompleted = false;
+  const { response, tasks } = await invoke(
     new Request("https://example.test/error-cancel"),
     env,
   );
@@ -201,7 +218,12 @@ async function invoke(request, env = environment()) {
   env.releaseResponseCancel = true;
   await downstreamCancel;
   await terminalRead;
+  await Promise.all(tasks);
   assert.equal(env.responseCancelled, true);
+  assert.equal(globalThis.reportCount, 1);
+  assert.equal(globalThis.reportMethod, "GET");
+  assert.equal(globalThis.reportPath, "/error-cancel");
+  assert.equal(globalThis.reportCompleted, true);
 }
 
 {
@@ -320,7 +342,65 @@ for (const status of [204, 205, 304]) {
 }
 
 {
+  globalThis.reportCount = 0;
+  globalThis.reportCompleted = false;
+  const { response, tasks } = await invoke(
+    new Request("https://example.test/invalid-response-stream"),
+  );
+  const failure = await rejection(response.body.getReader().read());
+  assert.equal(globalThis.reportCount, 1);
+  assert.equal(globalThis.reportMethod, "GET");
+  assert.equal(globalThis.reportPath, "/invalid-response-stream");
+  assert.equal(globalThis.reportError, "Bad state: byte conversion failed");
+  assert.ok(globalThis.reportStack.length > 0);
+  assert.equal(globalThis.reportStack, failure.stack);
+  assert.equal(tasks.length, 2);
+  await Promise.all(tasks);
+  assert.equal(globalThis.reportCompleted, true);
+}
+
+{
   const env = environment();
+  globalThis.reportCount = 0;
+  globalThis.reportCompleted = false;
+  let requestCancelled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("invalid header"));
+    },
+    cancel() {
+      requestCancelled = true;
+    },
+  });
+  const { context, tasks } = executionContext();
+  const failure = await rejection(
+    handler(
+      new Request("https://example.test/invalid-response-header", {
+        method: "POST",
+        body,
+        duplex: "half",
+      }),
+      env,
+      context,
+    ),
+  );
+  assert.equal(globalThis.reportCount, 1);
+  assert.equal(globalThis.reportMethod, "POST");
+  assert.equal(globalThis.reportPath, "/invalid-response-header");
+  assert.match(globalThis.reportError, /invalid header name/i);
+  assert.ok(globalThis.reportStack.length > 0);
+  assert.equal(globalThis.reportStack, failure.stack);
+  assert.equal(tasks.length, 2);
+  await Promise.all(tasks);
+  assert.equal(globalThis.reportCompleted, true);
+  assert.equal(env.responseCancelled, true);
+  assert.equal(requestCancelled, true);
+}
+
+{
+  const env = environment();
+  globalThis.reportCount = 0;
+  globalThis.reportCompleted = false;
   let requestCancelled = false;
   const body = new ReadableStream({
     start(controller) {
@@ -331,7 +411,7 @@ for (const status of [204, 205, 304]) {
     },
   });
   const { context, tasks } = executionContext();
-  await assert.rejects(
+  const failure = await rejection(
     handler(
       new Request("https://example.test/invalid-response", {
         method: "POST",
@@ -342,7 +422,15 @@ for (const status of [204, 205, 304]) {
       context,
     ),
   );
+  assert.equal(globalThis.reportCount, 1);
+  assert.equal(globalThis.reportMethod, "POST");
+  assert.equal(globalThis.reportPath, "/invalid-response");
+  assert.ok(globalThis.reportError.length > 0);
+  assert.ok(globalThis.reportStack.length > 0);
+  assert.equal(globalThis.reportStack, failure.stack);
+  assert.equal(tasks.length, 2);
   await Promise.all(tasks);
+  assert.equal(globalThis.reportCompleted, true);
   assert.equal(env.responseCancelled, true);
   assert.equal(requestCancelled, true);
 }

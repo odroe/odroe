@@ -517,8 +517,8 @@ pool-backed 顶层调用不保证复用同一 session。临时表、`SET` 等 se
 pool 由数据库拥有，`close()` 会释放它。
 
 driver 只在 fragments 之间插入 native placeholder，不解析或重写 SQL。SQLite 与
-PostgreSQL 已通过真实合同测试。D1 是 Preview，已通过本地
-Wrangler/Workerd；它提供原子 batch，不提供交互式 transaction。
+PostgreSQL 已通过真实合同测试。D1 是 Preview，提供可选的本地
+Wrangler/Workerd 合同测试；它提供原子 batch，不提供交互式 transaction。
 MySQL/MariaDB 是 Preview，已通过真实 MySQL 8.4 与 MariaDB 11.8；当前为
 单连接串行 driver，不支持 nested transaction、multiple result sets、portable
 `TIME` 解码或 `SqlDialect.mysql` 的 `RETURNING`。
@@ -580,8 +580,14 @@ content hash；若上游代理负责内容编码，可设置
 
 Cloudflare target 生成 `build/odroe/cloudflare/server.js` 与薄
 `worker.mjs`。平台配置仍由应用持有；Odroe 不覆盖已有
-`wrangler.jsonc`。当前只验证了本地 Wrangler/Workerd，尚未验证远端
-Cloudflare 部署。
+`wrangler.jsonc`。生成的 Fetch bootstrap 只创建一次 `Server`，并把同一实例的
+`invocationHandler` 与 `onError` 交给 adapter。status、header、`Response` 构造及
+response byte bridge 的 adapter-owned 异常只上报一次；handler 与 source stream
+仍由 `Server` 上报。异步 reporter 由 host `waitUntil` 持有，不阻塞 response。
+若需让真实客户端断开完成 `ServerRequest.cancelled`，运行该 Fetch adapter 的
+Cloudflare Worker 必须在 `compatibility_flags` 中启用 `enable_request_signal`；Node
+`AbortController` smoke 不能替代该平台配置。纯静态 assets-only SSG 不运行 adapter，
+无需该 flag。当前尚未验证远端 Cloudflare 部署。
 
 可运行应用见 [`example/app`](https://github.com/odroe/odroe/tree/main/example/app)。官网源码与正式文档位于
 [`sites/odroe.dev`](https://github.com/odroe/odroe/tree/main/sites/odroe.dev)，由 Odroe 的 Document、Press 与 SSG

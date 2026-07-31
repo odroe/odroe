@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
 
+import '../server/error_reporter.dart';
 import '../server/http.dart';
 import '../server/invocation.dart';
 
@@ -11,8 +12,9 @@ import '../server/invocation.dart';
 Future<web.Response> handleFetchInvocation(
   ServerInvocationHandler handler,
   web.Request request,
-  ServerInvocation invocation,
-) async {
+  ServerInvocation invocation, {
+  required ServerErrorHandler onError,
+}) async {
   final requestBody = request.body;
   final requestBodySource = requestBody == null
       ? null
@@ -66,6 +68,13 @@ Future<web.Response> handleFetchInvocation(
         : _ResponseBodySource(
             response.body,
             onDone: () => _cancelRequestBody(requestBodySource),
+            onError: (error, stackTrace) => reportServerError(
+              onError,
+              serverRequest,
+              error,
+              stackTrace,
+              keepAlive: invocation.waitUntil,
+            ),
           ).stream;
     final result = web.Response(
       body,
@@ -78,6 +87,13 @@ Future<web.Response> handleFetchInvocation(
     bodyHandled = true;
     return result;
   } on Object catch (error, stackTrace) {
+    reportServerError(
+      onError,
+      serverRequest,
+      error,
+      stackTrace,
+      keepAlive: invocation.waitUntil,
+    );
     if (!bodyHandled) {
       try {
         await _cancelBody(response.body);
@@ -122,11 +138,14 @@ final class _ResponseBodySource {
   _ResponseBodySource(
     Stream<List<int>> body, {
     required Future<void> Function() onDone,
+    required void Function(Object error, StackTrace stackTrace) onError,
   }) : _iterator = StreamIterator<List<int>>(body),
-       _onDone = onDone;
+       _onDone = onDone,
+       _onError = onError;
 
   final StreamIterator<List<int>> _iterator;
   final Future<void> Function() _onDone;
+  final void Function(Object error, StackTrace stackTrace) _onError;
   bool _closed = false;
   bool _cancelled = false;
   Future<void>? _closing;
@@ -142,8 +161,16 @@ final class _ResponseBodySource {
 
   Future<JSAny?> _pull(web.ReadableStreamDefaultController controller) async {
     if (_closed) return null;
+    var sourceFailed = false;
     try {
-      if (!await _iterator.moveNext()) {
+      late final bool hasNext;
+      try {
+        hasNext = await _iterator.moveNext();
+      } on Object {
+        sourceFailed = true;
+        rethrow;
+      }
+      if (!hasNext) {
         await _close(cancelIterator: false);
         controller.close();
         return null;
@@ -153,6 +180,9 @@ final class _ResponseBodySource {
       controller.enqueue(bytes.toJS);
       return null;
     } on Object catch (error, stackTrace) {
+      if (!sourceFailed && !_cancelled) {
+        _onError(error, stackTrace);
+      }
       try {
         await _close(cancelIterator: true);
       } on Object {

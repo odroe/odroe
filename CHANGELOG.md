@@ -48,6 +48,11 @@
   proxy dispatch. Bodyless framing is now status-aware: 1xx and 204 omit
   `Content-Length` and `Transfer-Encoding`, 205 emits zero length, and HEAD
   preserves representation framing only where the protocol permits it.
+- Reuse `Server.onError` from the generated Fetch bootstrap for adapter-owned
+  response metadata, construction, and byte-conversion failures. Keep handler
+  and source-stream reporting Server-owned, register asynchronous reporters
+  with host `waitUntil`, and document Cloudflare's `enable_request_signal`
+  flag for real incoming-client cancellation.
 - Make application context, route capability, and request context keys
   identity-based so independent modules cannot collide through equal constant
   type/name pairs.

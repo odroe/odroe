@@ -374,7 +374,7 @@ HtmlElement _output() => element(
           'Fetch',
           'Preview',
           'Edge JavaScript',
-          'Build a Worker artifact verified with local Workerd.',
+          'Build a Worker artifact with optional local Workerd verification.',
           'cloud',
         ),
       ],

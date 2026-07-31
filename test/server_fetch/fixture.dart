@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:js_interop';
 
@@ -7,12 +8,28 @@ import 'package:odroe/server_fetch.dart';
 void main() {
   final server = Server(
     routes: const [],
-    onError: (_, _, _) {},
+    onError: _reportError,
     middleware: <Middleware>[
       (context, _) => _handle(context.request, context.invocation),
     ],
   );
-  exportFetchHandler(server.invocationHandler);
+  exportFetchHandler(server.invocationHandler, onError: server.onError);
+}
+
+Future<void> _reportError(
+  ServerRequest request,
+  Object error,
+  StackTrace stackTrace,
+) async {
+  _testState
+    ..reportCount = _testState.reportCount + 1
+    ..reportMethod = request.method.wire
+    ..reportPath = request.uri.path
+    ..reportError = '$error'
+    ..reportStack = '$stackTrace'
+    ..reportCompleted = false;
+  await Future<void>.delayed(const Duration(milliseconds: 5));
+  _testState.reportCompleted = true;
 }
 
 Future<ServerResponse> _handle(
@@ -69,6 +86,13 @@ Future<ServerResponse> _handle(
       return ServerResponse.text('scheduled');
     case '/invalid-response':
       return ServerResponse(status: 700, body: _discardedBody(env));
+    case '/invalid-response-header':
+      return ServerResponse(
+        headers: Headers()..set('bad\nname', 'value'),
+        body: _discardedBody(env),
+      );
+    case '/invalid-response-stream':
+      return ServerResponse(body: Stream<List<int>>.value(_FailingBytes()));
     default:
       if (request.uri.path.startsWith('/status/')) {
         final status = int.parse(request.uri.path.split('/').last);
@@ -105,6 +129,21 @@ Stream<List<int>> _discardedBody(_Environment env) async* {
   }
 }
 
+final class _FailingBytes extends ListBase<int> {
+  @override
+  int get length => 1;
+
+  @override
+  set length(int value) => throw UnsupportedError('fixed length');
+
+  @override
+  int operator [](int index) => throw StateError('byte conversion failed');
+
+  @override
+  void operator []=(int index, int value) =>
+      throw UnsupportedError('read only');
+}
+
 extension type _Environment(JSObject _) implements JSObject {
   external String get marker;
 
@@ -118,4 +157,27 @@ extension type _Environment(JSObject _) implements JSObject {
   external set responseCancelStarted(bool value);
 
   external bool get releaseResponseCancel;
+}
+
+@JS('globalThis')
+external _TestState get _testState;
+
+extension type _TestState(JSObject _) implements JSObject {
+  external int get reportCount;
+  external set reportCount(int value);
+
+  external String get reportMethod;
+  external set reportMethod(String value);
+
+  external String get reportPath;
+  external set reportPath(String value);
+
+  external String get reportError;
+  external set reportError(String value);
+
+  external String get reportStack;
+  external set reportStack(String value);
+
+  external bool get reportCompleted;
+  external set reportCompleted(bool value);
 }

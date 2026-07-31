@@ -236,6 +236,13 @@ adapter-owned static files, development proxy, response metadata, HTTP
 framing, and omitted-body cleanup for a raw handler. Handler and response
 source-stream failures stay `Server`-owned and are not reported twice.
 
+The generated Fetch bootstrap also creates one `Server` and gives its
+`invocationHandler` and `onError` to the adapter. The adapter reports its own
+status, header, `Response` construction, and response-byte conversion failures
+once. Handler and source-stream failures remain `Server`-owned. A returned
+reporter `Future` is registered with the host `waitUntil` without delaying the
+response.
+
 For `Server` failures, the callback receives the same `ServerRequest` for
 method, path, and application trace-header correlation. A static or proxy
 failure before dispatch gets a metadata-only diagnostic `ServerRequest`
@@ -317,3 +324,7 @@ separate adapter so shared server code does not import JavaScript interop.
 Both adapters release response bodies that HTTP semantics omit. The Fetch
 adapter also cancels unread request streams when a handler throws or the
 response ends, is cancelled, or is omitted.
+Cloudflare Workers that run this Fetch adapter must enable the
+`enable_request_signal` compatibility flag for a real incoming client
+disconnect to abort `Request.signal` and complete `ServerRequest.cancelled`. A
+synthetic Node `AbortController` test does not enable that runtime behavior.

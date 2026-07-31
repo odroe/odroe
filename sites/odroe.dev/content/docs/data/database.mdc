@@ -176,7 +176,7 @@ by `close()`.
 | --- | --- | --- | --- |
 | `database_sqlite.dart` | Native SQLite | Verified | Real CRUD, `RETURNING`, batches, and transactions |
 | `database_postgres.dart` | Dart VM + PostgreSQL | Verified | Real single-connection, pooled concurrency, and transaction suite |
-| `database_d1.dart` | Cloudflare D1 | Preview | Verified with local Wrangler/Workerd; atomic batches, no interactive transaction |
+| `database_d1.dart` | Cloudflare D1 | Preview | Optional local Wrangler/Workerd contract; atomic batches, no interactive transaction |
 | `database_mysql.dart` | Dart VM + MySQL/MariaDB | Preview | Verified with real MySQL 8.4 and MariaDB 11.8 |
 | RPC | Flutter Web | Available | Calls a server-owned database; no browser SQL driver |
 
