@@ -164,6 +164,10 @@ void main() {
       bootstrap,
       contains("developmentOriginFile == null || developmentOriginFile == ''"),
     );
+    expect(bootstrap, contains('final appServer = app.createServer();'));
+    expect(bootstrap, contains('appServer.handler'));
+    expect(bootstrap, contains('onError: appServer.onError'));
+    expect('app.createServer()'.allMatches(bootstrap), hasLength(1));
 
     final id = Uri.encodeComponent('posts.read-title');
     final rpc = await client.getUrl(

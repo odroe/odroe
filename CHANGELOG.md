@@ -36,6 +36,15 @@
   stream outcomes remain unchanged, and synchronous or asynchronous reporter
   failures cannot replace the original outcome. Malformed server-function
   inputs remain controlled HTTP 400 results instead of producing error logs.
+- Reuse `Server.onError` from the generated native bootstrap for IO-owned
+  static, development-proxy, response-metadata, framing, and raw omitted-body
+  failures without duplicating handler or source-stream reports. Metadata
+  failures now discard partially applied status, reason, headers, cookies, and
+  content framing before returning a fixed 500; for a supported method,
+  malformed forwarded authority remains a controlled 400 before static or
+  proxy dispatch. Bodyless framing is now status-aware: 1xx and 204 omit
+  `Content-Length` and `Transfer-Encoding`, 205 emits zero length, and HEAD
+  preserves representation framing only where the protocol permits it.
 - Make application context, route capability, and request context keys
   identity-based so independent modules cannot collide through equal constant
   type/name pairs.

@@ -64,6 +64,25 @@ handler again for HTML-compatible requests. Explicit
 `Accept: application/json` requests still reach the dynamic Document handoff;
 responses vary by `Accept`.
 
+The generated bootstrap creates the application `Server` once and forwards
+both `handler` and `onError` to `IoServer.bind`, so native static, proxy,
+metadata, and framing failures use the application reporter without
+duplicating Server-owned handler or source-stream failures. Handwritten native
+entrypoints should preserve the same ownership:
+
+```dart
+final appServer = createServer();
+final nativeServer = await IoServer.bind(
+  appServer.handler,
+  onError: appServer.onError,
+);
+```
+
+An IO callback starts only after the server-side response close attempt
+settles, and its returned future is observed by a detached request task.
+`HttpServer.close` does not await that task. Keep it bounded; delivery that
+must survive shutdown belongs in an application-owned durable queue.
+
 Native output is OS- and architecture-specific. Build on the target OS and
 architecture, or in a compatible builder. For a Linux container, compile in a
 Linux build stage. Do not copy a macOS executable into the image.

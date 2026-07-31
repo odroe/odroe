@@ -70,6 +70,12 @@ final class StaticFiles {
     }
     if (_notModified(request.headers, etag, asset.stat.modified)) {
       response.statusCode = HttpStatus.notModified;
+      response.headers.chunkedTransferEncoding = false;
+      if (request.method == 'HEAD' && !useGzip) {
+        response.contentLength = asset.stat.size;
+      } else if (request.method != 'HEAD') {
+        await response.addStream(const Stream<List<int>>.empty());
+      }
       return true;
     }
 

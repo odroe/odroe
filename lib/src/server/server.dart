@@ -12,6 +12,7 @@ import '../rpc/function.dart';
 import '../rpc/serializer.dart';
 import 'accept.dart';
 import 'context.dart';
+import 'error_reporter.dart';
 import 'http.dart';
 import 'invocation.dart';
 import 'middleware.dart';
@@ -20,14 +21,6 @@ import 'route.dart';
 
 /// Handles one platform-neutral server request.
 typedef ServerHandler = Future<ServerResponse> Function(ServerRequest request);
-
-/// Observes one unexpected server failure without changing its outcome.
-typedef ServerErrorHandler =
-    FutureOr<void> Function(
-      ServerRequest request,
-      Object error,
-      StackTrace stackTrace,
-    );
 
 /// Creates request modules from adapter-owned invocation state.
 typedef InvocationModuleFactory =
@@ -68,7 +61,7 @@ final class Server {
        middleware = List<Middleware>.unmodifiable(middleware),
        modules = modules ?? _emptyModules,
        serializer = serializer ?? Serializer(),
-       onError = onError ?? _defaultServerErrorHandler,
+       onError = onError ?? defaultServerErrorHandler,
        _flutterRoutes = HashSet<Object>.identity()
          ..addAll(flutterRoutes.map((route) => route.identity)),
        _functionPrefix = functionPath.endsWith('/')
@@ -665,33 +658,13 @@ final class Server {
     StackTrace stackTrace,
     ServerInvocation invocation,
   ) {
-    try {
-      final report = onError(request, error, stackTrace);
-      if (report is Future<void>) {
-        invocation.waitUntil(
-          report.then<void>(
-            (_) {},
-            onError: (Object reporterError, StackTrace reporterStackTrace) {
-              _reportReporterFailure(
-                request,
-                error,
-                stackTrace,
-                reporterError,
-                reporterStackTrace,
-              );
-            },
-          ),
-        );
-      }
-    } on Object catch (reporterError, reporterStackTrace) {
-      _reportReporterFailure(
-        request,
-        error,
-        stackTrace,
-        reporterError,
-        reporterStackTrace,
-      );
-    }
+    reportServerError(
+      onError,
+      request,
+      error,
+      stackTrace,
+      keepAlive: invocation.waitUntil,
+    );
   }
 }
 
@@ -708,34 +681,6 @@ bool _isControlledDispatchError(Object error) =>
     error is HttpError ||
     error is PayloadTooLargeException ||
     error is _FunctionResponseFrameTooLarge;
-
-void _defaultServerErrorHandler(
-  ServerRequest request,
-  Object error,
-  StackTrace stackTrace,
-) {
-  Zone.current.print(
-    'Unexpected Odroe server error for '
-    '${request.method.wire} ${request.uri.path}: $error\n$stackTrace',
-  );
-}
-
-void _reportReporterFailure(
-  ServerRequest request,
-  Object error,
-  StackTrace stackTrace,
-  Object reporterError,
-  StackTrace reporterStackTrace,
-) {
-  try {
-    _defaultServerErrorHandler(request, error, stackTrace);
-    Zone.current.print(
-      'Odroe Server.onError failed: $reporterError\n$reporterStackTrace',
-    );
-  } on Object {
-    // Error reporting must never replace the original outcome.
-  }
-}
 
 Headers _varyAccept(Headers? headers) {
   final result = headers?.copy() ?? Headers();

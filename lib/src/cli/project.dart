@@ -196,8 +196,10 @@ Future<void> main() async {
   final webRoot = Platform.environment['ODROE_WEB_ROOT'];
   final developmentOriginFile =
       Platform.environment['ODROE_FLUTTER_ORIGIN_FILE'];
+  final appServer = app.createServer();
   final server = await IoServer.bind(
-    app.createServer().handler,
+    appServer.handler,
+    onError: appServer.onError,
     address: host,
     port: port,
     publicDirectory: webRoot == '' ? null : Directory(webRoot ?? 'build/web'),

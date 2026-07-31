@@ -396,13 +396,23 @@ void main() {
     expect(source, contains('onError: (request, error, stackTrace)'));
     expect(source, contains('module setup failure is reported and rethrown'));
     expect(source, contains('return a bounded `Future`'));
-    expect(source, contains('without delaying the response'));
+    expect(source, contains('invokes it inline'));
+    expect(source, contains('response close attempt settles'));
     expect(source, contains('same `ServerRequest`'));
     expect(source, contains('not query, headers, or body'));
     expect(source, contains('error and stack trace are written verbatim'));
     expect(source, contains('must not put sensitive data in exceptions'));
-    expect(source, contains('failures consumed by the `Server` runtime'));
-    expect(source, contains('remain outside this contract'));
+    expect(source, contains('generated native bootstrap creates one `Server`'));
+    expect(source, contains('adapter-owned static files'));
+    expect(source, contains('HTTP framing'));
+    expect(source, contains('metadata-only diagnostic `ServerRequest`'));
+    expect(
+      source,
+      contains('For a supported method, malformed forwarded authority'),
+    );
+    expect(source, contains('rejected with a controlled `400`'));
+    expect(source, contains('not reported twice'));
+    expect(source, contains('`HttpServer.close` does not await'));
     expect(source, contains('controlled HTTP 400 before the handler starts'));
     expect(source, contains('do not trigger `Server.onError`'));
     expect(source, contains('before a response starts'));
@@ -412,6 +422,19 @@ void main() {
     expect(source, contains('`ServerInvocation.onError` is the separate'));
     expect(source, contains('Once a host accepts a task'));
     expect(source, contains('controlled and are not reported'));
+  });
+
+  test('Native deploy docs preserve reporter ownership', () async {
+    final document = await File('content/docs/deploy.mdc').readAsString();
+    final source = document.replaceAll(RegExp(r'\s+'), ' ');
+
+    expect(source, contains('creates the application `Server` once'));
+    expect(source, contains('appServer.handler'));
+    expect(source, contains('onError: appServer.onError'));
+    expect(source, contains('without duplicating Server-owned'));
+    expect(source, contains('response close attempt settles'));
+    expect(source, contains('`HttpServer.close` does not await'));
+    expect(source, contains('application-owned durable queue'));
   });
 
   test('Cloudflare hybrid example preserves dynamic page navigation', () async {

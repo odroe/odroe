@@ -2,6 +2,7 @@
 library;
 
 export 'src/server/render.dart';
+export 'src/server/error_reporter.dart' show ServerErrorHandler;
 export 'src/server/server.dart';
 export 'src/server/context.dart';
 export 'src/server/http.dart';

@@ -214,24 +214,40 @@ Server createServer() => generated.createServer(
 );
 ```
 
-The callback may finish synchronously or return a bounded `Future`. Odroe joins
-that future to the current invocation lifetime without delaying the response.
-Payload and typed-frame budget overflow, plus normal cancellation, are always
-controlled and are not reported. During request dispatch, before a response
-starts, `Redirect`, `NotFound`, and `HttpError` are controlled too. Those and
-other errors thrown by a response stream are reported, except typed-frame
-overflow. `exposeErrors` only controls client disclosure; it does not change
-the original error and stack trace delivered to `onError`. A synchronously or
-asynchronously failing reporter cannot replace the original outcome and falls
-back to the default Zone log.
+The callback may finish synchronously or return a bounded `Future`. The
+`Server` runtime invokes it inline, so keep work before its first asynchronous
+boundary small. The returned future joins the current invocation lifetime
+without holding the response. For an IO-adapter-owned failure, callback
+invocation starts only after the server-side response close attempt settles;
+its future is then observed by a detached request task. `HttpServer.close`
+does not await that task, so telemetry that must survive process exit belongs
+in an application-owned durable queue. Payload and typed-frame budget overflow, plus
+normal cancellation, are always controlled and are not reported. During
+request dispatch, before a response starts, `Redirect`, `NotFound`, and
+`HttpError` are controlled too. Those and other errors thrown by a response
+stream are reported, except typed-frame overflow. `exposeErrors` only controls
+client disclosure; it does not change the original error and stack trace
+delivered to `onError`. A synchronously or asynchronously failing reporter
+cannot replace the original outcome and falls back to the default Zone log.
 
-The callback receives the same `ServerRequest` for method, path, and
-application trace-header correlation. Its body may already be consumed and
-must not be read again. The framework itself adds only method and path to the
-default log, not query, headers, or body. The error and stack trace are written
-verbatim, so applications must not put sensitive data in exceptions. This hook
-covers failures consumed by the `Server` runtime; IO-adapter static serving,
-development proxy, and response-metadata failures remain outside this contract.
+The generated native bootstrap creates one `Server` and gives both its
+`handler` and `onError` to `IoServer.bind`. The same callback therefore covers
+adapter-owned static files, development proxy, response metadata, HTTP
+framing, and omitted-body cleanup for a raw handler. Handler and response
+source-stream failures stay `Server`-owned and are not reported twice.
+
+For `Server` failures, the callback receives the same `ServerRequest` for
+method, path, and application trace-header correlation. A static or proxy
+failure before dispatch gets a metadata-only diagnostic `ServerRequest`
+without the original body. A body may otherwise already be consumed and must
+not be read again. For a supported method, malformed forwarded authority is
+rejected with a controlled `400` before static or proxy dispatch and does not
+call the application reporter. Before response commit, invalid
+metadata is discarded with the old status, reason, headers, cookies, and
+framing before a fixed `500` is written. After commit, a stream failure can
+only close the connection. The framework itself adds only method and path to
+the default log, not query, headers, or body. The error and stack trace are
+written verbatim, so applications must not put sensitive data in exceptions.
 
 `ServerInvocation.onError` is the separate adapter-lifetime fallback for
 background and cleanup failures that no host owns, plus synchronous host

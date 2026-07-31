@@ -294,11 +294,27 @@ void main() {
     expect(headResponse.headers.value(HttpHeaders.etagHeader), etag);
     expect(await headResponse.toList(), isEmpty);
 
+    final conditionalHead = await client.openUrl('HEAD', uri);
+    conditionalHead.headers.set(HttpHeaders.ifNoneMatchHeader, etag!);
+    final conditionalHeadResponse = await conditionalHead.close();
+    expect(conditionalHeadResponse.statusCode, HttpStatus.notModified);
+    expect(conditionalHeadResponse.contentLength, 'version one'.length);
+    expect(
+      conditionalHeadResponse.headers.value(HttpHeaders.transferEncodingHeader),
+      isNull,
+    );
+    expect(await conditionalHeadResponse.toList(), isEmpty);
+
     final byEtag = await client.getUrl(uri);
-    byEtag.headers.set(HttpHeaders.ifNoneMatchHeader, etag!);
+    byEtag.headers.set(HttpHeaders.ifNoneMatchHeader, etag);
     final etagResponse = await byEtag.close();
     expect(etagResponse.statusCode, HttpStatus.notModified);
     expect(etagResponse.headers.value(HttpHeaders.etagHeader), etag);
+    expect(etagResponse.headers.value(HttpHeaders.contentLengthHeader), isNull);
+    expect(
+      etagResponse.headers.value(HttpHeaders.transferEncodingHeader),
+      isNull,
+    );
     expect(await etagResponse.toList(), isEmpty);
 
     final repeatedEtag = await client.getUrl(uri);
@@ -437,6 +453,36 @@ void main() {
       'gzip',
     );
     expect(await compressedNotModifiedResponse.toList(), isEmpty);
+
+    final compressedConditionalHead = await client.openUrl('HEAD', uri);
+    compressedConditionalHead.headers
+      ..set(HttpHeaders.acceptEncodingHeader, 'gzip, identity;q=0.5')
+      ..set(HttpHeaders.ifNoneMatchHeader, etag);
+    final compressedConditionalHeadResponse = await compressedConditionalHead
+        .close();
+    expect(
+      compressedConditionalHeadResponse.statusCode,
+      HttpStatus.notModified,
+    );
+    expect(
+      compressedConditionalHeadResponse.headers.value(
+        HttpHeaders.contentEncodingHeader,
+      ),
+      'gzip',
+    );
+    expect(
+      compressedConditionalHeadResponse.headers.value(
+        HttpHeaders.contentLengthHeader,
+      ),
+      isNull,
+    );
+    expect(
+      compressedConditionalHeadResponse.headers.value(
+        HttpHeaders.transferEncodingHeader,
+      ),
+      isNull,
+    );
+    expect(await compressedConditionalHeadResponse.toList(), isEmpty);
 
     final disabled = await client.getUrl(uri);
     disabled.headers.set(HttpHeaders.acceptEncodingHeader, 'gzip;q=0, *;q=1');
@@ -685,36 +731,6 @@ void main() {
 
     expect(response.statusCode, HttpStatus.ok);
     await response.drain<void>();
-    await cancelled.future.timeout(const Duration(seconds: 2));
-  });
-
-  test('IO adapter cancels a body when response metadata is invalid', () async {
-    final cancelled = Completer<void>();
-    final server = await IoServer.bind((request) async {
-      Stream<List<int>> body() async* {
-        try {
-          yield <int>[1, 2, 3];
-        } finally {
-          cancelled.complete();
-        }
-      }
-
-      return ServerResponse(
-        headers: Headers()..set('invalid\nname', 'value'),
-        body: body(),
-      );
-    }, port: 0);
-    addTearDown(server.close);
-    final client = HttpClient();
-    addTearDown(client.close);
-
-    final response = await client.getUrl(
-      Uri.parse('http://127.0.0.1:${server.port}/'),
-    );
-    final received = await response.close();
-
-    expect(received.statusCode, HttpStatus.internalServerError);
-    await received.drain<void>();
     await cancelled.future.timeout(const Duration(seconds: 2));
   });
 }

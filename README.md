@@ -237,21 +237,39 @@ Server createServer() => generated.createServer(
 );
 ```
 
-callback 可同步完成，也可返回有界的 `Future`；Odroe 会把 Future 加入当前
-invocation 生命周期，但不会延迟 response。payload/frame 预算超限和正常取消
-始终属于受控结果，不会上报。在 response 开始前的 request dispatch 中，
-`Redirect`、`NotFound` 与 `HttpError` 也属于受控结果；若这些或其他 error 从
-response stream 抛出，则会上报（typed frame overflow 除外）。`exposeErrors`
-只决定是否向客户端披露内部细节，不影响 reporter 收到原始 error 与 stack
-trace。reporter 自身同步或异步失败都不会替换原始结果；Odroe 会退回默认 Zone
-日志。
+callback 可同步完成，也可返回有界的 `Future`。`Server` runtime 会立即调用 callback；
+同步部分应保持很小，返回的 Future 会加入当前 invocation 生命周期而不等待 response。
+原生 IO adapter 则在服务端 response close 尝试结束后调用 callback，并由 detached
+request task 观察 Future。`HttpServer.close` 不等待该 task；需要跨进程退出保证的
+telemetry 应进入应用自己的 durable queue。payload/frame 预算超限和正常取消始终属于
+受控结果，不会上报。在 response 开始前的 request dispatch 中，`Redirect`、`NotFound` 与
+`HttpError` 也属于受控结果；若这些或其他 error 从 response stream 抛出，则会上报
+（typed frame overflow 除外）。`exposeErrors` 只决定是否向客户端披露内部细节，
+不影响 reporter 收到原始 error 与 stack trace。reporter 自身同步或异步失败都不会
+替换原始结果；Odroe 会退回默认 Zone 日志。
 
-callback 收到同一个 `ServerRequest`，可用 method、path 和应用自己的 trace header
-关联 telemetry；此时 body 可能已被消费，不应再次读取。默认日志由框架主动附加的
-请求字段只有 method 与 path，不含 query、header 或 body；error 与 stack trace
-仍会原样记录，因此应用不应把敏感信息写入异常。该 hook 只覆盖 `Server` runtime
-消费的异常；IO adapter 自己的 static serving、development proxy 与 response
-metadata 阶段不在本轮合同内。
+CLI 生成的 native bootstrap 只创建一次 `Server`，并把同一个实例的 `handler` 与
+`onError` 交给 `IoServer.bind`。因此 static serving、development proxy、response
+metadata、HTTP framing，以及 raw handler 的 omitted-body cleanup 都使用同一个
+应用 reporter；handler 与 response source stream 仍由 `Server` 负责，不会重复
+上报。手写入口也应保持同样接线：
+
+```dart
+final appServer = createServer();
+final nativeServer = await IoServer.bind(
+  appServer.handler,
+  onError: appServer.onError,
+);
+```
+
+`Server` runtime 的 callback 收到 handler 使用的同一个 `ServerRequest`。static 或
+proxy 在 dispatch 前失败时，IO adapter 提供不含原始 body 的 metadata-only
+diagnostic request；body 可能已消费或不可用，任何阶段都不应再次读取。受支持 method
+的非法 forwarded authority 会在 static/proxy dispatch 前返回受控 400，不触发应用
+reporter。response metadata 在提交前失败时会清除
+旧 status reason、header、cookie 与 framing，再返回固定 500；提交后的 stream 失败
+只能关闭连接。默认日志主动附加的请求字段只有 method 与 path，不含 query、header
+或 body；error 与 stack trace 仍会原样记录，因此应用不应把敏感信息写入异常。
 
 `ServerInvocation.onError` 是独立的 adapter-lifetime fallback，只观察没有 host
 接管的 background/cleanup failure，以及 host `waitUntil` 的同步注册失败。host
@@ -559,7 +577,7 @@ Cloudflare target 生成 `build/odroe/cloudflare/server.js` 与薄
 `wrangler.jsonc`。当前只验证了本地 Wrangler/Workerd，尚未验证远端
 Cloudflare 部署。
 
-可运行应用见 [`example/app`](example/app)。官网源码与正式文档位于
-[`sites/odroe.dev`](sites/odroe.dev)，由 Odroe 的 Document、Press 与 SSG
+可运行应用见 [`example/app`](https://github.com/odroe/odroe/tree/main/example/app)。官网源码与正式文档位于
+[`sites/odroe.dev`](https://github.com/odroe/odroe/tree/main/sites/odroe.dev)，由 Odroe 的 Document、Press 与 SSG
 构建。当前 `odroe.dev` 外部访问受 Cloudflare 526 SSL 错误阻塞，不宣称已
 线上可用。
