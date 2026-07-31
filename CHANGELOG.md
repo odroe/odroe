@@ -4,6 +4,9 @@
 
 - Add typed SQL, typed inner and left joins, and SQLite, PostgreSQL,
   MySQL/MariaDB, and Cloudflare D1 entrypoints.
+- Preserve the dialect on typed `BoundSql` statements and reject explicit
+  driver mismatches before statement I/O. Handwritten statements remain
+  unpinned unless `dialect` is supplied.
 - Add request invocation lifetimes and a Fetch adapter for local
   Cloudflare Workers builds.
 - Add optional stable `ServerFunction.id` wire identifiers, reject empty,

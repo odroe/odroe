@@ -21,6 +21,7 @@ void main() {
         ]);
         expect(_values(insert.statement), <Object?>['ada@example.com', true]);
         expect(insert.statement.kind, SqlStatementKind.write);
+        expect(insert.statement.dialect, dialect);
 
         final select = queries.selectTable(
           users,
@@ -38,6 +39,7 @@ void main() {
         ]);
         expect(_values(select.statement), <Object?>[10]);
         expect(select.statement.kind, SqlStatementKind.rowReturning);
+        expect(select.statement.dialect, dialect);
       });
     }
 
@@ -238,6 +240,7 @@ void main() {
         7,
       ]);
       expect(update.statement.kind, SqlStatementKind.rowReturning);
+      expect(update.statement.dialect, SqlDialect.sqlite);
 
       final delete = queries.deleteWhere(
         users,
@@ -249,6 +252,7 @@ void main() {
       ]);
       expect(_values(delete.statement), <Object?>['root@example.com']);
       expect(delete.statement.kind, SqlStatementKind.write);
+      expect(delete.statement.dialect, SqlDialect.sqlite);
 
       final columnDelete = queries.deleteWhere(
         users,
@@ -268,6 +272,7 @@ void main() {
         'INSERT INTO "users" ("email") VALUES (',
         ') RETURNING "email" AS "returned_email"',
       ]);
+      expect(aliasedReturning.statement.dialect, SqlDialect.sqlite);
 
       for (final fragment in <String>[
         ...update.statement.fragments,

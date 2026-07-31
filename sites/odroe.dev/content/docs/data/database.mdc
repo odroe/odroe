@@ -95,6 +95,12 @@ Joined reads qualify every column automatically. For a `LEFT JOIN`, use the
 result-only `.optional` selection to decode a non-null schema column as
 nullable; it cannot be used for INSERT or UPDATE. Mutations remain single-table.
 
+`SqlQueries` preserves its selected dialect on every generated `BoundSql`.
+SQLite and D1 accept `SqlDialect.sqlite`, PostgreSQL accepts
+`SqlDialect.postgres`, and MySQL/MariaDB accepts `SqlDialect.mysql`. An explicit
+mismatch throws `SqlException` with `SqlErrorCode.unsupported` before that
+statement reaches the database.
+
 ## BoundSql escape hatch
 
 Use `BoundSql.parts` for SQL outside the typed relational surface.
@@ -104,6 +110,7 @@ final statement = BoundSql.parts(
   <String>['SELECT "title" FROM "posts" WHERE "id" = ', ''],
   <SqlValue>[sqlInt.encode(42)],
   kind: SqlStatementKind.rowReturning,
+  dialect: SqlDialect.postgres,
 );
 final titles = await database.query(
   statement,
@@ -113,6 +120,10 @@ final titles = await database.query(
 
 Fragments are trusted source. Values are bound. Drivers insert native
 placeholders between fragments without parsing or rewriting their contents.
+Handwritten `BoundSql.raw` and `BoundSql.parts` statements default to
+`dialect: null`: no compatibility is claimed, so drivers continue to accept
+them. This does not prove that the SQL is portable. Pin database-specific SQL
+with `dialect:` to opt into the same preflight protection as typed queries.
 
 Top-level calls may leave handwritten SQL as `unknown`, but a wrong terminal
 may then be detected only after the database executes it. Declare the kind

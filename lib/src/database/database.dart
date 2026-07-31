@@ -11,6 +11,8 @@ abstract interface class SqlExecutor {
   ///
   /// Use this method for `SELECT` and dialect-supported statements containing
   /// `RETURNING`. The driver invokes [decode] exactly once per returned row.
+  /// A non-null [BoundSql.dialect] must match the driver and is rejected before
+  /// that statement reaches the database when it does not.
   /// The terminal is part of the caller contract: some database protocols only
   /// reveal the result shape after execution, so choosing the wrong terminal
   /// can still apply a statement's side effects before it is rejected.
@@ -18,7 +20,8 @@ abstract interface class SqlExecutor {
 
   /// Executes one write [statement].
   ///
-  /// Row-returning statements must use [query].
+  /// Row-returning statements must use [query]. A non-null
+  /// [BoundSql.dialect] must match the driver.
   Future<SqlWriteResult> execute(BoundSql statement);
 }
 

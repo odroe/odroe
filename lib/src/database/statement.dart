@@ -1,4 +1,5 @@
 import 'codec.dart';
+import 'dialect.dart';
 
 /// Declares the protocol shape of a transaction-safe SQL statement.
 ///
@@ -30,10 +31,12 @@ final class BoundSql {
   factory BoundSql.raw(
     String trustedSql, {
     SqlStatementKind kind = SqlStatementKind.unknown,
+    SqlDialect? dialect,
   }) => BoundSql._(
     List<String>.unmodifiable(<String>[trustedSql]),
     const <SqlValue>[],
     kind,
+    dialect,
   );
 
   /// Creates SQL from [fragments] separated by [values].
@@ -44,6 +47,7 @@ final class BoundSql {
     List<String> fragments,
     List<SqlValue> values, {
     SqlStatementKind kind = SqlStatementKind.unknown,
+    SqlDialect? dialect,
   }) {
     final copiedFragments = List<String>.unmodifiable(fragments);
     final copiedValues = List<SqlValue>.unmodifiable(values);
@@ -52,10 +56,10 @@ final class BoundSql {
         'BoundSql requires exactly one more fragment than bound values.',
       );
     }
-    return BoundSql._(copiedFragments, copiedValues, kind);
+    return BoundSql._(copiedFragments, copiedValues, kind, dialect);
   }
 
-  const BoundSql._(this.fragments, this.values, this.kind);
+  const BoundSql._(this.fragments, this.values, this.kind, this.dialect);
 
   /// Trusted SQL fragments in source order.
   final List<String> fragments;
@@ -65,4 +69,10 @@ final class BoundSql {
 
   /// Declared protocol shape and transaction-safety category.
   final SqlStatementKind kind;
+
+  /// Database dialect this statement was compiled for.
+  ///
+  /// `null` means caller-authored SQL without a compatibility claim. Drivers
+  /// accept unpinned statements and reject only explicit dialect mismatches.
+  final SqlDialect? dialect;
 }

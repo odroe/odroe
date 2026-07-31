@@ -288,6 +288,83 @@ void main() {
       expect(await _count(database, table), 0);
     });
 
+    test('rejects mismatched dialects at every executor boundary', () async {
+      await expectLater(
+        database.query(
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.rowReturning,
+            dialect: SqlDialect.postgres,
+          ),
+          (row) => row,
+        ),
+        _throwsDialect('MySQL', SqlDialect.postgres),
+      );
+      await expectLater(
+        database.execute(
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.sqlite,
+          ),
+        ),
+        _throwsDialect('MySQL', SqlDialect.sqlite),
+      );
+      await expectLater(
+        database.atomicWrite(<BoundSql>[
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.mysql,
+          ),
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.postgres,
+          ),
+        ]),
+        _throwsDialect('MySQL', SqlDialect.postgres),
+      );
+
+      final table = 'odroe_mysql_dialect_$suffix';
+      tables.add(table);
+      await database.execute(
+        BoundSql.raw('CREATE TABLE `$table` (value BIGINT NOT NULL)'),
+      );
+      await database.transaction<void>((transaction) async {
+        await expectLater(
+          transaction.query(
+            BoundSql.raw(
+              _dialectSentinel,
+              kind: SqlStatementKind.rowReturning,
+              dialect: SqlDialect.postgres,
+            ),
+            (row) => row,
+          ),
+          _throwsDialect('MySQL', SqlDialect.postgres),
+        );
+        await expectLater(
+          transaction.execute(
+            BoundSql.raw(
+              _dialectSentinel,
+              kind: SqlStatementKind.write,
+              dialect: SqlDialect.sqlite,
+            ),
+          ),
+          _throwsDialect('MySQL', SqlDialect.sqlite),
+        );
+        await transaction.execute(
+          BoundSql.raw(
+            'INSERT INTO `$table` VALUES (1)',
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.mysql,
+          ),
+        );
+      });
+
+      expect(await _count(database, table), 1);
+    });
+
     test('rejects compound SQL before any statement runs', () async {
       final table = 'odroe_mysql_compound_$suffix';
       tables.add(table);
@@ -453,3 +530,19 @@ Matcher _throwsSql(SqlErrorCode code) {
     isA<SqlException>().having((error) => error.code, 'code', code),
   );
 }
+
+Matcher _throwsDialect(String database, SqlDialect actual) {
+  return throwsA(
+    isA<SqlException>()
+        .having((error) => error.code, 'code', SqlErrorCode.unsupported)
+        .having((error) => error.message, 'message', contains(database))
+        .having((error) => error.message, 'message', contains(actual.name))
+        .having(
+          (error) => error.message,
+          'message',
+          isNot(contains(_dialectSentinel)),
+        ),
+  );
+}
+
+const _dialectSentinel = 'DIALECT_SENTINEL private-value';

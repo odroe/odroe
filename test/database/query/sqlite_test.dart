@@ -101,6 +101,24 @@ void main() {
     expect(await queries.selectTable(users).all(database), isEmpty);
   });
 
+  test(
+    'rejects typed SQL compiled for MySQL without changing SQLite',
+    () async {
+      const mysql = SqlQueries(SqlDialect.mysql);
+
+      await expectLater(
+        mysql
+            .insert(users, <SqlAssignment>[
+              users.email.set('wrong-dialect@example.com'),
+            ])
+            .execute(database),
+        _throwsSql(SqlErrorCode.unsupported),
+      );
+
+      expect(await queries.selectTable(users).all(database), isEmpty);
+    },
+  );
+
   test('decodes an aliased RETURNING selection', () async {
     final returnedEmail = users.email.as('returned_email');
 
@@ -260,5 +278,11 @@ final class _Posts extends SqlTable<_Post> {
       authorId: authorId.read(row, 1),
       title: title.read(row, 2),
     ),
+  );
+}
+
+Matcher _throwsSql(SqlErrorCode code) {
+  return throwsA(
+    isA<SqlException>().having((error) => error.code, 'code', code),
   );
 }

@@ -5,6 +5,7 @@ import 'package:mysql_dart/mysql_client.dart' as mysql;
 
 import '../database/codec.dart';
 import '../database/database.dart';
+import '../database/dialect.dart';
 import '../database/error.dart';
 import '../database/result.dart';
 import '../database/row.dart';
@@ -383,6 +384,7 @@ final class _TransactionExecutor implements SqlExecutor {
 }
 
 void _requireTopLevelQuery(BoundSql statement) {
+  requireSqlDialect(statement.dialect, SqlDialect.mysql, 'MySQL');
   if (statement.kind == SqlStatementKind.write) {
     throw const SqlException(
       SqlErrorCode.unsupported,
@@ -392,6 +394,7 @@ void _requireTopLevelQuery(BoundSql statement) {
 }
 
 void _requireTopLevelExecute(BoundSql statement) {
+  requireSqlDialect(statement.dialect, SqlDialect.mysql, 'MySQL');
   if (statement.kind == SqlStatementKind.rowReturning) {
     throw const SqlException(
       SqlErrorCode.unsupported,
@@ -402,6 +405,7 @@ void _requireTopLevelExecute(BoundSql statement) {
 
 void _requireAtomicWrites(List<BoundSql> statements) {
   for (final statement in statements) {
+    requireSqlDialect(statement.dialect, SqlDialect.mysql, 'MySQL');
     if (statement.kind != SqlStatementKind.write) {
       throw const SqlException(
         SqlErrorCode.unsupported,
@@ -412,6 +416,7 @@ void _requireAtomicWrites(List<BoundSql> statements) {
 }
 
 void _requireTransactionQuery(BoundSql statement) {
+  requireSqlDialect(statement.dialect, SqlDialect.mysql, 'MySQL');
   if (statement.kind != SqlStatementKind.rowReturning) {
     throw const SqlException(
       SqlErrorCode.unsupported,
@@ -422,6 +427,7 @@ void _requireTransactionQuery(BoundSql statement) {
 }
 
 void _requireTransactionExecute(BoundSql statement) {
+  requireSqlDialect(statement.dialect, SqlDialect.mysql, 'MySQL');
   if (statement.kind != SqlStatementKind.write) {
     throw const SqlException(
       SqlErrorCode.unsupported,

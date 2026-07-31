@@ -32,11 +32,55 @@ Future<void> _run() async {
   final second = D1SqlDatabase.fromBinding(_bindingB);
   _expect(first is! TransactionalSqlDatabase, 'D1 must not be transactional');
 
+  await _expectSqlCode(
+    () => first.query(
+      BoundSql.raw(
+        _dialectSentinel,
+        kind: SqlStatementKind.rowReturning,
+        dialect: SqlDialect.postgres,
+      ),
+      (row) => row,
+    ),
+    SqlErrorCode.unsupported,
+    'query dialect mismatch',
+    hidden: _dialectSentinel,
+  );
+  await _expectSqlCode(
+    () => first.execute(
+      BoundSql.raw(
+        _dialectSentinel,
+        kind: SqlStatementKind.write,
+        dialect: SqlDialect.mysql,
+      ),
+    ),
+    SqlErrorCode.unsupported,
+    'execute dialect mismatch',
+    hidden: _dialectSentinel,
+  );
+  await _expectSqlCode(
+    () => first.atomicWrite(<BoundSql>[
+      BoundSql.raw(
+        _dialectSentinel,
+        kind: SqlStatementKind.write,
+        dialect: SqlDialect.sqlite,
+      ),
+      BoundSql.raw(
+        _dialectSentinel,
+        kind: SqlStatementKind.write,
+        dialect: SqlDialect.postgres,
+      ),
+    ]),
+    SqlErrorCode.unsupported,
+    'batch dialect mismatch',
+    hidden: _dialectSentinel,
+  );
+
   await first.execute(
     BoundSql.raw(
       'CREATE TABLE records '
       '(id INTEGER PRIMARY KEY, nullable INTEGER, count INTEGER, ratio REAL, '
       'name TEXT, active INTEGER, created_at TEXT, payload BLOB)',
+      dialect: SqlDialect.sqlite,
     ),
   );
 
@@ -298,12 +342,16 @@ Future<String> _instanceValue(SqlDatabase database) async {
 Future<void> _expectSqlCode(
   Future<Object?> Function() action,
   SqlErrorCode code,
-  String label,
-) async {
+  String label, {
+  String? hidden,
+}) async {
   try {
     await action();
   } on SqlException catch (error) {
     _expect(error.code == code, label);
+    if (hidden != null) {
+      _expect(!error.message.contains(hidden), '$label hides statement text');
+    }
     return;
   }
   throw StateError('$label did not throw');
@@ -320,3 +368,5 @@ bool _sameBytes(Uint8List left, Uint8List right) {
 void _expect(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
+
+const _dialectSentinel = 'DIALECT_SENTINEL private-value';

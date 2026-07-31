@@ -281,6 +281,22 @@ void main() {
     expect(source, contains('Query keeps cancellation out of error state'));
   });
 
+  test('Database docs preserve the typed dialect boundary', () async {
+    final source = (await File(
+      'content/docs/data/database.mdc',
+    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+
+    expect(source, contains('preserves its selected dialect'));
+    expect(source, contains('SQLite and D1 accept `SqlDialect.sqlite`'));
+    expect(source, contains('PostgreSQL accepts `SqlDialect.postgres`'));
+    expect(source, contains('MySQL/MariaDB accepts `SqlDialect.mysql`'));
+    expect(source, contains('`SqlErrorCode.unsupported`'));
+    expect(source, contains('before that statement reaches the database'));
+    expect(source, contains('dialect: SqlDialect.postgres'));
+    expect(source, contains('default to `dialect: null`'));
+    expect(source, contains('does not prove that the SQL is portable'));
+  });
+
   test('Server docs close the authenticated RPC contract', () async {
     final source = await File('content/docs/server.mdc').readAsString();
     final appSource = await File('content/docs/core/app.mdc').readAsString();

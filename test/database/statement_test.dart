@@ -21,6 +21,7 @@ void main() {
       true,
     ]);
     expect(statement.kind, SqlStatementKind.unknown);
+    expect(statement.dialect, isNull);
   });
 
   test('BoundSql defensively copies its inputs', () {
@@ -62,18 +63,26 @@ void main() {
     expect(statement.fragments, <String>['SELECT 1']);
     expect(statement.values, isEmpty);
     expect(statement.kind, SqlStatementKind.unknown);
+    expect(statement.dialect, isNull);
   });
 
-  test('BoundSql preserves explicit statement kinds', () {
-    final query = BoundSql.raw('SELECT 1', kind: SqlStatementKind.rowReturning);
+  test('BoundSql preserves explicit statement metadata', () {
+    final query = BoundSql.raw(
+      'SELECT 1',
+      kind: SqlStatementKind.rowReturning,
+      dialect: SqlDialect.postgres,
+    );
     final write = BoundSql.parts(
       <String>['INSERT INTO values_table VALUES (', ')'],
       <SqlValue>[const SqlValue.integer(1)],
       kind: SqlStatementKind.write,
+      dialect: SqlDialect.mysql,
     );
 
     expect(query.kind, SqlStatementKind.rowReturning);
+    expect(query.dialect, SqlDialect.postgres);
     expect(write.kind, SqlStatementKind.write);
+    expect(write.dialect, SqlDialect.mysql);
   });
 
   test('BoundSql rejects invalid fragment arity', () {

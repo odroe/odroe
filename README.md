@@ -356,17 +356,27 @@ await sql.updateAll(
 schema column 通过结果专用的 `.optional` 解码，不能用于写入。
 mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口：
 
+`SqlQueries` 会把所选方言保留到每个 `BoundSql`。SQLite 与 D1 接受
+`SqlDialect.sqlite`，PostgreSQL 接受 `SqlDialect.postgres`，MySQL/MariaDB
+接受 `SqlDialect.mysql`；显式错配会在该 statement 到达数据库前抛出
+`SqlException(SqlErrorCode.unsupported)`。
+
 ```dart
 final statement = BoundSql.parts(
   <String>['SELECT "title" FROM "posts" WHERE "id" = ', ''],
   <SqlValue>[sqlInt.encode(42)],
   kind: SqlStatementKind.rowReturning,
+  dialect: SqlDialect.sqlite,
 );
 final manualTitles = await database.query(
   statement,
   (row) => row.read(0, sqlText),
 );
 ```
+
+手写 `BoundSql.raw` / `BoundSql.parts` 默认 `dialect: null`，表示没有声明
+兼容方言，driver 会继续接受；这不代表 SQL 已证明可跨数据库运行。数据库专用
+SQL 应显式设置 `dialect`，以获得同样的前置保护。
 
 PostgreSQL 可继续使用 `PostgresDatabase.open(...)` 打开一个串行连接，也可按
 服务并发量选择惰性连接池：

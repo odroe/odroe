@@ -421,6 +421,81 @@ void main() {
     expect(await _count(database, 'shaped'), 0);
   });
 
+  test('rejects mismatched dialects at every executor boundary', () async {
+    await expectLater(
+      database.query(
+        BoundSql.raw(
+          _dialectSentinel,
+          kind: SqlStatementKind.rowReturning,
+          dialect: SqlDialect.postgres,
+        ),
+        (row) => row,
+      ),
+      _throwsDialect('SQLite', SqlDialect.postgres),
+    );
+    await expectLater(
+      database.execute(
+        BoundSql.raw(
+          _dialectSentinel,
+          kind: SqlStatementKind.write,
+          dialect: SqlDialect.mysql,
+        ),
+      ),
+      _throwsDialect('SQLite', SqlDialect.mysql),
+    );
+    await expectLater(
+      database.atomicWrite(<BoundSql>[
+        BoundSql.raw(
+          _dialectSentinel,
+          kind: SqlStatementKind.write,
+          dialect: SqlDialect.sqlite,
+        ),
+        BoundSql.raw(
+          _dialectSentinel,
+          kind: SqlStatementKind.write,
+          dialect: SqlDialect.postgres,
+        ),
+      ]),
+      _throwsDialect('SQLite', SqlDialect.postgres),
+    );
+
+    await database.execute(
+      BoundSql.raw('CREATE TABLE dialect_guard (value INTEGER)'),
+    );
+    await database.transaction<void>((transaction) async {
+      await expectLater(
+        transaction.query(
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.rowReturning,
+            dialect: SqlDialect.postgres,
+          ),
+          (row) => row,
+        ),
+        _throwsDialect('SQLite', SqlDialect.postgres),
+      );
+      await expectLater(
+        transaction.execute(
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.mysql,
+          ),
+        ),
+        _throwsDialect('SQLite', SqlDialect.mysql),
+      );
+      await transaction.execute(
+        BoundSql.raw(
+          'INSERT INTO dialect_guard VALUES (1)',
+          kind: SqlStatementKind.write,
+          dialect: SqlDialect.sqlite,
+        ),
+      );
+    });
+
+    expect(await _count(database, 'dialect_guard'), 1);
+  });
+
   test('close is idempotent and all later operations report closed', () async {
     final first = database.close();
     final second = database.close();
@@ -532,3 +607,19 @@ Matcher _throwsSql(SqlErrorCode code) {
     isA<SqlException>().having((error) => error.code, 'code', code),
   );
 }
+
+Matcher _throwsDialect(String database, SqlDialect actual) {
+  return throwsA(
+    isA<SqlException>()
+        .having((error) => error.code, 'code', SqlErrorCode.unsupported)
+        .having((error) => error.message, 'message', contains(database))
+        .having((error) => error.message, 'message', contains(actual.name))
+        .having(
+          (error) => error.message,
+          'message',
+          isNot(contains(_dialectSentinel)),
+        ),
+  );
+}
+
+const _dialectSentinel = 'DIALECT_SENTINEL private-value';

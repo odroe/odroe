@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import '../database/codec.dart';
 import '../database/database.dart';
+import '../database/dialect.dart';
 import '../database/error.dart';
 import '../database/result.dart';
 import '../database/row.dart';
@@ -143,6 +144,7 @@ final class D1SqlDatabase implements SqlDatabase {
 }
 
 void _requireTopLevelQuery(BoundSql statement) {
+  requireSqlDialect(statement.dialect, SqlDialect.sqlite, 'D1');
   if (statement.kind != SqlStatementKind.rowReturning) {
     throw const SqlException(
       SqlErrorCode.unsupported,
@@ -152,6 +154,7 @@ void _requireTopLevelQuery(BoundSql statement) {
 }
 
 void _requireTopLevelExecute(BoundSql statement) {
+  requireSqlDialect(statement.dialect, SqlDialect.sqlite, 'D1');
   if (statement.kind == SqlStatementKind.rowReturning) {
     throw const SqlException(
       SqlErrorCode.unsupported,
@@ -162,6 +165,7 @@ void _requireTopLevelExecute(BoundSql statement) {
 
 void _requireAtomicWrites(List<BoundSql> statements) {
   for (final statement in statements) {
+    requireSqlDialect(statement.dialect, SqlDialect.sqlite, 'D1');
     if (statement.kind != SqlStatementKind.write) {
       throw const SqlException(
         SqlErrorCode.unsupported,

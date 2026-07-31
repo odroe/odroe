@@ -398,6 +398,81 @@ void main() {
       expect(await _count(database, 'shaped'), 0);
     });
 
+    test('rejects mismatched dialects at every executor boundary', () async {
+      await expectLater(
+        database.query(
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.rowReturning,
+            dialect: SqlDialect.sqlite,
+          ),
+          (row) => row,
+        ),
+        _throwsDialect('PostgreSQL', SqlDialect.sqlite),
+      );
+      await expectLater(
+        database.execute(
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.mysql,
+          ),
+        ),
+        _throwsDialect('PostgreSQL', SqlDialect.mysql),
+      );
+      await expectLater(
+        database.atomicWrite(<BoundSql>[
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.postgres,
+          ),
+          BoundSql.raw(
+            _dialectSentinel,
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.sqlite,
+          ),
+        ]),
+        _throwsDialect('PostgreSQL', SqlDialect.sqlite),
+      );
+
+      await database.execute(
+        BoundSql.raw('CREATE TEMP TABLE dialect_guard (value BIGINT)'),
+      );
+      await database.transaction<void>((transaction) async {
+        await expectLater(
+          transaction.query(
+            BoundSql.raw(
+              _dialectSentinel,
+              kind: SqlStatementKind.rowReturning,
+              dialect: SqlDialect.sqlite,
+            ),
+            (row) => row,
+          ),
+          _throwsDialect('PostgreSQL', SqlDialect.sqlite),
+        );
+        await expectLater(
+          transaction.execute(
+            BoundSql.raw(
+              _dialectSentinel,
+              kind: SqlStatementKind.write,
+              dialect: SqlDialect.mysql,
+            ),
+          ),
+          _throwsDialect('PostgreSQL', SqlDialect.mysql),
+        );
+        await transaction.execute(
+          BoundSql.raw(
+            'INSERT INTO dialect_guard VALUES (1)',
+            kind: SqlStatementKind.write,
+            dialect: SqlDialect.postgres,
+          ),
+        );
+      });
+
+      expect(await _count(database, 'dialect_guard'), 1);
+    });
+
     test(
       'invalidates escaped executors and rejects nested transactions',
       () async {
@@ -605,3 +680,19 @@ Matcher _throwsSql(SqlErrorCode code) {
     isA<SqlException>().having((error) => error.code, 'code', code),
   );
 }
+
+Matcher _throwsDialect(String database, SqlDialect actual) {
+  return throwsA(
+    isA<SqlException>()
+        .having((error) => error.code, 'code', SqlErrorCode.unsupported)
+        .having((error) => error.message, 'message', contains(database))
+        .having((error) => error.message, 'message', contains(actual.name))
+        .having(
+          (error) => error.message,
+          'message',
+          isNot(contains(_dialectSentinel)),
+        ),
+  );
+}
+
+const _dialectSentinel = 'DIALECT_SENTINEL private-value';

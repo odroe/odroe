@@ -1,31 +1,5 @@
 part of '../query.dart';
 
-/// SQL compilation rules for one database family.
-///
-/// Cloudflare D1 uses [sqlite] because it exposes SQLite SQL syntax.
-enum SqlDialect {
-  /// SQLite and Cloudflare D1.
-  sqlite,
-
-  /// PostgreSQL.
-  postgres,
-
-  /// MySQL.
-  mysql;
-
-  /// Quotes one identifier without interpreting dots as qualification.
-  String quoteIdentifier(String identifier) {
-    _validateIdentifier(identifier, 'identifier');
-    return switch (this) {
-      SqlDialect.sqlite ||
-      SqlDialect.postgres => '"${identifier.replaceAll('"', '""')}"',
-      SqlDialect.mysql => '`${identifier.replaceAll('`', '``')}`',
-    };
-  }
-
-  bool get _supportsReturning => this != SqlDialect.mysql;
-}
-
 /// Dialect-explicit compiler for typed SQL operations.
 ///
 /// This object stores no database or request state. Every terminal operation
@@ -72,7 +46,7 @@ final class SqlQueries {
     final aliases = _selectAliases(tables, qualified: joins.isNotEmpty);
     _validateProjection(tables, projection);
 
-    final builder = _BoundSqlBuilder()..write('SELECT ');
+    final builder = _BoundSqlBuilder(dialect)..write('SELECT ');
     _writeSelections(builder, projection.columns, aliases);
     builder
       ..write(' FROM ')
@@ -128,7 +102,7 @@ final class SqlQueries {
   /// Empty [values] use the selected dialect's default-row syntax.
   SqlWrite insert(SqlTable<Object?> table, Iterable<SqlAssignment> values) {
     final assignments = _validateAssignments(table, values, allowEmpty: true);
-    final builder = _BoundSqlBuilder()
+    final builder = _BoundSqlBuilder(dialect)
       ..write('INSERT INTO ')
       ..write(_quoteTable(table));
     if (assignments.isEmpty) {
@@ -148,11 +122,7 @@ final class SqlQueries {
       }
       builder.write(')');
     }
-    return SqlWrite._(
-      builder.build(kind: SqlStatementKind.write),
-      table,
-      dialect,
-    );
+    return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
   }
 
   /// Creates an UPDATE constrained by [where].
@@ -175,7 +145,7 @@ final class SqlQueries {
 
   /// Creates a DELETE constrained by [where].
   SqlWrite deleteWhere(SqlTable<Object?> table, {required SqlPredicate where}) {
-    final builder = _BoundSqlBuilder()
+    final builder = _BoundSqlBuilder(dialect)
       ..write('DELETE FROM ')
       ..write(_quoteTable(table))
       ..write(' WHERE ');
@@ -185,23 +155,15 @@ final class SqlQueries {
       const <SqlTable<Object?>, String>{},
       where,
     );
-    return SqlWrite._(
-      builder.build(kind: SqlStatementKind.write),
-      table,
-      dialect,
-    );
+    return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
   }
 
   /// Creates an intentional full-table DELETE.
   SqlWrite deleteAll(SqlTable<Object?> table, {required SqlAllRows confirm}) {
-    final builder = _BoundSqlBuilder()
+    final builder = _BoundSqlBuilder(dialect)
       ..write('DELETE FROM ')
       ..write(_quoteTable(table));
-    return SqlWrite._(
-      builder.build(kind: SqlStatementKind.write),
-      table,
-      dialect,
-    );
+    return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
   }
 
   SqlWrite _update(
@@ -210,7 +172,7 @@ final class SqlQueries {
     SqlPredicate? where,
   }) {
     final assignments = _validateAssignments(table, values, allowEmpty: false);
-    final builder = _BoundSqlBuilder()
+    final builder = _BoundSqlBuilder(dialect)
       ..write('UPDATE ')
       ..write(_quoteTable(table))
       ..write(' SET ');
@@ -231,11 +193,7 @@ final class SqlQueries {
         predicate,
       );
     }
-    return SqlWrite._(
-      builder.build(kind: SqlStatementKind.write),
-      table,
-      dialect,
-    );
+    return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
   }
 
   List<SqlAssignment> _validateAssignments(
@@ -453,13 +411,12 @@ final class SqlRead<R> {
 
 /// A compiled non-row-returning INSERT, UPDATE, or DELETE.
 final class SqlWrite {
-  const SqlWrite._(this.statement, this._table, this._dialect);
+  const SqlWrite._(this.statement, this._table);
 
   /// Bound statement available for direct execution or [SqlDatabase.atomicWrite].
   final BoundSql statement;
 
   final SqlTable<Object?> _table;
-  final SqlDialect _dialect;
 
   /// Executes this operation through [SqlExecutor.execute].
   Future<SqlWriteResult> execute(SqlExecutor executor) =>
@@ -471,7 +428,8 @@ final class SqlWrite {
   /// accidentally use [SqlExecutor.execute]. MySQL rejects this operation
   /// before any database call.
   SqlRead<R> returning<R>(SqlProjection<R> projection) {
-    if (!_dialect._supportsReturning) {
+    final dialect = statement.dialect!;
+    if (!supportsSqlReturning(dialect)) {
       throw const SqlException(
         SqlErrorCode.unsupported,
         'MySQL does not support SQL RETURNING in this query layer.',
@@ -492,12 +450,12 @@ final class SqlWrite {
     for (final (index, selection) in projection.columns.indexed) {
       if (index != 0) suffix.write(', ');
       final column = selection._source;
-      suffix.write(_dialect.quoteIdentifier(column.name));
+      suffix.write(dialect.quoteIdentifier(column.name));
       final resultName = selection._resultColumn.name;
       if (resultName != column.name) {
         suffix
           ..write(' AS ')
-          ..write(_dialect.quoteIdentifier(resultName));
+          ..write(dialect.quoteIdentifier(resultName));
       }
     }
     fragments[fragments.length - 1] = '${fragments.last}${suffix.toString()}';
@@ -506,6 +464,7 @@ final class SqlWrite {
         fragments,
         statement.values,
         kind: SqlStatementKind.rowReturning,
+        dialect: dialect,
       ),
       projection.decode,
     );
@@ -513,6 +472,9 @@ final class SqlWrite {
 }
 
 final class _BoundSqlBuilder {
+  _BoundSqlBuilder(this._dialect);
+
+  final SqlDialect _dialect;
   final List<StringBuffer> _fragments = <StringBuffer>[StringBuffer()];
   final List<SqlValue> _values = <SqlValue>[];
 
@@ -529,5 +491,6 @@ final class _BoundSqlBuilder {
     <String>[for (final fragment in _fragments) fragment.toString()],
     _values,
     kind: kind,
+    dialect: _dialect,
   );
 }
