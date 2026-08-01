@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 

@@ -45,7 +45,10 @@ void main() {
     expect(output.source, contains("import 'package:odroe/router.dart';"));
     expect(output.source, isNot(contains("package:odroe/route.dart")));
     expect(output.source, contains("import 'package:odroe/rpc.dart';"));
-    expect(output.serverSource, contains("import 'package:odroe/rpc.dart';"));
+    expect(
+      output.serverSource,
+      isNot(contains("import 'package:odroe/rpc.dart';")),
+    );
     expect(output.serverSource, contains('Server createServer('));
     expect(
       output.serverSource,

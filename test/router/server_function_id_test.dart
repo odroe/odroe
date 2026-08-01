@@ -188,7 +188,6 @@ final route = AppRoute<NoParams, NoSearch, NoData>();
   void writeFunctions(String functions) {
     serverFile.writeAsStringSync('''
 import 'package:odroe/router.dart';
-import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 
 import 'route.dart' as definition;
@@ -209,7 +208,6 @@ final route = AppRoute<NoParams, NoSearch, NoData>();
 ''');
     File('${routes.path}/server.dart').writeAsStringSync('''
 import 'package:odroe/router.dart';
-import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 
 import 'route.dart' as definition;

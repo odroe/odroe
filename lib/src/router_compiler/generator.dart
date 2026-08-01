@@ -102,7 +102,6 @@ final class RouteGenerator {
       ..writeln()
       ..writeln("import 'package:odroe/odroe.dart';")
       ..writeln("import 'package:odroe/router.dart';")
-      ..writeln("import 'package:odroe/rpc.dart';")
       ..writeln("import 'package:odroe/server.dart';");
     if (hasRenderer) {
       buffer.writeln("import 'package:odroe/document.dart';");

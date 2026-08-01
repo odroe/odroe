@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Make `server.dart` the complete server product entrypoint. Move
+  `ServerFunction`, `ServerFunctionBinding`, `ServerFunctionContext`, and
+  `ServerFunctionHandler` out of `rpc.dart`; server files now import
+  `server.dart`, while `rpc.dart` keeps client/shared protocol APIs including
+  `NoServerInput` and `ValueDecoder`.
 - Run the example post page through Flutter Query, generated typed RPC, a real
   `DatabaseModule`, typed SQL, native SQLite, and local Cloudflare D1. Keep the
   drivers platform-isolated, track the D1 schema as a migration, and export

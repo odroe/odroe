@@ -700,6 +700,8 @@ void main() {
     expect(cloudflare, contains("@JS('DB')"));
     expect(cloudflare, isNot(contains('database_sqlite.dart')));
     expect(route, contains("package:odroe/database.dart"));
+    expect(route, contains("package:odroe/server.dart"));
+    expect(route, isNot(contains("package:odroe/rpc.dart")));
     expect(route, contains('context.request.read(databaseKey)'));
     expect(route, contains("const NotFound('Post not found.')"));
     expect(route, isNot(contains('database_sqlite.dart')));
@@ -735,6 +737,8 @@ void main() {
     expect(database, isNot(contains('pg.Pool')));
     expect(server, contains('`Client.send`'));
     expect(server, contains('Extending `BaseClient`'));
+    expect(server, contains('complete server product entrypoint'));
+    expect(server, contains('server implementations stay'));
     expect(server, contains('controlled `NotFound` and `Redirect`'));
     expect(server, contains('Every typed frame must use `version: 1`'));
     expect(server, contains("a `redirect` frame's status must equal"));

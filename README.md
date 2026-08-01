@@ -29,8 +29,8 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 | `database_postgres.dart` | 已验证的 PostgreSQL driver |
 | `database_mysql.dart` | Preview MySQL/MariaDB driver |
 | `database_d1.dart` | Preview Cloudflare D1 binding adapter |
-| `rpc.dart` | 强类型 server functions、client、transport 与 `RpcModule` |
-| `server.dart` | adapter-neutral HTTP、middleware、route 与 `Server` |
+| `rpc.dart` | 强类型 refs、client、transport、serialization 与 `RpcModule` |
+| `server.dart` | adapter-neutral HTTP、server functions、serializer、middleware、route 与 `Server` |
 | `server_io.dart` | Dart IO host 与 prerenderer |
 | `server_fetch.dart` | Preview Fetch/JavaScript host adapter |
 
@@ -418,7 +418,6 @@ final route = definition.route.page(
 
 ```dart
 import 'package:odroe/router.dart';
-import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 
 import 'route.dart' as definition;
@@ -437,6 +436,11 @@ final updatePost = ServerFunction<int, bool>(
   handler: (context) async => repository.update(context.data),
 );
 ```
+
+`server.dart` 是完整的服务端产品入口，直接导出 server function、受控 HTTP
+结果与 serializer 类型；route server 不需要再导入 `rpc.dart`。`rpc.dart`
+专注于生成的 client refs、transport、serialization 与 `RpcModule`，并保留
+client 和 server 共用的协议类型。
 
 文件名只有一种心智：`definition.route.page(...)`、`definition.route.shell(...)`、`definition.route.server(...)`、`definition.route.document(...)`。
 `ServerFunction.id` 是已发布 App 与服务端共享的 wire 合同；发布后应保持稳定。
@@ -670,8 +674,9 @@ callback 必须声明 `write` 或 `rowReturning`，因此 transaction control
 由于 D1 raw result 无法区分空查询与写入，D1 的 `query` 还会在发送前要求
 `rowReturning`；`SqlQueries` 已自动提供该标记。
 
-`NotFound` 与 `Redirect` 同时由 `package:odroe/rpc.dart` 导出，因此只使用 RPC
-产品入口的 server-function 文件无需为了这些受控结果额外导入内部类型。
+`NotFound` 与 `Redirect` 也由 `package:odroe/rpc.dart` 作为 client/server
+共用的受控结果导出，client 可以直接捕获；server-function 实现统一从
+`package:odroe/server.dart` 使用，无需第二个产品入口。
 
 ## CLI
 

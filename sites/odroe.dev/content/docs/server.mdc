@@ -38,6 +38,13 @@ final updatePost = ServerFunction<UpdatePost, Post>(
 );
 ```
 
+`package:odroe/server.dart` is the complete server product entrypoint. It
+exports server functions, controlled HTTP results, and serializer types; a
+route server does not also import `package:odroe/rpc.dart`. The RPC entrypoint
+owns generated client references, transport, serialization, and `RpcModule`,
+plus protocol types shared by clients and servers; server implementations stay
+on `server.dart`.
+
 An explicit `id` is the stable wire contract shared by already shipped apps and
 new server deployments. Keep it unchanged after release. The compiler accepts
 only a non-empty string literal and rejects duplicates across the complete route
@@ -173,10 +180,9 @@ Future<Post> savePost(AppContext app, UpdatePost input) async {
 }
 ```
 
-`package:odroe/rpc.dart` also exports the controlled `NotFound` and `Redirect`
-results. A server-function file that otherwise needs only the RPC product
-entrypoint does not need an extra internal import to return a typed 404 or
-redirect.
+`package:odroe/server.dart` exports the controlled `NotFound` and `Redirect`
+results. A server-function file needs no second product entrypoint to return a
+typed 404 or redirect.
 
 Every typed frame must use `version: 1`. A `notFound` frame is accepted only
 with HTTP 404, and a `redirect` frame's status must equal the HTTP status. A

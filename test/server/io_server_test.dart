@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:odroe/document.dart';
 import 'package:odroe/router.dart';
-import 'package:odroe/rpc.dart';
 import 'package:odroe/server_io.dart';
 import 'package:test/test.dart';
 

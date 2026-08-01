@@ -1,6 +1,20 @@
 /// Adapter-neutral server runtime.
+///
+/// {@canonicalFor function.ServerFunction}
+/// {@canonicalFor function.ServerFunctionBinding}
+/// {@canonicalFor function.ServerFunctionContext}
+/// {@canonicalFor function.ServerFunctionHandler}
 library;
 
+export 'src/rpc/function.dart'
+    show
+        NoServerInput,
+        ServerFunction,
+        ServerFunctionBinding,
+        ServerFunctionContext,
+        ServerFunctionHandler,
+        ValueDecoder;
+export 'src/rpc/serializer.dart' show SerializationAdapter, Serializer;
 export 'src/server/render.dart';
 export 'src/server/error_reporter.dart' show ServerErrorHandler;
 export 'src/server/server.dart';

@@ -2,7 +2,6 @@
 
 import 'package:odroe/odroe.dart';
 import 'package:odroe/router.dart';
-import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 import 'package:odroe/document.dart';
 import 'routes/route.dart' as root_definition;

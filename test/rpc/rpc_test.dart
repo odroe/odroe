@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:odroe/rpc.dart';
+import 'package:odroe/rpc.dart' show Serializer;
+import 'package:odroe/server.dart' show ServerFunction;
 import 'package:test/test.dart';
 
 void main() {
