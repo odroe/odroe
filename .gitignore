@@ -2,5 +2,6 @@
 .wrangler/
 .pub/
 build/
+node_modules/
 pubspec.lock
 !sites/odroe.dev/pubspec.lock

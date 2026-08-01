@@ -366,6 +366,91 @@ void main() {
     },
   );
 
+  test('website deployment pins a gated and readable workflow', () async {
+    final package =
+        jsonDecode(await File('package.json').readAsString())
+            as Map<String, Object?>;
+    final scripts = package['scripts']! as Map<String, Object?>;
+    final dependencies = package['devDependencies']! as Map<String, Object?>;
+    final lock =
+        jsonDecode(await File('package-lock.json').readAsString())
+            as Map<String, Object?>;
+    final packages = lock['packages']! as Map<String, Object?>;
+    final root = packages['']! as Map<String, Object?>;
+    final wrangler = packages['node_modules/wrangler']! as Map<String, Object?>;
+    final deployment = await File('content/docs/deploy.mdc').readAsString();
+    final normalizedDeployment = deployment.replaceAll(RegExp(r'\s+'), ' ');
+    final npmConfig = await File('.npmrc').readAsString();
+    final readme = await File('../../README.md').readAsString();
+
+    expect(package['private'], isTrue);
+    expect(package['engines'], <String, Object?>{'node': '>=22.0.0'});
+    expect(npmConfig, 'engine-strict=true\n');
+    expect(dependencies, <String, Object?>{'wrangler': '4.118.0'});
+    expect(root['devDependencies'], dependencies);
+    expect(root['engines'], package['engines']);
+    expect(wrangler['version'], '4.118.0');
+    expect(scripts['build'], 'dart run odroe build --no-server');
+    expect(scripts['preview'], 'wrangler dev --local');
+    expect(
+      scripts['deploy:check'],
+      'wrangler deploy --dry-run --strict --outdir .wrangler/dry-run',
+    );
+    expect(scripts['deploy'], 'wrangler deploy --strict');
+    expect(scripts['deploy:account'], 'wrangler whoami --json');
+    expect(scripts['deploy:status'], 'wrangler deployments status --json');
+    expect(scripts['deploy:versions'], 'wrangler versions list --json');
+    expect(deployment, contains('npm run deploy:check'));
+    expect(deployment, contains('Node 22 or newer'));
+    expect(deployment, contains('without authenticating, uploading'));
+    expect(deployment, contains('requires explicit authorization'));
+    expect(deployment, contains('creates the `odroe-dev` Worker'));
+    expect(deployment, contains('explicitly permit creation or replacement'));
+    expect(deployment, contains('rather than treated as absence'));
+    expect(deployment, contains('CLOUDFLARE_ACCOUNT_ID'));
+    expect(deployment, contains('npm run deploy:account'));
+    expect(
+      RegExp(
+        RegExp.escape(r'test -z "$(git status --porcelain)"'),
+      ).allMatches(deployment),
+      hasLength(2),
+    );
+    expect(deployment, contains('ODROE_DEPLOY_SHA'));
+    expect(deployment, contains('npm run deploy:status'));
+    expect(deployment, contains('npm run deploy:versions'));
+    expect(
+      RegExp(r'^  set -eu$', multiLine: true).allMatches(deployment),
+      hasLength(4),
+    );
+    expect(deployment, contains('grouped shell is fail-closed'));
+    expect(deployment, contains('100% of traffic'));
+    expect(normalizedDeployment, contains('full reviewed Git SHA'));
+    expect(deployment, contains('ODROE_DEPLOY_URL'));
+    expect(
+      deployment,
+      contains("export ODROE_DEPLOY_URL='https://<deployment>.workers.dev'"),
+    );
+    expect(
+      deployment,
+      isNot(contains('export ODROE_DEPLOY_URL=https://<deployment>')),
+    );
+    expect(deployment, contains('/__odroe_missing__'));
+    expect(deployment, contains('/zh/'));
+    expect(
+      deployment.lastIndexOf('npm run deploy:check'),
+      lessThan(deployment.indexOf('npm run deploy --')),
+    );
+    expect(
+      deployment.indexOf('npm run deploy --'),
+      lessThan(deployment.lastIndexOf('npm run deploy:status')),
+    );
+    expect(readme, contains('sites/odroe.dev/package.json'));
+    expect(readme, contains('npm run deploy:check'));
+    expect(readme, contains('必须获得明确授权'));
+    expect(readme, contains('发布前必须通过 `npm run deploy:account`'));
+    expect(readme, contains('发布后运行 `npm run deploy:status`'));
+  });
+
   test('search assets match published pages and exact migrations', () async {
     final server = Server(
       routes: generated.serverRouteTree,

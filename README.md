@@ -697,7 +697,25 @@ Fetch host 没有可靠的进程 shutdown event，因此生成入口不会自动
 若需让真实客户端断开完成 `ServerRequest.cancelled`，运行该 Fetch adapter 的
 Cloudflare Worker 必须在 `compatibility_flags` 中启用 `enable_request_signal`；Node
 `AbortController` smoke 不能替代该平台配置。纯静态 assets-only SSG 不运行 adapter，
-无需该 flag。当前尚未验证远端 Cloudflare 部署。
+无需该 flag。
+
+官网的 assets-only 发布工具隔离在 `sites/odroe.dev/package.json`，并由 lockfile
+固定为 Wrangler 4.118.0；它不会进入 Odroe 的 Dart 依赖图或线上产物。本地无上传
+门禁要求 Node 22 或更新版本与 npm，Dart-only 开发不需要 Node：
+
+```sh
+cd sites/odroe.dev
+npm ci
+npm run build
+npm run deploy:check
+```
+
+`npm run preview` 可通过本地 Workerd 验证真实 Cloudflare 静态路由。
+`npm run deploy` 会创建缺失的 `odroe-dev` Worker，或立即改变现有版本与流量，
+必须获得明确授权。发布前必须通过 `npm run deploy:account` 锁定并回读授权账号；
+发布后运行 `npm run deploy:status`、`npm run deploy:versions` 回读版本与流量，
+再对部署返回的精确 URL 做 HTTP smoke。当前本地 dry-run 与 Workerd 已验证，
+尚未执行远端 Cloudflare 发布。
 
 可运行应用见 [`example/app`](https://github.com/odroe/odroe/tree/main/example/app)。官网源码与正式文档位于
 [`sites/odroe.dev`](https://github.com/odroe/odroe/tree/main/sites/odroe.dev)，由 Odroe 的 Document、Press 与 SSG

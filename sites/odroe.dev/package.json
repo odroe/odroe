@@ -1,0 +1,19 @@
+{
+  "name": "odroe-dev",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "dart run odroe build --no-server",
+    "preview": "wrangler dev --local",
+    "deploy:check": "wrangler deploy --dry-run --strict --outdir .wrangler/dry-run",
+    "deploy": "wrangler deploy --strict",
+    "deploy:account": "wrangler whoami --json",
+    "deploy:status": "wrangler deployments status --json",
+    "deploy:versions": "wrangler versions list --json"
+  },
+  "devDependencies": {
+    "wrangler": "4.118.0"
+  }
+}

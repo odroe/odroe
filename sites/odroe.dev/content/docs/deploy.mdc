@@ -211,6 +211,124 @@ remote Cloudflare deployment has been verified.
 
 `sites/odroe.dev` is the website source. Its assets-only build uses
 `dart run odroe build --no-server` and passes local prerender checks without
-compiling an unused Worker. This is not proof of a live deployment. At this
-snapshot, external access to `odroe.dev` is blocked by Cloudflare error 526
-from its SSL setup.
+compiling an unused Worker.
+
+The deployment CLI is isolated in `sites/odroe.dev/package.json` and locked to
+Wrangler 4.118.0. It is a deployment-only dependency: neither the Odroe Dart
+package nor the served website contains it. Node 22 or newer and npm are
+required only for this deployment toolchain; `.npmrc` makes an older runtime
+fail at install instead of continuing after an engine warning. The complete
+no-upload gate is:
+
+```sh
+(
+  set -eu
+  cd sites/odroe.dev
+  dart pub get --enforce-lockfile
+  dart analyze
+  dart test
+  npm ci
+  npm run build
+  npm run deploy:check
+)
+```
+
+`deploy:check` runs `wrangler deploy --dry-run --strict` against
+`wrangler.jsonc` and `build/web`. It validates the exact locked toolchain and
+assets without authenticating, uploading, or creating a Cloudflare resource.
+The grouped shell is fail-closed in Bash and Zsh: any failed gate stops the
+remaining commands.
+Run the same asset routing locally with:
+
+```sh
+npm run preview
+```
+
+Then, from another terminal, verify the provider path rather than a generic
+static file server:
+
+```sh
+(
+  set -eu
+  for route in / /docs /site.css /robots.txt /sitemap.xml; do
+    curl --fail --silent --show-error --output /dev/null \
+      "http://127.0.0.1:8787$route"
+  done
+  test "$(curl --silent --show-error --output /dev/null \
+    --write-out '%{http_code} %{redirect_url}' \
+    http://127.0.0.1:8787/docs/)" = \
+    "307 http://127.0.0.1:8787/docs"
+  test "$(curl --silent --show-error --output /dev/null \
+    --write-out '%{http_code}' \
+    http://127.0.0.1:8787/__odroe_missing__)" = 404
+  test "$(curl --silent --show-error --output /dev/null \
+    --write-out '%{http_code} %{redirect_url}' \
+    http://127.0.0.1:8787/zh/)" = \
+    "301 http://127.0.0.1:8787/"
+)
+```
+
+A remote deploy creates the `odroe-dev` Worker and its default `workers.dev`
+endpoint when absent; otherwise it changes the active version and traffic
+immediately. It therefore requires explicit authorization, which must name the
+target account and explicitly permit creation or replacement. Before approval,
+an authenticated, read-only
+`npm run deploy:status` distinguishes an existing deployment from a not-found
+result; any other failure must be resolved rather than treated as absence.
+After reviewing the dry-run, deploy the exact reviewed commit to the account
+named in that authorization, then read the platform state back.
+`CLOUDFLARE_ACCOUNT_ID` is not a secret; setting it prevents an interactive
+multi-account choice from changing the target:
+
+```sh
+(
+  set -eu
+  export CLOUDFLARE_ACCOUNT_ID='authorized-account-id'
+  npm run deploy:account -- --account "$CLOUDFLARE_ACCOUNT_ID"
+  test -z "$(git status --porcelain)"
+  export ODROE_DEPLOY_SHA="$(git rev-parse HEAD)"
+  npm run build
+  npm run deploy:check
+  test -z "$(git status --porcelain)"
+  npm run deploy -- --message "git:$ODROE_DEPLOY_SHA"
+  npm run deploy:status
+  npm run deploy:versions
+)
+```
+
+The account readback must match the authorized account ID. Both clean-tree
+checks must be silent and successful: the second check catches tracked
+generated-source drift from the build. Do not edit or replace the ignored
+`build/web` directory between the final dry-run and deploy.
+Confirm that the active deployment sends 100% of traffic to the version ID
+returned by `deploy`, and that the version message contains the full reviewed
+Git SHA. Stop before smoke testing if either readback differs.
+
+Use the exact URL printed by `deploy`; do not guess the account subdomain. The
+minimum remote smoke is:
+
+```sh
+(
+  set -eu
+  export ODROE_DEPLOY_URL='https://<deployment>.workers.dev'
+  for route in / /docs /site.css /robots.txt /sitemap.xml; do
+    curl --fail --silent --show-error --output /dev/null \
+      "$ODROE_DEPLOY_URL$route"
+  done
+  test "$(curl --silent --show-error --output /dev/null \
+    --write-out '%{http_code} %{redirect_url}' \
+    "$ODROE_DEPLOY_URL/docs/")" = "307 $ODROE_DEPLOY_URL/docs"
+  test "$(curl --silent --show-error --output /dev/null \
+    --write-out '%{http_code}' \
+    "$ODROE_DEPLOY_URL/__odroe_missing__")" = 404
+  test "$(curl --silent --show-error --output /dev/null \
+    --write-out '%{http_code} %{redirect_url}' \
+    "$ODROE_DEPLOY_URL/zh/")" = "301 $ODROE_DEPLOY_URL/"
+)
+```
+
+This closes the `workers.dev` artifact path only. Adding the `odroe.dev` custom
+domain, changing DNS, and issuing or replacing its certificate are separate
+state changes and require separate authorization. The live root domain still
+returns Cloudflare error 526 as of 2026-08-01; an application-code change is
+not evidence that its SSL setup is fixed.

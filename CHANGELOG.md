@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Pin the documentation site's Wrangler deployment tool, add a no-upload
+  dry-run gate, and document authorized deploy, version readback, and HTTP
+  smoke checks.
 - Select browser DOM handoff and external navigation through JS interop so
   Flutter Web keeps the same behavior in JavaScript and WebAssembly builds.
 - Freeze nested `QueryKey` list and map parts at construction so cache,
