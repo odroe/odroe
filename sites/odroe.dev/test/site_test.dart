@@ -450,6 +450,8 @@ void main() {
     expect(options.key, QueryKey('post', <Object?>[42]));
     expect(source, contains("key: QueryKey('post', <Object?>[postId]),"));
     expect(source, isNot(contains("QueryKey(<Object?>['post', postId])")));
+    expect(source, contains('Nested lists and string-keyed maps are copied'));
+    expect(source, contains('cannot change cache identity, prefix matching'));
     expect(
       source,
       contains(
@@ -471,6 +473,10 @@ void main() {
         contains('Queries, infinite queries, and mutations share cancellation'),
       ),
     );
+    expect(source, contains('MutationCancelledException'));
+    expect(source, contains('cannot roll back its side effects'));
+    expect(source, contains('returns the latest cache projection'));
+    expect(source, contains('reuses an active fetch'));
     expect(
       source,
       contains(

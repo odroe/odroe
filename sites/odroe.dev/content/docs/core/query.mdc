@@ -21,9 +21,22 @@ final post = await client.fetchQuery(
 );
 ```
 
+`QueryKey` snapshots its JSON-like parts when it is created. Nested lists and
+string-keyed maps are copied and frozen, so later changes to caller-owned
+collections cannot change cache identity, prefix matching, hydration, or the
+serialized key. Prefer small scalar IDs; use lists and maps only when the
+resource identity is genuinely structured.
+
 Queries and infinite queries participate in `QueryClient` cancellation and
 invalidation. Mutations keep separate cache, observer, scope, and retry
 lifecycles; use mutation callbacks to invalidate related queries explicitly.
+`QueryClient.clear()` cancels a mutation that is still paused before its next
+attempt with `MutationCancelledException`, then releases its cache and online
+listeners. A mutation function that already started remains application-owned:
+clearing cache state cannot roll back its side effects or interrupt its Future.
+Manual `QueryObserver.refetch()` returns the latest cache projection even when
+the observer has no listeners. Interval polling reuses an active fetch instead
+of cancelling and restarting work that lasts longer than the interval.
 
 ## Server handoff
 

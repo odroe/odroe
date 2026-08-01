@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Freeze nested `QueryKey` list and map parts at construction so cache,
+  hydration, and persistence identities cannot diverge after caller mutation.
+- Cancel destroyed mutations while they are paused for connectivity or serial
+  scope, release their wait listeners, and keep `QueryClient.clear()` safe.
+- Return current state from unsubscribed manual refetches and let interval
+  polling reuse active work instead of repeatedly cancelling slow requests.
 - Add typed SQL, typed inner and left joins, and SQLite, PostgreSQL,
   MySQL/MariaDB, and Cloudflare D1 entrypoints.
 - Preserve the dialect on typed `BoundSql` statements and reject explicit

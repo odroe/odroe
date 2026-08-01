@@ -175,6 +175,19 @@ Query 数据，再由 Flutter 的 `DocumentModule` 解码。默认配置可往�
 key-first 实例方法会在分析期拒绝直接错型，并在 key 被泛型宽化后保留运行时
 类型校验。
 
+`QueryKey` 与上述实例身份 key 不同，它是可序列化的值身份。构造时会递归复制并
+冻结 JSON-like parts；调用方之后修改嵌套 List 或 String-keyed Map，不会改变
+cache identity、prefix matching、hydration 或持久化后的 key。优先使用小型标量
+ID，只有资源身份本身是结构化值时才放入 List 或 Map。
+
+`QueryClient.clear()` 会取消尚在等待网络或串行 scope、还没开始下一次尝试的
+mutation，并让其 Future 以 `MutationCancelledException` 结束，同时释放 cache 与
+online listener。已经进入 mutation function 的副作用仍由应用负责；清空 cache
+不能回滚副作用，也不会强行中断正在执行的 Future。
+未订阅 listener 时，`QueryObserver.refetch()` 也会返回本次执行后的最新状态。
+interval polling 若遇到慢于 interval 的 active fetch，会复用同一个 Future，不会
+周期性取消并重启网络请求。
+
 浏览器端 RPC 只支持同源，可让 `rpcBaseUri()` 返回 `null`，由
 `RpcModule.http` 使用当前 origin。Android、iOS 与桌面应用必须传入明确的
 HTTP(S) 服务端地址。应用可用
