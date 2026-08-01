@@ -53,6 +53,7 @@ Server createServer({
   Serializer? serializer,
   Renderer? renderer,
   ServerErrorHandler? onError,
+  ServerCloseHandler? onClose,
   int maxFunctionPayload = Server.defaultMaxFunctionPayload,
   int maxFunctionResponseFrameBytes =
       Server.defaultMaxFunctionResponseFrameBytes,
@@ -65,6 +66,7 @@ Server createServer({
   middleware: middleware,
   serializer: serializer,
   onError: onError,
+  onClose: onClose,
   maxFunctionPayload: maxFunctionPayload,
   maxFunctionResponseFrameBytes: maxFunctionResponseFrameBytes,
   renderer:

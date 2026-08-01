@@ -26,6 +26,9 @@ typedef ServerHandler = Future<ServerResponse> Function(ServerRequest request);
 typedef InvocationModuleFactory =
     Iterable<Module> Function(ServerInvocation invocation);
 
+/// Releases application-owned resources after server requests drain.
+typedef ServerCloseHandler = FutureOr<void> Function();
+
 /// Adapter-neutral runtime for typed routes and server functions.
 final class Server {
   /// Default maximum buffered server-function request size: 1 MiB.
@@ -51,6 +54,7 @@ final class Server {
     Serializer? serializer,
     this.renderer,
     ServerErrorHandler? onError,
+    ServerCloseHandler? onClose,
     this.functionPath = '/__odroe/functions',
     this.maxFunctionPayload = defaultMaxFunctionPayload,
     this.maxFunctionResponseFrameBytes = defaultMaxFunctionResponseFrameBytes,
@@ -62,6 +66,7 @@ final class Server {
        modules = modules ?? _emptyModules,
        serializer = serializer ?? Serializer(),
        onError = onError ?? defaultServerErrorHandler,
+       _onClose = onClose,
        _flutterRoutes = HashSet<Object>.identity()
          ..addAll(flutterRoutes.map((route) => route.identity)),
        _functionPrefix = functionPath.endsWith('/')
@@ -122,6 +127,9 @@ final class Server {
   /// invocation lifetime without delaying the response.
   final ServerErrorHandler onError;
 
+  /// Releases long-lived resources after every started invocation settles.
+  final ServerCloseHandler? _onClose;
+
   /// Prefix used by generated server functions.
   final String functionPath;
 
@@ -142,8 +150,10 @@ final class Server {
   final bool allowRpcWithoutOrigin;
 
   final Set<Object> _flutterRoutes;
+  final Set<Completer<void>> _activeInvocations = <Completer<void>>{};
   final String _functionPrefix;
   late final RouteMatcher _matcher;
+  Future<void>? _closeFuture;
 
   /// A handler suitable for platform adapters.
   ServerHandler get handler => handle;
@@ -167,42 +177,129 @@ final class Server {
     ServerInvocation invocation,
   ) => _handleInvocation(request, invocation, includeInvocationModules: true);
 
+  /// Stops accepting invocations, drains started work, and releases resources.
+  ///
+  /// The returned future is shared by concurrent and repeated calls. It waits
+  /// for every response body, background task, and request module cleanup that
+  /// started before this call, then invokes the application [ServerCloseHandler]
+  /// once. Call this after the hosting adapter stops accepting requests.
+  Future<void> close() {
+    final current = _closeFuture;
+    if (current != null) return current;
+
+    final completion = Completer<void>();
+    _closeFuture = completion.future;
+    unawaited(
+      _closeApplication().then<void>(
+        (_) => completion.complete(),
+        onError: (Object error, StackTrace stackTrace) {
+          completion.completeError(error, stackTrace);
+        },
+      ),
+    );
+    return completion.future;
+  }
+
   Future<ServerResponse> _handleInvocation(
     ServerRequest request,
     ServerInvocation invocation, {
     required bool includeInvocationModules,
   }) async {
-    startServerInvocation(invocation);
+    final lifetime = _beginInvocation();
+    try {
+      startServerInvocation(invocation);
+    } on Object {
+      _completeInvocation(lifetime);
+      rethrow;
+    }
     late final AppContext app;
     try {
-      final baseModules = modules();
       final createInvocationModules = includeInvocationModules
           ? invocationModules
           : null;
-      final installedModules = createInvocationModules == null
-          ? baseModules
-          : baseModules.followedBy(createInvocationModules(invocation));
+
+      Iterable<Module> installedModules() sync* {
+        yield* modules();
+        if (createInvocationModules != null) {
+          yield* createInvocationModules(invocation);
+        }
+      }
+
       app = await AppContext.create(
-        installedModules,
+        installedModules(),
         onCleanupError: (error, stackTrace) =>
             _reportUnexpected(request, error, stackTrace, invocation),
       );
     } on Object catch (error, stackTrace) {
       _reportUnexpected(request, error, stackTrace, invocation);
-      finishServerInvocation(
+      final cleanup = finishServerInvocation(
         invocation,
         responseDone: Future<void>.value(),
         dispose: () {},
       );
+      _trackInvocation(lifetime, cleanup);
       Error.throwWithStackTrace(error, stackTrace);
     }
-    final context = RequestContext(
-      request: request,
-      app: app,
-      invocation: invocation,
+    var cleanupScheduled = false;
+    void scheduleCleanup(Future<void> responseDone) {
+      cleanupScheduled = true;
+      final cleanup = finishServerInvocation(
+        invocation,
+        responseDone: responseDone,
+        dispose: app.dispose,
+      );
+      _trackInvocation(lifetime, cleanup);
+    }
+
+    try {
+      final context = RequestContext(
+        request: request,
+        app: app,
+        invocation: invocation,
+      );
+      final response = await _dispatch(request, context);
+      return _withInvocationCleanup(
+        response,
+        request,
+        invocation,
+        scheduleCleanup,
+      );
+    } on Object catch (error, stackTrace) {
+      _reportUnexpected(request, error, stackTrace, invocation);
+      if (!cleanupScheduled) scheduleCleanup(Future<void>.value());
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  Completer<void> _beginInvocation() {
+    if (_closeFuture != null) {
+      throw StateError('The server is closing or closed.');
+    }
+    final lifetime = Completer<void>();
+    _activeInvocations.add(lifetime);
+    return lifetime;
+  }
+
+  void _trackInvocation(Completer<void> lifetime, Future<void> cleanup) {
+    unawaited(
+      cleanup.then<void>(
+        (_) => _completeInvocation(lifetime),
+        onError: (Object _, StackTrace _) => _completeInvocation(lifetime),
+      ),
     );
-    final response = await _dispatch(request, context);
-    return _withInvocationCleanup(response, app, request, invocation);
+  }
+
+  void _completeInvocation(Completer<void> lifetime) {
+    _activeInvocations.remove(lifetime);
+    if (!lifetime.isCompleted) lifetime.complete();
+  }
+
+  Future<void> _closeApplication() async {
+    final active = <Future<void>>[
+      for (final lifetime in _activeInvocations) lifetime.future,
+    ];
+    if (active.isNotEmpty) await Future.wait<void>(active);
+    await _onClose?.call();
   }
 
   Future<ServerResponse> _dispatch(
@@ -596,9 +693,9 @@ final class Server {
 
   ServerResponse _withInvocationCleanup(
     ServerResponse response,
-    AppContext app,
     ServerRequest request,
     ServerInvocation invocation,
+    void Function(Future<void> responseDone) scheduleCleanup,
   ) {
     final omitBody =
         request.method == HttpMethod.head ||
@@ -613,11 +710,7 @@ final class Server {
           _reportUnexpected(request, error, stackTrace, invocation);
         },
       );
-      finishServerInvocation(
-        invocation,
-        responseDone: responseDone,
-        dispose: app.dispose,
-      );
+      scheduleCleanup(responseDone);
       return ServerResponse(
         status: response.status,
         reason: response.reason,
@@ -639,11 +732,7 @@ final class Server {
       }
     }
 
-    finishServerInvocation(
-      invocation,
-      responseDone: responseDone.future,
-      dispose: app.dispose,
-    );
+    scheduleCleanup(responseDone.future);
     return ServerResponse(
       status: response.status,
       reason: response.reason,

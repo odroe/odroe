@@ -57,6 +57,8 @@ void main() {
     );
     expect(output.serverSource, contains('ServerErrorHandler? onError'));
     expect(output.serverSource, contains('onError: onError'));
+    expect(output.serverSource, contains('ServerCloseHandler? onClose'));
+    expect(output.serverSource, contains('onClose: onClose'));
     expect(
       output.serverSource,
       contains('int maxFunctionPayload = Server.defaultMaxFunctionPayload'),

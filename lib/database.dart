@@ -5,6 +5,7 @@ export 'src/database/codec.dart';
 export 'src/database/database.dart';
 export 'src/database/dialect.dart' show SqlDialect;
 export 'src/database/error.dart';
+export 'src/database/module.dart';
 export 'src/database/query.dart';
 export 'src/database/result.dart';
 export 'src/database/row.dart';

@@ -226,32 +226,104 @@ Future<void> main() async {
   final webRoot = Platform.environment['ODROE_WEB_ROOT'];
   final developmentOriginFile =
       Platform.environment['ODROE_FLUTTER_ORIGIN_FILE'];
-  final appServer = app.createServer();
-  final server = await IoServer.bind(
-    appServer.handler,
-    onError: appServer.onError,
-    address: host,
-    port: port,
-    publicDirectory: webRoot == '' ? null : Directory(webRoot ?? 'build/web'),
-    developmentProxyOriginFile:
-        developmentOriginFile == null || developmentOriginFile == ''
-        ? null
-        : File(developmentOriginFile),
-  );
-  stdout.writeln(
-    'Odroe listening on http://\${server.address.host}:\${server.port}',
-  );
-  if (!Platform.isWindows) {
+  final appServer = await app.createServer();
+  HttpServer? nativeServer;
+  Object? primaryError;
+  StackTrace? primaryStackTrace;
+  final subscriptions = <StreamSubscription<ProcessSignal>>[];
+  try {
+    nativeServer = await IoServer.bind(
+      appServer.handler,
+      onError: appServer.onError,
+      address: host,
+      port: port,
+      publicDirectory: webRoot == '' ? null : Directory(webRoot ?? 'build/web'),
+      developmentProxyOriginFile:
+          developmentOriginFile == null || developmentOriginFile == ''
+          ? null
+          : File(developmentOriginFile),
+    );
+    stdout.writeln(
+      'Odroe listening on http://\${nativeServer.address.host}:\${nativeServer.port}',
+    );
     final stopping = Completer<void>();
     void stop(ProcessSignal _) {
-      if (!stopping.isCompleted) stopping.complete();
+      if (!stopping.isCompleted) {
+        stopping.complete();
+        return;
+      }
+      IoServer.close(nativeServer!, force: true).ignore();
     }
-    final interrupt = ProcessSignal.sigint.watch().listen(stop);
-    final terminate = ProcessSignal.sigterm.watch().listen(stop);
+    subscriptions.add(ProcessSignal.sigint.watch().listen(stop));
+    if (!Platform.isWindows) {
+      subscriptions.add(ProcessSignal.sigterm.watch().listen(stop));
+    }
     await stopping.future;
-    await interrupt.cancel();
-    await terminate.cancel();
-    await server.close(force: true);
+  } on Object catch (error, stackTrace) {
+    primaryError = error;
+    primaryStackTrace = stackTrace;
+  }
+  try {
+    await _closeNativeApplication(nativeServer, appServer);
+  } on Object catch (error, stackTrace) {
+    if (primaryError == null) {
+      primaryError = error;
+      primaryStackTrace = stackTrace;
+    } else {
+      _reportSecondaryCleanupError(error, stackTrace);
+    }
+  }
+  try {
+    await Future.wait<void>([
+      for (final subscription in subscriptions) subscription.cancel(),
+    ]);
+  } on Object catch (error, stackTrace) {
+    if (primaryError == null) {
+      primaryError = error;
+      primaryStackTrace = stackTrace;
+    } else {
+      _reportSecondaryCleanupError(error, stackTrace);
+    }
+  }
+  if (primaryError != null) {
+    Error.throwWithStackTrace(primaryError, primaryStackTrace!);
+  }
+}
+
+Future<void> _closeNativeApplication(
+  HttpServer? nativeServer,
+  Server appServer,
+) async {
+  Object? primaryError;
+  StackTrace? primaryStackTrace;
+  if (nativeServer != null) {
+    try {
+      await IoServer.close(nativeServer);
+    } on Object catch (error, stackTrace) {
+      primaryError = error;
+      primaryStackTrace = stackTrace;
+    }
+  }
+  try {
+    await appServer.close();
+  } on Object catch (error, stackTrace) {
+    if (primaryError == null) {
+      primaryError = error;
+      primaryStackTrace = stackTrace;
+    } else {
+      _reportSecondaryCleanupError(error, stackTrace);
+    }
+  }
+  if (primaryError != null) {
+    Error.throwWithStackTrace(primaryError, primaryStackTrace!);
+  }
+}
+
+void _reportSecondaryCleanupError(Object error, StackTrace stackTrace) {
+  try {
+    Zone.current.print('Secondary Odroe cleanup error: \$error\\n\$stackTrace');
+  } on Object {
+    // Cleanup reporting must not replace the primary failure.
   }
 }
 ''';

@@ -164,9 +164,15 @@ void main() {
       bootstrap,
       contains("developmentOriginFile == null || developmentOriginFile == ''"),
     );
-    expect(bootstrap, contains('final appServer = app.createServer();'));
+    expect(bootstrap, contains('final appServer = await app.createServer();'));
     expect(bootstrap, contains('appServer.handler'));
     expect(bootstrap, contains('onError: appServer.onError'));
+    expect(
+      bootstrap,
+      contains('IoServer.close(nativeServer!, force: true).ignore();'),
+    );
+    expect(bootstrap, contains('await IoServer.close(nativeServer);'));
+    expect(bootstrap, contains('await appServer.close();'));
     expect('app.createServer()'.allMatches(bootstrap), hasLength(1));
 
     final id = Uri.encodeComponent('posts.read-title');

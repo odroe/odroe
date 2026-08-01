@@ -12,6 +12,9 @@ import 'static_files.dart';
 final class IoServer {
   const IoServer._();
 
+  static final Expando<_IoServerLifecycle> _lifecycles =
+      Expando<_IoServerLifecycle>('Odroe IO server lifecycle');
+
   /// Starts an HTTP server that forwards requests to [handler].
   ///
   /// Files in [publicDirectory] use conditional caching and stream eligible
@@ -45,20 +48,37 @@ final class IoServer {
       backlog: backlog,
       shared: shared,
     );
+    final lifecycle = _IoServerLifecycle();
+    _lifecycles[server] = lifecycle;
+    final listening = _listen(
+      server,
+      handler,
+      onError ?? defaultServerErrorHandler,
+      publicDirectory == null
+          ? null
+          : StaticFiles(publicDirectory, compress: compressStaticAssets),
+      developmentProxyOriginFile == null
+          ? null
+          : DevelopmentProxy(developmentProxyOriginFile.absolute),
+      lifecycle,
+    );
+    lifecycle.listening = listening;
     unawaited(
-      _listen(
-        server,
-        handler,
-        onError ?? defaultServerErrorHandler,
-        publicDirectory == null
-            ? null
-            : StaticFiles(publicDirectory, compress: compressStaticAssets),
-        developmentProxyOriginFile == null
-            ? null
-            : DevelopmentProxy(developmentProxyOriginFile.absolute),
-      ),
+      listening.then<void>((_) {}, onError: _reportDetachedTaskFailure),
     );
     return server;
+  }
+
+  /// Stops [server] and waits for every accepted request task to settle.
+  ///
+  /// Unlike [HttpServer.close], this includes the detached adapter work that
+  /// writes and closes responses and reports failures. Concurrent and repeated
+  /// calls for a server returned by [bind] share one future. A later
+  /// `force: true` call escalates an earlier graceful close.
+  static Future<void> close(HttpServer server, {bool force = false}) {
+    final lifecycle = _lifecycles[server];
+    if (lifecycle == null) return server.close(force: force);
+    return lifecycle.close(server, force: force);
   }
 
   static Future<void> _listen(
@@ -67,14 +87,16 @@ final class IoServer {
     ServerErrorHandler onError,
     StaticFiles? staticFiles,
     DevelopmentProxy? developmentProxy,
+    _IoServerLifecycle lifecycle,
   ) async {
     try {
       await for (final incoming in server) {
-        unawaited(
+        lifecycle.track(
           _handle(incoming, handler, onError, staticFiles, developmentProxy),
         );
       }
     } finally {
+      await lifecycle.drain();
       developmentProxy?.close();
     }
   }
@@ -303,6 +325,84 @@ final class IoServer {
   }
 }
 
+final class _IoServerLifecycle {
+  late final Future<void> listening;
+
+  final Set<Future<void>> _active = <Future<void>>{};
+  Future<void>? _closeFuture;
+  bool _forceRequested = false;
+
+  void track(Future<void> task) {
+    late final Future<void> observed;
+    observed = task.then<void>(
+      (_) => _active.remove(observed),
+      onError: (Object error, StackTrace stackTrace) {
+        _active.remove(observed);
+        _reportDetachedTaskFailure(error, stackTrace);
+      },
+    );
+    _active.add(observed);
+  }
+
+  Future<void> drain() async {
+    while (_active.isNotEmpty) {
+      await Future.wait<void>(List<Future<void>>.of(_active));
+    }
+  }
+
+  Future<void> close(HttpServer server, {required bool force}) {
+    final current = _closeFuture;
+    if (current != null) {
+      if (force && !_forceRequested) {
+        _forceRequested = true;
+        unawaited(
+          server
+              .close(force: true)
+              .then<void>((_) {}, onError: _reportDetachedTaskFailure),
+        );
+      }
+      return current;
+    }
+
+    _forceRequested = force;
+    final completion = Completer<void>();
+    _closeFuture = completion.future;
+    unawaited(
+      _close(server, force: force).then<void>(
+        (_) => completion.complete(),
+        onError: (Object error, StackTrace stackTrace) {
+          completion.completeError(error, stackTrace);
+        },
+      ),
+    );
+    return completion.future;
+  }
+
+  Future<void> _close(HttpServer server, {required bool force}) async {
+    Object? primaryError;
+    StackTrace? primaryStackTrace;
+    try {
+      await server.close(force: force);
+    } on Object catch (error, stackTrace) {
+      primaryError = error;
+      primaryStackTrace = stackTrace;
+    }
+    try {
+      await listening;
+    } on Object catch (error, stackTrace) {
+      if (primaryError == null) {
+        primaryError = error;
+        primaryStackTrace = stackTrace;
+      } else {
+        _reportDetachedTaskFailure(error, stackTrace);
+      }
+    }
+    if (primaryError != null) {
+      Error.throwWithStackTrace(primaryError, primaryStackTrace!);
+    }
+  }
+}
+
 typedef _PendingReport = ({
   ServerRequest? request,
   Object error,
@@ -401,6 +501,16 @@ void _reportWithoutRequest(
     );
   } on Object {
     // Error reporting must never replace the original outcome.
+  }
+}
+
+void _reportDetachedTaskFailure(Object error, StackTrace stackTrace) {
+  try {
+    Zone.current.print(
+      'Unexpected detached Odroe IO adapter error: $error\n$stackTrace',
+    );
+  } on Object {
+    // Error reporting must never replace adapter cleanup.
   }
 }
 

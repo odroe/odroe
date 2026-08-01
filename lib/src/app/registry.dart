@@ -37,6 +37,7 @@ final class ModuleRegistry {
 
   final Map<Object, Object> _values = <Object, Object>{};
   final List<ModuleBinding> _bindings = <ModuleBinding>[];
+  bool _lazyFactoriesSealed = false;
 
   /// Reads a value already registered under [key].
   T read<T extends Object>(ContextKey<T> key) {
@@ -45,6 +46,11 @@ final class ModuleRegistry {
       throw StateError('No value is registered for ${key.name}.');
     }
     if (value is _Factory<T>) {
+      if (_lazyFactoriesSealed) {
+        throw StateError(
+          'Cannot create ${key.name} while the application is disposing.',
+        );
+      }
       value = value.create();
       _values[key] = value;
     }
@@ -64,6 +70,14 @@ final class ModuleRegistry {
 
   /// Returns registered bindings assignable to [T], in registration order.
   Iterable<T> bindings<T extends ModuleBinding>() => _bindings.whereType<T>();
+
+  /// Prevents uninitialized lazy values from being created during disposal.
+  ///
+  /// Existing values remain readable so modules can release dependencies in
+  /// reverse order. This lifecycle hook is idempotent.
+  void sealLazyFactories() {
+    _lazyFactoriesSealed = true;
+  }
 }
 
 final class _Factory<T extends Object> {

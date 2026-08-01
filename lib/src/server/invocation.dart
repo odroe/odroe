@@ -139,7 +139,7 @@ void startServerInvocation(ServerInvocation invocation) {
 }
 
 /// Schedules invocation cleanup after its response and background work finish.
-void finishServerInvocation(
+Future<void> finishServerInvocation(
   ServerInvocation invocation, {
   required Future<void> responseDone,
   required FutureOr<void> Function() dispose,
@@ -159,6 +159,7 @@ void finishServerInvocation(
   if (!invocation._registerWithHost(cleanup, backgroundTask: false)) {
     invocation._observeTask(cleanup);
   }
+  return cleanup;
 }
 
 Future<void> _finishServerInvocation(

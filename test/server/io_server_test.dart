@@ -733,4 +733,46 @@ void main() {
     await response.drain<void>();
     await cancelled.future.timeout(const Duration(seconds: 2));
   });
+
+  test('IO close drains accepted tasks and can escalate to force', () async {
+    final handlerStarted = Completer<void>();
+    final handlerGate = Completer<void>();
+    final server = await IoServer.bind((request) async {
+      handlerStarted.complete();
+      await handlerGate.future;
+      return ServerResponse.text('done');
+    }, port: 0);
+    final client = HttpClient();
+    addTearDown(() async {
+      if (!handlerGate.isCompleted) handlerGate.complete();
+      await IoServer.close(server, force: true);
+      client.close(force: true);
+    });
+
+    final exchange = () async {
+      try {
+        final request = await client.getUrl(
+          Uri.parse('http://127.0.0.1:${server.port}/'),
+        );
+        final response = await request.close();
+        await response.drain<void>();
+      } on Object {
+        // A forced close deliberately terminates the active connection.
+      }
+    }();
+    await handlerStarted.future;
+
+    var closeCompleted = false;
+    final graceful = IoServer.close(server);
+    unawaited(graceful.then<void>((_) => closeCompleted = true));
+    final forced = IoServer.close(server, force: true);
+
+    expect(forced, same(graceful));
+    await exchange.timeout(const Duration(seconds: 2));
+    expect(closeCompleted, isFalse);
+
+    handlerGate.complete();
+    await graceful.timeout(const Duration(seconds: 2));
+    expect(closeCompleted, isTrue);
+  });
 }

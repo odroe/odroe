@@ -509,7 +509,60 @@ void main() {
     expect(source, contains('dialect: SqlDialect.postgres'));
     expect(source, contains('default to `dialect: null`'));
     expect(source, contains('does not prove that the SQL is portable'));
+    expect(source, contains('Future<void> close()'));
+    expect(source, contains('DatabaseModule.owned'));
+    expect(source, contains('DatabaseModule.borrowed'));
+    expect(source, contains('app.read(databaseKey)'));
+    expect(source, contains('onClose: database.close'));
   });
+
+  test(
+    'Lifecycle ownership is consistent across public documentation',
+    () async {
+      final app = await File('content/docs/core/app.mdc').readAsString();
+      final server = await File('content/docs/server.mdc').readAsString();
+      final database = await File(
+        'content/docs/data/database.mdc',
+      ).readAsString();
+      final deploy = await File('content/docs/deploy.mdc').readAsString();
+      final readme = await File('../../README.md').readAsString();
+
+      expect(app, contains('ownership transfers as each module is yielded'));
+      expect(app, contains('DatabaseModule.borrowed(database)'));
+      expect(app, contains('DatabaseModule.owned(sharedDatabase)'));
+      expect(app, contains('`Server` `onClose` callback owns'));
+      expect(server, contains('`Server.close()` immediately rejects'));
+      expect(server, contains('Concurrent and repeated calls return the same'));
+      expect(
+        server,
+        contains('Do not await `Server.close()` from the current'),
+      );
+      expect(
+        server,
+        contains('`IoServer.close` stops the listener and drains'),
+      );
+      expect(server, contains('Fetch bootstrap does not call `onClose`'));
+      expect(database, contains('Future<void> close();'));
+      expect(database, contains('DatabaseModule.owned'));
+      expect(database, contains('DatabaseModule.borrowed'));
+      expect(database, contains('onClose: database.close'));
+      expect(database, contains('Future<Server> createServer() async'));
+      expect(database, contains('MysqlDatabase.open'));
+      expect(database, contains('invocationModules: (invocation)'));
+      expect(database, contains('invocation.requireBindings<FetchBindings>()'));
+      expect(database, contains('D1SqlDatabase.fromBinding(environment.DB)'));
+      expect(deploy, contains('await IoServer.close(nativeServer)'));
+      expect(deploy, contains('await appServer.close()'));
+      expect(deploy, contains('`HttpServer.close` does not await'));
+      expect(
+        deploy,
+        contains('Fetch runtime has no reliable process-shutdown'),
+      );
+      expect(readme, contains('DatabaseModule.borrowed(database)'));
+      expect(readme, contains('onClose: database.close'));
+      expect(readme, contains('`IoServer.close`'));
+    },
+  );
 
   test('Server docs close the authenticated RPC contract', () async {
     final source = await File('content/docs/server.mdc').readAsString();
@@ -621,6 +674,8 @@ void main() {
     expect(source, contains('rejected with a controlled `400`'));
     expect(source, contains('not reported twice'));
     expect(source, contains('`HttpServer.close` does not await'));
+    expect(source, contains('`IoServer.close` stops the listener and drains'));
+    expect(source, contains('`Server.close()` immediately rejects'));
     expect(source, contains('controlled HTTP 400 before the handler starts'));
     expect(source, contains('do not trigger `Server.onError`'));
     expect(source, contains('before a response starts'));
@@ -642,6 +697,9 @@ void main() {
     expect(source, contains('without duplicating Server-owned'));
     expect(source, contains('response close attempt settles'));
     expect(source, contains('`HttpServer.close` does not await'));
+    expect(source, contains('await IoServer.close(nativeServer)'));
+    expect(source, contains('await appServer.close()'));
+    expect(source, contains('second signal during that drain escalates'));
     expect(source, contains('application-owned durable queue'));
   });
 

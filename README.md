@@ -150,6 +150,14 @@ Uri? rpcBaseUri({
 
 删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
 
+module 一经惰性 iterable 产出即把所有权交给 `AppContext`。枚举、注册或初始化
+任一阶段失败，已产出的全部 module 都会逆序回滚；module 的 `dispose` 必须容忍
+setup 尚未开始或只完成一部分。并发与重复 `dispose()` 共享同一 Future，清理完成后
+context 的新读取会 fail closed。setup 期间调用公开 `dispose()` 会直接失败，避免
+初始化在已销毁 context 上继续；清理只能读取已创建值，不能在 owner 释放后首次物化
+lazy factory。Flutter `App` 保持同一合同，并把 rollback 的次级错误与卸载清理错误
+交给 `FlutterError`。
+
 Document SSR 会用服务端 `Server` 的 `Serializer` 编码已完成与 pending 的
 Query 数据，再由 Flutter 的 `DocumentModule` 解码。默认配置可往返
 `DateTime`、`Duration`、`Uri`、`BigInt` 与 `Uint8List`。自定义 wire 类型应从
@@ -293,8 +301,9 @@ Server createServer() => generated.createServer(
 callback 可同步完成，也可返回有界的 `Future`。`Server` runtime 会立即调用 callback；
 同步部分应保持很小，返回的 Future 会加入当前 invocation 生命周期而不等待 response。
 原生 IO adapter 则在服务端 response close 尝试结束后调用 callback，并由 detached
-request task 观察 Future。`HttpServer.close` 不等待该 task；需要跨进程退出保证的
-telemetry 应进入应用自己的 durable queue。payload/frame 预算超限和正常取消始终属于
+request task 观察 Future。`HttpServer.close` 不等待该 task；`IoServer.close` 会停止
+监听并等待已接收的 adapter task 收尾，然后才应调用 `Server.close` 释放应用资源。
+需要跨进程退出保证的 telemetry 仍应进入应用自己的 durable queue。payload/frame 预算超限和正常取消始终属于
 受控结果，不会上报。在 response 开始前的 request dispatch 中，`Redirect`、`NotFound` 与
 `HttpError` 也属于受控结果；若这些或其他 error 从 response stream 抛出，则会上报
 （typed frame overflow 除外）。`exposeErrors` 只决定是否向客户端披露内部细节，
@@ -308,11 +317,14 @@ metadata、HTTP framing，以及 raw handler 的 omitted-body cleanup 都使用�
 上报。手写入口也应保持同样接线：
 
 ```dart
-final appServer = createServer();
+final appServer = await createServer();
 final nativeServer = await IoServer.bind(
   appServer.handler,
   onError: appServer.onError,
 );
+
+await IoServer.close(nativeServer);
+await appServer.close();
 ```
 
 `Server` runtime 的 callback 收到 handler 使用的同一个 `ServerRequest`。static 或
@@ -419,7 +431,7 @@ Server createServer() => generated.createServer(
 );
 ```
 
-loader、middleware 与 server function 都可以通过 `context.read(queryClientKey)` 读取该请求显式安装的 Query client。没有 `lib/server.dart` 时，CLI 直接使用生成的默认 server。
+loader、middleware 与 server function 都可以通过 `context.read(queryClientKey)` 读取该请求显式安装的 Query client。生成入口也接受 `onClose`。`Server.close()` 会先拒绝新请求，再等待 response body、嵌套 background task 与 request module 清理，最后只调用一次 `onClose`；并发或重复关闭共享同一个 Future。不要从当前 middleware、handler 或 `onError` 内等待它，也不要在尚未消费或取消手写 `handle()` response body 时等待关闭。没有 `lib/server.dart` 时，CLI 直接使用生成的默认 server。
 
 ## 内容与静态页面
 
@@ -548,6 +560,28 @@ final database = PostgresDatabase.pool(
 );
 ```
 
+数据库所有权必须显式。Flutter 应用级 context 应使用应用解析出的绝对可写路径，
+例如 `DatabaseModule.owned(SqliteDatabase.open(appWritableDatabasePath))`；不要把
+移动端持久化绑定到相对工作目录。原生服务端的 `modules` 是 request-scoped，
+必须借用上面的进程级 PostgreSQL pool，并由 `Server` 的 `onClose` 在所有请求
+drain 后关闭：
+
+```dart
+Server createServer() => generated.createServer(
+  modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
+  onClose: database.close,
+);
+```
+
+handler、loader 与 server function 通过 `context.read(databaseKey)` 取得同一
+数据库。不要把 `DatabaseModule.owned(sharedDatabase)` 放入 `Server.modules`，
+否则首个请求结束就会关闭共享 pool。
+同一规则适用于 native SQLite 单连接与 MySQL/MariaDB：进程创建、request 借用、
+`onClose` 关闭。生成的 native bootstrap 会等待异步 `createServer()`，因此可先
+`await MysqlDatabase.open(...)` 再开始监听。Cloudflare D1 则在
+`invocationModules` 中为每次请求创建 `DatabaseModule.owned` wrapper；runtime
+仍拥有底层 binding，Fetch 入口没有虚构的进程级 `onClose`。
+
 `pool(...)` 的默认 settings 是
 `pg.PoolSettings(maxConnectionCount: 4)`；这是控制数据库连接成本的旋钮，
 应按部署环境明确调整。若传入自定义 `PoolSettings`，也应显式设置该字段；
@@ -631,6 +665,10 @@ content hash；若上游代理负责内容编码，可设置
 无需再次动态渲染。该 fallback 只接管 HTML-compatible 请求；显式
 `Accept: application/json` 仍交给动态 Document handoff，并以 `Vary: Accept`
 隔离缓存。
+生成的 bootstrap 在所有平台监听 SIGINT，并在受支持平台监听 SIGTERM；它会先
+通过 `IoServer.close` 停止接入并 drain adapter task，再调用 `Server.close`。
+首个终止信号优雅等待在途请求；drain 期间的第二个信号会升级为强制关闭。
+绑定失败也会释放已创建的应用资源。手写入口必须保持同一顺序。
 
 Cloudflare target 生成 `build/odroe/cloudflare/server.js` 与薄
 `worker.mjs`。平台配置仍由应用持有；Odroe 不覆盖已有
@@ -638,6 +676,8 @@ Cloudflare target 生成 `build/odroe/cloudflare/server.js` 与薄
 `invocationHandler` 与 `onError` 交给 adapter。status、header、`Response` 构造及
 response byte bridge 的 adapter-owned 异常只上报一次；handler 与 source stream
 仍由 `Server` 上报。异步 reporter 由 host `waitUntil` 持有，不阻塞 response。
+Fetch host 没有可靠的进程 shutdown event，因此生成入口不会自动调用
+`Server.close` 或 `onClose`；D1 等 binding-backed 资源保持 invocation-scoped。
 若需让真实客户端断开完成 `ServerRequest.cancelled`，运行该 Fetch adapter 的
 Cloudflare Worker 必须在 `compatibility_flags` 中启用 `enable_request_signal`；Node
 `AbortController` smoke 不能替代该平台配置。纯静态 assets-only SSG 不运行 adapter，

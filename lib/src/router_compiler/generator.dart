@@ -191,6 +191,7 @@ final class RouteGenerator {
       ..writeln('  Serializer? serializer,')
       ..writeln('  Renderer? renderer,')
       ..writeln('  ServerErrorHandler? onError,')
+      ..writeln('  ServerCloseHandler? onClose,')
       ..writeln('  int maxFunctionPayload = Server.defaultMaxFunctionPayload,')
       ..writeln(
         '  int maxFunctionResponseFrameBytes = '
@@ -205,6 +206,7 @@ final class RouteGenerator {
       ..writeln('  middleware: middleware,')
       ..writeln('  serializer: serializer,')
       ..writeln('  onError: onError,')
+      ..writeln('  onClose: onClose,')
       ..writeln('  maxFunctionPayload: maxFunctionPayload,')
       ..writeln(
         '  maxFunctionResponseFrameBytes: maxFunctionResponseFrameBytes,',

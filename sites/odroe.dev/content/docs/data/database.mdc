@@ -20,6 +20,8 @@ abstract interface class SqlDatabase {
   Future<List<SqlWriteResult>> atomicWrite(
     List<BoundSql> statements,
   );
+
+  Future<void> close();
 }
 ```
 
@@ -134,6 +136,106 @@ committing DDL stay outside framework-managed transactions.
 D1 additionally requires `rowReturning` on every `query` call because its raw
 result cannot distinguish an empty query from a write. `SqlQueries` supplies
 that marker automatically.
+
+## Application ownership
+
+`DatabaseModule` makes ownership explicit. An application-level Flutter
+context may own a native database:
+
+```dart
+App(
+  modules: <DatabaseModule>[
+    DatabaseModule.owned(
+      SqliteDatabase.open(appWritableDatabasePath),
+    ),
+  ],
+  builder: (app) => Product(database: app.read(databaseKey)),
+);
+```
+
+A native server instead creates one database or pool for the process and lets
+each request borrow it:
+
+```dart
+final database = PostgresDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+);
+
+Server createServer() => generated.createServer(
+  modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
+  onClose: database.close,
+);
+```
+
+Handlers, loaders, and server functions read `databaseKey`. Request disposal
+does not close the shared pool; `Server.close()` drains requests first and then
+runs `onClose` once. Using `DatabaseModule.owned(database)` in
+`Server.modules` is incorrect because modules are request-scoped. Edge D1
+bindings have no reliable process shutdown event and remain invocation-owned;
+the Fetch bootstrap does not manufacture an `onClose` callback.
+
+`appWritableDatabasePath` above is an absolute writable path resolved by the
+Flutter application for its platform; a relative process working directory is
+not a portable mobile persistence location. The ownership boundary for every
+driver is:
+
+| Driver | Resource scope | Module and close contract |
+| --- | --- | --- |
+| SQLite in Flutter | Application | `DatabaseModule.owned`, closed with `AppContext` |
+| SQLite, PostgreSQL, MySQL/MariaDB on a native server | Process | request `borrowed`, then `Server` `onClose` |
+| Cloudflare D1 | Invocation | invocation `owned` wrapper; runtime still owns the binding |
+
+The generated native bootstrap awaits either a synchronous or asynchronous
+`createServer`, so MySQL can connect before the listener starts:
+
+```dart
+Future<Server> createServer() async {
+  final database = await MysqlDatabase.open(
+    host: 'localhost',
+    database: 'app',
+    username: 'app',
+    password: secret,
+  );
+  return generated.createServer(
+    modules: () => <DatabaseModule>[
+      DatabaseModule.borrowed(database),
+    ],
+    onClose: database.close,
+  );
+}
+```
+
+In a Cloudflare-only server entry, wrap D1 once per invocation instead of
+putting it in process modules:
+
+```dart
+@JS()
+library;
+
+import 'dart:js_interop';
+
+import 'package:odroe/database_d1.dart';
+import 'package:odroe/server_fetch.dart';
+
+import 'routes.server.dart' as generated;
+
+extension type WorkerEnvironment(JSObject _) implements JSObject {
+  external JSObject get DB;
+}
+
+Server createServer() => generated.createServer(
+  invocationModules: (invocation) {
+    final bindings = invocation.requireBindings<FetchBindings>();
+    final environment = WorkerEnvironment(bindings.raw);
+    return <DatabaseModule>[
+      DatabaseModule.owned(D1SqlDatabase.fromBinding(environment.DB)),
+    ];
+  },
+);
+```
 
 ## PostgreSQL connections
 

@@ -20,6 +20,15 @@ final query = context.read(queryClientKey);
 await context.dispose();
 ```
 
+Module ownership transfers as each module is yielded to `AppContext.create`.
+If enumeration, registration, or initialization fails, every yielded module is
+disposed in reverse order. Modules must therefore tolerate setup that never
+started or only partly completed. Concurrent and repeated `dispose()` calls
+join the same future. Public disposal during setup is rejected so initialization
+cannot resume on a destroyed context. Cleanup may still read already-created
+context values, but cannot first materialize a lazy factory after its owner has
+released. After cleanup settles, new reads fail closed.
+
 A binding must have a typed `ContextKey`. There is no string service locator
 and no implicit global registry.
 
@@ -59,9 +68,20 @@ runApp(
 );
 ```
 
+`App` preserves the same lazy-enumeration rollback contract. Initialization
+failures go to `errorBuilder`; secondary rollback and later disposal failures
+are reported once through `FlutterError`.
+
 ## Request scope
 
-The server creates a fresh application context for each request. Long-lived
-resources such as connection pools belong to the server adapter; a
-request-scoped module may expose a transaction or binding-backed database
-handle and will be disposed after the response lifecycle completes.
+The server creates a fresh application context for each request. Request
+modules may borrow a process-owned database with
+`DatabaseModule.borrowed(database)`, then read it through `databaseKey`.
+The `Server` `onClose` callback owns the one process-level `database.close`
+call. Never put
+`DatabaseModule.owned(sharedDatabase)` in `Server.modules`: the first completed
+request would close the shared pool.
+
+Request modules are disposed only after the response body, nested
+`waitUntil` work, and cancellation cleanup settle. `Server.close()` first
+rejects new invocations, drains those request lifetimes, then runs `onClose`.

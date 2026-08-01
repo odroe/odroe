@@ -235,6 +235,32 @@ network request starts; GET payloads only cross the server input budget.
 A function explicitly typed to return `ServerResponse` bypasses the typed frame
 budget. The caller then owns streaming, limits, and body release.
 
+## Application lifetime
+
+Generated `createServer` accepts `onClose` for process-owned resources:
+
+```dart
+final server = generated.createServer(
+  modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
+  onClose: database.close,
+);
+```
+
+`Server.close()` immediately rejects new invocations, waits for every started
+response body, nested `waitUntil` task, and request-module disposal, then calls
+`onClose` once. Concurrent and repeated calls return the same future, including
+the same cleanup failure.
+
+Hosting code must stop accepting requests before calling it. A manual
+`Server.handle` caller must fully consume or cancel every returned response
+body before awaiting close. Do not await `Server.close()` from the current
+middleware, handler, or `onError`: close deliberately waits for that invocation.
+The generated native bootstrap follows the safe order automatically.
+
+The Fetch bootstrap does not call `onClose`: edge hosts expose request
+lifetimes, not a reliable process-shutdown event. Binding-backed edge resources
+therefore remain invocation-scoped.
+
 ## Error reporting
 
 Unexpected module setup and rollback cleanup, middleware, handler, loader,
@@ -269,9 +295,11 @@ boundary small. The returned future joins the current invocation lifetime
 without holding the response. For an IO-adapter-owned failure, callback
 invocation starts only after the server-side response close attempt settles;
 its future is then observed by a detached request task. `HttpServer.close`
-does not await that task, so telemetry that must survive process exit belongs
-in an application-owned durable queue. Payload and typed-frame budget overflow, plus
-normal cancellation, are always controlled and are not reported. During
+does not await that task. `IoServer.close` stops the listener and drains those
+accepted adapter tasks before `Server.close` releases application resources.
+Telemetry that must survive process exit still belongs in an application-owned
+durable queue. Payload and typed-frame budget overflow, plus normal cancellation,
+are always controlled and are not reported. During
 request dispatch, before a response starts, `Redirect`, `NotFound`, and
 `HttpError` are controlled too. Those and other errors thrown by a response
 stream are reported, except typed-frame overflow. `exposeErrors` only controls

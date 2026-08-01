@@ -77,17 +77,27 @@ duplicating Server-owned handler or source-stream failures. Handwritten native
 entrypoints should preserve the same ownership:
 
 ```dart
-final appServer = createServer();
+final appServer = await createServer();
 final nativeServer = await IoServer.bind(
   appServer.handler,
   onError: appServer.onError,
 );
+
+// After the host stops accepting traffic:
+await IoServer.close(nativeServer);
+await appServer.close();
 ```
 
 An IO callback starts only after the server-side response close attempt
 settles, and its returned future is observed by a detached request task.
-`HttpServer.close` does not await that task. Keep it bounded; delivery that
-must survive shutdown belongs in an application-owned durable queue.
+`HttpServer.close` does not await that task; `IoServer.close` does. Only after
+the adapter drains should `Server.close` release process-owned pools and
+telemetry through `onClose`. The generated bootstrap performs this order for
+SIGINT on every platform and SIGTERM where supported. The first signal drains
+in-flight requests gracefully; a second signal during that drain escalates to
+a forced socket close. Binding failures also close the application. Keep
+reporting bounded; delivery that must survive process shutdown belongs in an
+application-owned durable queue.
 
 Native output is OS- and architecture-specific. Build on the target OS and
 architecture, or in a compatible builder. For a Linux container, compile in a
@@ -120,6 +130,11 @@ Dart server source for prerendering instead of compiling a second temporary
 native executable. An assets-only Flutter SSG instead uses
 `build --no-server web` and deploys only `build/web`; a Document-only SSG can
 omit the Flutter target.
+
+The Fetch runtime has no reliable process-shutdown event, so its generated
+bootstrap does not call `Server.close` or `onClose`. Durable bindings and D1
+wrappers remain scoped to the host invocation instead of pretending to own an
+isolate lifetime.
 
 ```json
 {

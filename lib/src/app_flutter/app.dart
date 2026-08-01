@@ -17,14 +17,17 @@ final class App extends StatefulWidget {
   /// Creates an application that installs [modules] in declaration order.
   App({
     super.key,
-    required Iterable<Module> modules,
+    required this.modules,
     required this.builder,
     this.loading = const SizedBox.shrink(),
     this.errorBuilder = _defaultErrorBuilder,
-  }) : modules = List<Module>.of(modules, growable: false);
+  });
 
   /// Modules selected by the application.
-  final List<Module> modules;
+  ///
+  /// The iterable is consumed once when the widget state initializes. Module
+  /// ownership then follows [AppContext.create].
+  final Iterable<Module> modules;
 
   /// Builds the application after every module is initialized.
   final AppBuilder builder;
@@ -47,7 +50,10 @@ final class _AppState extends State<App> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loading = AppContext.create(widget.modules);
+    _loading = AppContext.create(
+      widget.modules,
+      onCleanupError: _reportCleanupError,
+    );
   }
 
   @override
@@ -84,11 +90,22 @@ final class _AppState extends State<App> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     final context = _context;
     if (context != null) {
-      unawaited(context.dispose());
+      _disposeContext(context);
     } else {
-      unawaited(_loading.then((context) => context.dispose()));
+      unawaited(
+        _loading.then<void>(
+          (context) => _observeContextDisposal(context),
+          onError: (Object _, StackTrace _) {
+            // FutureBuilder already owns and renders initialization failures.
+          },
+        ),
+      );
     }
     super.dispose();
+  }
+
+  void _disposeContext(AppContext context) {
+    unawaited(_observeContextDisposal(context));
   }
 }
 
@@ -119,3 +136,17 @@ Widget _defaultErrorBuilder(Object error, StackTrace stackTrace) =>
       message: error.toString(),
       error: FlutterError(error.toString()),
     );
+
+Future<void> _observeContextDisposal(AppContext context) =>
+    context.dispose().then<void>((_) {}, onError: _reportCleanupError);
+
+void _reportCleanupError(Object error, StackTrace stackTrace) {
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'odroe',
+      context: ErrorDescription('while disposing application modules'),
+    ),
+  );
+}

@@ -410,6 +410,137 @@ void main() {
     expect(reported, isEmpty);
   });
 
+  test(
+    'close drains started work then releases the application once',
+    () async {
+      final events = <String>[];
+      final bodyStarted = Completer<void>();
+      final bodyGate = Completer<void>();
+      final taskStarted = Completer<void>();
+      final taskGate = Completer<void>();
+      var closeCalls = 0;
+      final server = Server(
+        routes: const [],
+        modules: () => <Module>[_LifecycleModule('request', events)],
+        middleware: [
+          (context, _) {
+            context.invocation.waitUntil(() async {
+              events.add('task:start');
+              taskStarted.complete();
+              await taskGate.future;
+              events.add('task:end');
+            }());
+
+            Stream<List<int>> body() async* {
+              events.add('body:start');
+              bodyStarted.complete();
+              yield utf8.encode('ok');
+              await bodyGate.future;
+              events.add('body:end');
+            }
+
+            return ServerResponse(body: body());
+          },
+        ],
+        onClose: () {
+          closeCalls++;
+          events.add('application:close');
+        },
+      );
+
+      final response = await server.handle(_request(0));
+      final body = response.readText();
+      await Future.wait<void>(<Future<void>>[
+        bodyStarted.future,
+        taskStarted.future,
+      ]);
+
+      final firstClose = server.close();
+      final secondClose = server.close();
+      expect(secondClose, same(firstClose));
+      expect(closeCalls, 0);
+      await expectLater(server.handle(_request(1)), throwsA(isA<StateError>()));
+
+      bodyGate.complete();
+      expect(await body, 'ok');
+      await Future<void>.delayed(Duration.zero);
+      expect(closeCalls, 0);
+
+      taskGate.complete();
+      await firstClose;
+
+      expect(events, <String>[
+        'task:start',
+        'body:start',
+        'body:end',
+        'task:end',
+        'dispose:request',
+        'application:close',
+      ]);
+      expect(closeCalls, 1);
+      expect(server.close(), same(firstClose));
+    },
+  );
+
+  test('close preserves one application cleanup failure', () async {
+    final failure = StateError('application close failed');
+    var closeCalls = 0;
+    final server = Server(
+      routes: const [],
+      onClose: () {
+        closeCalls++;
+        throw failure;
+      },
+    );
+
+    final firstClose = server.close();
+    final secondClose = server.close();
+
+    expect(secondClose, same(firstClose));
+    await expectLater(firstClose, throwsA(same(failure)));
+    expect(server.close(), same(firstClose));
+    expect(closeCalls, 1);
+  });
+
+  test('a response construction failure still disposes before close', () async {
+    final events = <String>[];
+    final server = Server(
+      routes: const [],
+      exposeErrors: true,
+      modules: () => <Module>[_LifecycleModule('request', events)],
+      middleware: [(context, _) => throw const _BadToString()],
+      onError: (_, _, _) {},
+      onClose: () => events.add('application:close'),
+    );
+
+    await expectLater(server.handle(_request(0)), throwsA(isA<StateError>()));
+    await server.close();
+
+    expect(events, <String>['dispose:request', 'application:close']);
+  });
+
+  test(
+    'an invocation module factory failure disposes yielded base modules',
+    () async {
+      final failure = StateError('invocation modules failed');
+      final events = <String>[];
+      final server = Server(
+        routes: const [],
+        modules: () => <Module>[_LifecycleModule('base', events)],
+        invocationModules: (_) => throw failure,
+        onError: (_, _, _) {},
+      );
+
+      await expectLater(
+        server.handleInvocation(_request(0), ServerInvocation()),
+        throwsA(same(failure)),
+      );
+      await server.close();
+
+      expect(events, <String>['dispose:base']);
+    },
+  );
+
   test('rejects empty and repeated invocations', () async {
     final server = Server(
       routes: const [],
@@ -436,3 +567,10 @@ void main() {
 
 ServerRequest _request(int id, {HttpMethod method = HttpMethod.get}) =>
     ServerRequest.bytes(method: method, uri: Uri.parse('http://localhost/$id'));
+
+final class _BadToString {
+  const _BadToString();
+
+  @override
+  String toString() => throw StateError('toString failed');
+}
