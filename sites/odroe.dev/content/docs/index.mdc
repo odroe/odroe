@@ -43,6 +43,11 @@ a non-network `Uri.base`.
 
 Odroe does not install a global database, transport, router, or cache. Import
 the product entrypoint you need and install only the corresponding module.
+That keeps runtime wiring and reachable Dart code explicit. Dart pub does not
+provide optional dependencies inside one package, so every application still
+resolves Odroe's shared dependency graph and native build hooks may still add
+assets. Measure the actual target artifact rather than inferring cost from an
+import alone.
 
 Runtime support is documented as a matrix, not implied by a package name.
 SQLite and PostgreSQL are verified. D1 and MySQL/MariaDB remain Preview with

@@ -280,8 +280,9 @@ HtmlElement _principles() => element(
         ),
         _principle(
           '03',
-          'Entrypoints stay focused.',
-          'Only imported product entrypoints enter the runtime artifact.',
+          'Runtime wiring stays explicit.',
+          'Entrypoints and modules limit reachable Dart code; the one package '
+              'still resolves one shared dependency graph.',
         ),
       ],
     ),
@@ -337,11 +338,17 @@ HtmlElement _output() => element(
           children: <HtmlNode>[
             element(
               'code',
+              children: <HtmlNode>[text(r'$ dart run odroe init')],
+            ),
+            element(
+              'code',
               children: <HtmlNode>[text(r'$ dart run odroe dev -- -d chrome')],
             ),
             element(
               'code',
-              children: <HtmlNode>[text(r'$ dart run odroe build web')],
+              children: <HtmlNode>[
+                text(r'$ dart run odroe build --no-server web'),
+              ],
             ),
             element(
               'code',
@@ -433,7 +440,7 @@ HtmlElement _closing() => element(
     element(
       'p',
       children: <HtmlNode>[
-        text('Start with one package. Add only the layers your product needs.'),
+        text('Start with one package. Compose only the modules you use.'),
       ],
     ),
     _button('Get started', '/docs/getting-started', primary: true),

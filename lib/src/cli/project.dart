@@ -4,6 +4,8 @@ import 'package:args/args.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 import 'package:path/path.dart' as p;
 
+import '../atomic_write.dart';
+
 /// Project paths and compiler state used by Odroe CLI commands.
 final class CliProject {
   CliProject._({
@@ -14,7 +16,28 @@ final class CliProject {
 
   /// Resolves a project from parsed command arguments.
   factory CliProject.from(ArgResults arguments) {
-    final root = Directory(arguments.option('project')!).absolute;
+    return CliProject._fromPaths(
+      _absoluteDirectory(arguments.option('project')!),
+      routesPath: arguments.option('routes')!,
+      outputPath: arguments.option('output')!,
+      serverOutputPath: arguments.option('server-output')!,
+    );
+  }
+
+  /// Resolves a project using Odroe's conventional source paths.
+  factory CliProject.fromRoot(String path) => CliProject._fromPaths(
+    _absoluteDirectory(path),
+    routesPath: 'lib/routes',
+    outputPath: 'lib/routes.dart',
+    serverOutputPath: 'lib/routes.server.dart',
+  );
+
+  factory CliProject._fromPaths(
+    Directory root, {
+    required String routesPath,
+    required String outputPath,
+    required String serverOutputPath,
+  }) {
     final pubspec = File(p.join(root.path, 'pubspec.yaml'));
     if (!pubspec.existsSync()) {
       throw FileSystemException('pubspec.yaml does not exist.', pubspec.path);
@@ -26,19 +49,19 @@ final class CliProject {
     if (match == null) {
       throw FormatException('pubspec.yaml must declare a valid package name.');
     }
-    final routesPath = _resolveProjectPath(
+    final resolvedRoutesPath = _resolveProjectPath(
       root,
-      arguments.option('routes')!,
+      routesPath,
       option: '--routes',
     );
-    final outputPath = _resolveProjectPath(
+    final resolvedOutputPath = _resolveProjectPath(
       root,
-      arguments.option('output')!,
+      outputPath,
       option: '--output',
     );
-    final serverOutputPath = _resolveProjectPath(
+    final resolvedServerOutputPath = _resolveProjectPath(
       root,
-      arguments.option('server-output')!,
+      serverOutputPath,
       option: '--server-output',
     );
     return CliProject._(
@@ -46,9 +69,9 @@ final class CliProject {
       packageName: match.group(1)!,
       compiler: FileRouteCompiler(
         projectRoot: root,
-        routesPath: routesPath,
-        outputPath: outputPath,
-        serverOutputPath: serverOutputPath,
+        routesPath: resolvedRoutesPath,
+        outputPath: resolvedOutputPath,
+        serverOutputPath: resolvedServerOutputPath,
       ),
     );
   }
@@ -73,6 +96,18 @@ final class CliProject {
   File get fetchBootstrap =>
       File(p.join(root.path, '.dart_tool', 'odroe', 'server_fetch.dart'));
 
+  /// Whether the existing native bootstrap matches this project exactly.
+  bool get bootstrapIsCurrent {
+    if (!bootstrap.existsSync()) return false;
+    return bootstrap.readAsStringSync() ==
+        _bootstrapSource(
+          packageName,
+          customServer: File(
+            p.join(libDirectory.path, 'server.dart'),
+          ).existsSync(),
+        );
+  }
+
   /// Writes the current server bootstrap when its source changed.
   void writeBootstrap() {
     final source = _bootstrapSource(
@@ -91,6 +126,9 @@ final class CliProject {
     _writeGenerated(fetchBootstrap, source);
   }
 }
+
+Directory _absoluteDirectory(String path) =>
+    Directory(p.normalize(Directory(path).absolute.path));
 
 String _resolveProjectPath(
   Directory projectRoot,
@@ -163,15 +201,7 @@ Future<Process> startProjectProcess(
 );
 
 void _writeGenerated(File file, String source) {
-  file.parent.createSync(recursive: true);
-  if (file.existsSync() && file.readAsStringSync() == source) return;
-  final temporary = File('${file.path}.tmp');
-  try {
-    temporary.writeAsStringSync(source);
-    temporary.renameSync(file.path);
-  } finally {
-    if (temporary.existsSync()) temporary.deleteSync();
-  }
+  writeStringIfChanged(file, source);
 }
 
 String _bootstrapSource(String packageName, {required bool customServer}) =>

@@ -37,14 +37,20 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 无后缀入口保持平台中立。平台实现放在明确入口中：`*_flutter.dart`、
 `*_io.dart`、`server_fetch.dart` 与各 `database_<driver>.dart`。
 
+入口与 module 控制公开 API、运行时装配和可达的 Dart 代码，但不把单包的 pub
+依赖变成可选依赖。应用仍会解析这一份共享依赖图，native build hook 也可能产生
+资产；应以目标平台的实际产物衡量成本。
+
 ## 创建应用
 
+当前版本通过源码使用。以下命令从两项目录的共同父目录执行，让 Odroe checkout
+与应用保持同级；已有 checkout 时跳过 `git clone`：
+
 ```sh
-flutter create my_app
+git clone https://github.com/odroe/odroe.git
+flutter create --empty --platforms=android,ios,web my_app
 cd my_app
 ```
-
-当前重构版先通过源码使用：
 
 ```yaml
 dependencies:
@@ -54,24 +60,23 @@ dependencies:
 
 ```sh
 flutter pub get
+dart run odroe init
+dart run odroe dev -- -d chrome
 ```
 
 ```text
 lib/
-├── main.dart
-├── rpc_origin.dart
+├── main.dart             # Document + Router composition root
 ├── routes/
 │   ├── route.dart
-│   ├── shell.dart
-│   ├── page.dart
-│   └── posts/
-│       └── [postId]/
-│           ├── route.dart
-│           ├── page.dart
-│           └── server.dart
+│   └── page.dart
 ├── routes.dart          # generated client tree
 └── routes.server.dart   # generated server tree
 ```
+
+`init` 只接受 Flutter `--empty` 应用，验证目标项目确实解析到正在运行的 Odroe，
+然后写入上面的最小产品并生成 route targets。二次执行零改动；发现自定义 Dart
+源码会整体拒绝，不提供 `--force`，也不会修改 pubspec 或平台宿主。
 
 每个包含 `page.dart`、`shell.dart` 或 `server.dart` 的目录必须包含自己的中立 `route.dart`。没有 flat-route 语法、annotation、`part`、build_runner、registry 或 hash 清单。
 
@@ -579,25 +584,28 @@ callback 必须声明 `write` 或 `rowReturning`，因此 transaction control
 ## CLI
 
 ```sh
+dart run odroe init
 dart run odroe generate
 dart run odroe dev --server-only
 flutter devices
 dart run odroe dev -- -d <ios-device-id> --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe dev -- -d chrome
-dart run odroe build -- apk --dart-define=ODROE_API_ORIGIN=https://api.example.com
+dart run odroe build --no-server -- apk --dart-define=ODROE_API_ORIGIN=https://api.example.com
+dart run odroe build --no-server web
 dart run odroe build web
-dart run odroe build --no-server
 dart run odroe build --server-only --server-target cloudflare
+dart run odroe build --server-target cloudflare web
 ```
 
 将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
 Web；`--` 后参数原样交给 Flutter CLI。包含 RPC 的原生运行与构建必须传入
 `ODROE_API_ORIGIN`，Web 继续使用同源。开发 server 直接挂载源码 `public/`，
-不读取旧 `build/web`。`build web` 会构建 Flutter Web 与 server artifact，
-再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；
+不读取旧 `build/web`。`build --no-server web` 只构建 Flutter Web 与静态产物；
+`build web` 还会生成 native server artifact。两者都会通过真实 server
+prerender 静态 route。纯 Document route 输出纯 HTML；
 带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样
 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
-`build --no-server` 不生成可部署 server artifact，但仍运行生成的 Dart
+`--no-server` 不生成可部署 server artifact，但仍运行生成的 Dart
 server 源码完成 prerender，适合只部署 `build/web` 的 assets-only SSG。
 
 prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 HTML 响应

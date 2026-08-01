@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dart_style/dart_style.dart';
 import 'package:path/path.dart' as p;
 
+import '../atomic_write.dart';
 import 'generator.dart';
 import 'model.dart';
 import 'scanner.dart';
@@ -127,20 +128,7 @@ final class FileRouteCompiler {
   }
 
   bool _writeIfChanged(File target, String source) {
-    if (target.existsSync() && target.readAsStringSync() == source) {
-      return false;
-    }
-    target.parent.createSync(recursive: true);
-    final temporary = File('${target.path}.tmp');
-    try {
-      temporary.writeAsStringSync(source);
-      temporary.renameSync(target.path);
-    } finally {
-      if (temporary.existsSync()) {
-        temporary.deleteSync();
-      }
-    }
-    return true;
+    return writeStringIfChanged(target, source);
   }
 
   String _relative(String path) => p.relative(path, from: projectRoot.path);

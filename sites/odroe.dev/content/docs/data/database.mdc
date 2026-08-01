@@ -190,6 +190,13 @@ Statements with bound values use the prepared protocol.
 
 D1 has not been verified in a remote Cloudflare deployment.
 
+All drivers live in the same Dart package. Entrypoints keep driver APIs and
+reachable Dart code separate, but pub still resolves the shared dependency
+graph. Native hooks may contribute an asset such as SQLite even when an
+application does not import that driver; Dart tree shaking does not undo
+dependency resolution or every native build hook. Inspect each target's real
+artifact when binary size matters.
+
 ## Schema and migrations
 
 Keep migrations as reviewable `.sql` files. D1 uses Wrangler migrations.

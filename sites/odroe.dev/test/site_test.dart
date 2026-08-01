@@ -128,6 +128,8 @@ void main() {
       expect(body, isNot(contains('each runtime')));
       expect(body, isNot(contains('data models consistent')));
       expect(body, isNot(contains('Use only what you import')));
+      expect(body, isNot(contains('enter the runtime artifact')));
+      expect(body, contains('resolves one shared dependency graph'));
     },
   );
 
@@ -142,20 +144,63 @@ void main() {
     expect(source, isNot(contains('Data · Edge')));
   });
 
-  test('getting started closes the Flutter and Document run paths', () async {
-    final source = await File(
+  test('onboarding closes the Flutter and Document run paths', () async {
+    final gettingStarted = await File(
       'content/docs/getting-started.mdc',
     ).readAsString();
+    final readme = await File('../../README.md').readAsString();
+    final deployment = await File('content/docs/deploy.mdc').readAsString();
 
-    expect(source, contains('flutter create --platforms=android,ios,web'));
-    expect(source, contains('lib/routes/route.dart'));
-    expect(source, contains('lib/routes/page.dart'));
-    expect(source, contains('MaterialApp.router'));
-    expect(source, contains('dart run odroe dev --server-only'));
-    expect(source, contains('flutter devices'));
-    expect(source, contains('dart run odroe dev -- -d <ios-device-id>'));
-    expect(source, isNot(contains('dart run odroe dev -- -d ios')));
-    expect(source, contains('never reuses stale `build/web` HTML'));
+    for (final entry in <String, String>{
+      'README': readme,
+      'Getting started': gettingStarted,
+    }.entries) {
+      final source = entry.value;
+      expect(source, contains('git clone https://github.com/odroe/odroe.git'));
+      expect(
+        source,
+        contains('flutter create --empty --platforms=android,ios,web'),
+      );
+      expect(source, contains('dart run odroe init'));
+      expect(source, contains('flutter pub get'));
+      expect(source, contains('dart run odroe build --no-server web'));
+      expect(
+        RegExp(
+          r'^dart run odroe build --no-server$',
+          multiLine: true,
+        ).hasMatch(source),
+        isFalse,
+        reason: entry.key,
+      );
+      expect(
+        source.indexOf('flutter pub get'),
+        lessThan(source.indexOf('dart run odroe init')),
+      );
+      expect(
+        source.indexOf('dart run odroe init'),
+        lessThan(source.indexOf('dart run odroe dev -- -d chrome')),
+      );
+    }
+    expect(gettingStarted, contains('lib/routes/route.dart'));
+    expect(gettingStarted, contains('lib/routes/page.dart'));
+    expect(gettingStarted, contains('MaterialApp.router'));
+    expect(gettingStarted, contains('dart run odroe dev --server-only'));
+    expect(gettingStarted, contains('flutter devices'));
+    expect(
+      gettingStarted,
+      contains('dart run odroe dev -- -d <ios-device-id>'),
+    );
+    expect(gettingStarted, isNot(contains('dart run odroe dev -- -d ios')));
+    expect(gettingStarted, contains('never reuses stale'));
+    expect(gettingStarted, contains('`build/web` HTML'));
+    expect(
+      deployment,
+      contains('dart run odroe build --server-target cloudflare web'),
+    );
+    expect(
+      deployment,
+      contains('dart run odroe build --server-target cloudflare\n'),
+    );
   });
 
   test('runtime matrix reports Flutter evidence honestly', () async {
@@ -178,6 +223,7 @@ void main() {
         ),
       ),
     );
+    expect(source, contains('provide optional dependencies'));
   });
 
   test('cross-platform RPC examples require a native HTTP origin', () async {
@@ -204,7 +250,7 @@ void main() {
     expect(
       readme,
       contains(
-        'dart run odroe build -- apk '
+        'dart run odroe build --no-server -- apk '
         '--dart-define=ODROE_API_ORIGIN=https://api.example.com',
       ),
     );
@@ -215,7 +261,9 @@ void main() {
     expect(server, contains('Android, iOS, and desktop apps must pass'));
     expect(server, contains('baseUri: rpcBaseUri(),'));
     expect(homepage, contains('RpcModule.http(baseUri: rpcBaseUri())'));
+    expect(homepage, contains(r'$ dart run odroe init'));
     expect(homepage, contains(r'$ dart run odroe dev -- -d chrome'));
+    expect(homepage, contains(r'$ dart run odroe build --no-server web'));
 
     for (final entry in <String, String>{
       'README': readme,

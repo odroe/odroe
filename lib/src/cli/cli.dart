@@ -7,6 +7,7 @@ import 'package:odroe/src/router_compiler/compiler.dart';
 
 import 'build.dart';
 import 'development.dart';
+import 'initialize.dart';
 import 'project.dart';
 
 /// Runs the Odroe command-line product and returns a process exit code.
@@ -17,6 +18,7 @@ Future<int> runOdroe(
 }) async {
   final out = output ?? stdout;
   final err = errors ?? stderr;
+  final init = _projectParser();
   final generate = _generationParser()
     ..addFlag(
       'watch',
@@ -85,6 +87,7 @@ Future<int> runOdroe(
     );
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
+    ..addCommand('init', init)
     ..addCommand('generate', generate)
     ..addCommand('dev', dev)
     ..addCommand('build', build);
@@ -106,15 +109,22 @@ Future<int> runOdroe(
     out.writeln(
       _commandUsage(
         command.name!,
-        _parserFor(command.name!, generate, dev, build),
+        _parserFor(command.name!, init, generate, dev, build),
       ),
     );
     return 0;
   }
 
   try {
-    final project = CliProject.from(command);
+    if (command.name == 'init' && command.rest.isNotEmpty) {
+      err.writeln('odroe init does not accept positional arguments.');
+      return 64;
+    }
+    final project = command.name == 'init'
+        ? CliProject.fromRoot(command.option('project')!)
+        : CliProject.from(command);
     return switch (command.name) {
+      'init' => initializeProject(project, out, err) ? 0 : 1,
       'generate' =>
         command.flag('watch')
             ? await _watchRoutes(project, out, err)
@@ -174,13 +184,15 @@ Future<int> runOdroe(
   }
 }
 
-ArgParser _generationParser() => ArgParser()
+ArgParser _projectParser() => ArgParser()
   ..addFlag('help', abbr: 'h', negatable: false)
   ..addOption(
     'project',
     defaultsTo: '.',
     help: 'Dart or Flutter application root.',
-  )
+  );
+
+ArgParser _generationParser() => _projectParser()
   ..addOption(
     'routes',
     defaultsTo: 'lib/routes',
@@ -199,10 +211,12 @@ ArgParser _generationParser() => ArgParser()
 
 ArgParser _parserFor(
   String name,
+  ArgParser init,
   ArgParser generate,
   ArgParser dev,
   ArgParser build,
 ) => switch (name) {
+  'init' => init,
   'generate' => generate,
   'dev' => dev,
   'build' => build,
@@ -254,6 +268,7 @@ Future<int> _watchRoutes(
 String _usage(ArgParser parser) =>
     'Usage: dart run odroe <command> [arguments]\n\n'
     'Commands:\n'
+    '  init      Initialize an empty Flutter application.\n'
     '  generate  Generate client and server route targets.\n'
     '  dev       Watch source, run Odroe, and run Flutter.\n'
     '  build     Build a Flutter target and the Odroe server.\n'

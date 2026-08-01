@@ -12,7 +12,7 @@ your application.
 ## Static web
 
 ```sh
-dart run odroe build web
+dart run odroe build --no-server web
 ```
 
 Document routes are rendered through the real server. Pure document routes
@@ -32,7 +32,9 @@ The prerender server mounts no static root while generating pages, so neither
 an old build nor a same-path HTML file from `public/` can replace the current
 route response.
 
-For a document-only product such as this website:
+When the deployment also needs the default native server, use
+`dart run odroe build web` instead. For a document-only product such as this
+website, no Flutter target is required:
 
 ```sh
 dart run odroe build --no-server
@@ -99,7 +101,13 @@ Build the Cloudflare Workers target explicitly:
 dart run odroe build --server-only --server-target cloudflare
 ```
 
-For a Cloudflare Worker that also needs static HTML:
+For a Cloudflare Worker with Flutter Web and static HTML:
+
+```sh
+dart run odroe build --server-target cloudflare web
+```
+
+A Document-only Worker with static HTML does not need a Flutter target:
 
 ```sh
 dart run odroe build --server-target cloudflare
@@ -109,8 +117,9 @@ Odroe writes `build/odroe/cloudflare/server.js` and a thin `worker.mjs`.
 Your application continues to own `wrangler.jsonc`; the build never overwrites
 platform configuration. A non-server-only Cloudflare build runs the generated
 Dart server source for prerendering instead of compiling a second temporary
-native executable. An assets-only SSG instead uses `build --no-server` and
-deploys only `build/web`.
+native executable. An assets-only Flutter SSG instead uses
+`build --no-server web` and deploys only `build/web`; a Document-only SSG can
+omit the Flutter target.
 
 ```json
 {
