@@ -45,6 +45,22 @@ server-only tree. It does not use annotations, parts, registries, or
 Generated route references encode params and search values through the same
 typed codec used for matching.
 
+## Browser URLs and handoff
+
+Routed Flutter applications set `webPathUrls: true` on the composition root
+`App` to install Flutter's official path URL strategy before `runApp`. This
+remains early enough when modules are provided by a lazy iterable, and gives
+one typed location the same pathname and search values in Flutter, the server,
+and prerendered HTML. Omitting the option preserves Flutter's or the host's
+existing URL strategy; set `webPathUrls: false` for an intentional hash-routing
+host.
+
+If the live browser URL differs from an SSG handoff, the client discards those
+stale loads and Query data and loads the current location instead. This
+prevents a static `/posts/42` snapshot from erasing
+`?preview=true&tags=one` during Flutter startup. Odroe's native server and
+documented Cloudflare assets support path URLs.
+
 ## Capability keys
 
 Optional entrypoints extend a neutral route with typed `RouteCapability`

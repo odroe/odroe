@@ -59,6 +59,7 @@ use `sessionKey.provideFactory(registry, createSession)`.
 ```dart
 runApp(
   App(
+    webPathUrls: true,
     modules: <Module>[
       QueryModule(),
       RouterModule(routes: routeTree),
@@ -70,7 +71,11 @@ runApp(
 
 `App` preserves the same lazy-enumeration rollback contract. Initialization
 failures go to `errorBuilder`; secondary rollback and later disposal failures
-are reported once through `FlutterError`.
+are reported once through `FlutterError`. The routed example explicitly sets
+`webPathUrls: true`, installing Flutter's path URL strategy before `runApp` so
+a `RouterModule` yielded later by a lazy iterable cannot configure browser
+history too late. Omit the option to preserve Flutter's or the host's existing
+strategy. Set it to `false` only for a deliberate hash-routing host.
 
 ## Request scope
 

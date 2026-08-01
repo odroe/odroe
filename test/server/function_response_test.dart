@@ -81,7 +81,7 @@ void main() {
     );
     final oversizedResponse = await oversized.handle(_request());
     expect(oversizedResponse.status, 500);
-    expect(await oversizedResponse.readText(), '{"type":"error"}');
+    expect(await oversizedResponse.readText(), '{"version":1,"type":"error"}');
 
     final exposedFailure = _server<String>(
       maxResponseBytes: Server.minimumFunctionResponseFrameBytes,
@@ -90,7 +90,7 @@ void main() {
     );
     final failureResponse = await exposedFailure.handle(_request());
     expect(failureResponse.status, 500);
-    expect(await failureResponse.readText(), '{"type":"error"}');
+    expect(await failureResponse.readText(), '{"version":1,"type":"error"}');
   });
 
   test('bounds an oversized RPC redirect inside its catch path', () async {
@@ -102,7 +102,7 @@ void main() {
 
     final response = await server.handle(_request());
     expect(response.status, 500);
-    expect(await response.readText(), '{"type":"error"}');
+    expect(await response.readText(), '{"version":1,"type":"error"}');
   });
 
   test(

@@ -330,6 +330,28 @@ void main() {
     expect(app, isNot(contains('const sessionKey = ContextKey')));
   });
 
+  test('routing docs preserve live browser path and search state', () async {
+    final routing = (await File(
+      'content/docs/core/routing.mdc',
+    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+    final readme = (await File(
+      '../../README.md',
+    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+
+    expect(routing, contains('set `webPathUrls: true`'));
+    expect(routing, contains("install Flutter's official path URL"));
+    expect(routing, contains('before `runApp`'));
+    expect(routing, contains("preserves Flutter's or the host's existing"));
+    expect(routing, contains('discards those stale loads and Query data'));
+    expect(routing, contains('`webPathUrls: false`'));
+    expect(readme, contains('`webPathUrls: true`'));
+    expect(readme, contains('安装 Flutter 官方 Path URL strategy'));
+    expect(readme, contains('保留 Flutter 或宿主应用已经选择的 URL strategy'));
+    expect(readme, contains('惰性 modules'));
+    expect(readme, contains('旧 loads/query handoff'));
+    expect(readme, contains('`webPathUrls: false`'));
+  });
+
   test('unknown routes return a real 404 document', () async {
     final server = Server(
       routes: generated.serverRouteTree,
@@ -614,6 +636,62 @@ void main() {
     expect(source, contains('DatabaseModule.borrowed'));
     expect(source, contains('app.read(databaseKey)'));
     expect(source, contains('onClose: database.close'));
+    expect(source, contains('## One query, two runtimes'));
+    expect(source, contains('generated typed RPC'));
+    expect(source, contains('wrangler d1 migrations apply DB --local'));
+  });
+
+  test('full-stack database example keeps platform drivers isolated', () async {
+    const example = '../../example/app';
+    final entry = await File('$example/lib/server.dart').readAsString();
+    final native = await File('$example/lib/server_native.dart').readAsString();
+    final cloudflare = await File(
+      '$example/lib/server_cloudflare.dart',
+    ).readAsString();
+    final route = await File(
+      '$example/lib/routes/posts/[postId]/server.dart',
+    ).readAsString();
+    final migration = await File(
+      '$example/migrations/0001_posts.sql',
+    ).readAsString();
+    final exampleReadme = await File('$example/README.md').readAsString();
+    final deployment = await File('content/docs/deploy.mdc').readAsString();
+    final config =
+        jsonDecode(await File('$example/wrangler.jsonc').readAsString())
+            as Map<String, Object?>;
+    final databases = config['d1_databases']! as List<Object?>;
+    final database = databases.single as Map<String, Object?>;
+
+    expect(entry, contains("if (dart.library.io) 'server_native.dart'"));
+    expect(native, contains("package:odroe/database_sqlite.dart"));
+    expect(native, contains('FutureOr<Server> createServer()'));
+    expect(native, contains('await initializePostsDatabase(database)'));
+    expect(native, contains('DatabaseModule.borrowed(database)'));
+    expect(native, contains('onClose: database.close'));
+    expect(native, isNot(contains('database_d1.dart')));
+    expect(cloudflare, contains("package:odroe/database_d1.dart"));
+    expect(cloudflare, contains('FutureOr<Server> createServer()'));
+    expect(cloudflare, contains('invocationModules: (invocation)'));
+    expect(cloudflare, contains("@JS('DB')"));
+    expect(cloudflare, isNot(contains('database_sqlite.dart')));
+    expect(route, contains("package:odroe/database.dart"));
+    expect(route, contains('context.request.read(databaseKey)'));
+    expect(route, contains("const NotFound('Post not found.')"));
+    expect(route, isNot(contains('database_sqlite.dart')));
+    expect(route, isNot(contains('database_d1.dart')));
+    expect(route, isNot(contains(r'Post ${context.data}')));
+    expect(migration, contains('CREATE TABLE posts'));
+    expect(migration, contains("VALUES (42, 'D1 post 42')"));
+    expect(config['main'], './build/odroe/cloudflare/worker.mjs');
+    expect(config['compatibility_date'], '2026-08-01');
+    expect(config['compatibility_flags'], contains('enable_request_signal'));
+    expect(database['binding'], 'DB');
+    expect(database['migrations_dir'], 'migrations');
+    expect(exampleReadme, contains('Flutter page → Query'));
+    expect(exampleReadme, contains('SQLite post 42'));
+    expect(exampleReadme, contains('D1 post 42'));
+    expect(deployment, contains('wrangler d1 migrations apply DB --local'));
+    expect(deployment, contains('Removing `--local` changes the remote'));
   });
 
   test('Constructor dependency types stay on product entrypoints', () async {
@@ -632,6 +710,9 @@ void main() {
     expect(database, isNot(contains('pg.Pool')));
     expect(server, contains('`Client.send`'));
     expect(server, contains('Extending `BaseClient`'));
+    expect(server, contains('controlled `NotFound` and `Redirect`'));
+    expect(server, contains('Every typed frame must use `version: 1`'));
+    expect(server, contains("a `redirect` frame's status must equal"));
     expect(server, isNot(contains('http.Client')));
     expect(readme, contains('`Client.send`'));
     expect(readme, contains('实现 `BaseClient`'));
@@ -733,7 +814,8 @@ void main() {
     expect(source, contains('four independent byte boundaries'));
     expect(source, contains('`Server.maxFunctionResponseFrameBytes`'));
     expect(source, contains('defaults to 1 MiB'));
-    expect(source, contains('minimum is 16 bytes'));
+    expect(source, contains('minimum is 28 bytes'));
+    expect(source, contains('`{"version":1,"type":"error"}`'));
     expect(source, contains('`HttpTransport.maxRequestBodyBytes`'));
     expect(source, contains('PayloadTooLargeException'));
     expect(source, contains('does not cover GET query parameters'));

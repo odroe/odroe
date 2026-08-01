@@ -173,6 +173,17 @@ Future<Post> savePost(AppContext app, UpdatePost input) async {
 }
 ```
 
+`package:odroe/rpc.dart` also exports the controlled `NotFound` and `Redirect`
+results. A server-function file that otherwise needs only the RPC product
+entrypoint does not need an extra internal import to return a typed 404 or
+redirect.
+
+Every typed frame must use `version: 1`. A `notFound` frame is accepted only
+with HTTP 404, and a `redirect` frame's status must equal the HTTP status. A
+mismatch on a successful response is a protocol error. The same mismatch on a
+non-2xx response preserves its remote HTTP status instead of being promoted to
+local control flow.
+
 ## Payload budgets
 
 RPC has four independent byte boundaries: server request input, server typed
@@ -202,8 +213,8 @@ UTF-8 bytes in the complete typed JSON envelope. Each stream frame receives a
 fresh budget and its NDJSON line feed is excluded. Odroe encodes directly to a
 bounded UTF-8 sink: an oversized value becomes a bounded `500` error frame; an
 oversized stream item cancels the upstream stream after one bounded terminal
-error frame. The minimum is 16 bytes so a valid `{"type":"error"}` fallback
-always fits.
+error frame. The minimum is 28 bytes so a valid
+`{"version":1,"type":"error"}` fallback always fits.
 
 Malformed JSON, unknown serializer tags, and values that do not match the
 generated input type return a controlled HTTP 400 before the handler starts.

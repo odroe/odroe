@@ -152,12 +152,31 @@ isolate lifetime.
   "main": "./build/odroe/cloudflare/worker.mjs",
   "compatibility_date": "2026-07-29",
   "compatibility_flags": ["enable_request_signal"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "migrations_dir": "migrations"
+    }
+  ],
   "assets": {
     "directory": "./build/web",
     "html_handling": "drop-trailing-slash"
   }
 }
 ```
+
+When the Worker reads D1, keep schema changes in reviewable migration files and
+apply them explicitly before local runtime verification:
+
+```sh
+wrangler d1 migrations apply DB --local
+wrangler dev --local
+```
+
+The server entry should wrap `DB` through `D1SqlDatabase` in
+`invocationModules`; it must not open SQLite or run asynchronous DDL during
+Fetch bootstrap. Removing `--local` changes the remote database and therefore
+belongs to the authorized deployment procedure, not the local smoke path.
 
 `enable_request_signal` lets a real incoming client disconnect abort the Fetch
 `Request.signal`, which completes `ServerRequest.cancelled`. A Node test can
@@ -166,7 +185,10 @@ configuration.
 
 The generated Fetch bootstrap creates the application `Server` once and
 forwards both its invocation handler and reporter. Handwritten entrypoints
-should preserve the same ownership:
+should preserve the same ownership. Unlike the native bootstrap, Fetch rejects
+a `Future`-returning `createServer()` because the host export must be installed
+synchronously; keep binding wrappers request-scoped instead of doing startup
+I/O.
 
 ```dart
 final appServer = createServer();

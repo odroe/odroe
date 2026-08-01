@@ -44,6 +44,7 @@ void main() {
       generated.serverSource,
     );
     expect(main.readAsStringSync(), contains('DocumentModule()'));
+    expect(main.readAsStringSync(), contains('webPathUrls: true'));
     expect(
       main.readAsStringSync(),
       contains('RouterModule(routes: routeTree)'),

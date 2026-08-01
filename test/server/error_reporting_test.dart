@@ -252,7 +252,7 @@ void main() {
     final response = await server.handle(_rpcRequest('large'));
 
     expect(response.status, 500);
-    expect(await response.readText(), '{"type":"error"}');
+    expect(await response.readText(), '{"version":1,"type":"error"}');
     expect(reported, isEmpty);
   });
 
@@ -285,7 +285,7 @@ void main() {
 
     final response = await server.handle(_rpcRequest('large-stream'));
 
-    expect(await response.readText(), '{"type":"error"}\n');
+    expect(await response.readText(), '{"version":1,"type":"error"}\n');
     expect(reported, isEmpty);
     expect(finalized, isTrue);
   });

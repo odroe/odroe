@@ -39,8 +39,8 @@ final class Server {
 
   /// Smallest valid typed response budget.
   ///
-  /// This fits the terminal `{"type":"error"}` protocol frame.
-  static const int minimumFunctionResponseFrameBytes = 16;
+  /// This fits the terminal `{"version":1,"type":"error"}` protocol frame.
+  static const int minimumFunctionResponseFrameBytes = 28;
 
   /// Creates a server from explicitly selected routes and capabilities.
   Server({
@@ -320,6 +320,7 @@ final class Server {
       response = _controlResponse(
         request,
         <String, Object?>{
+          'version': 1,
           'type': 'redirect',
           'location': redirect.location.toString(),
           'status': redirect.status,
@@ -791,7 +792,10 @@ String _text(String value) =>
     const HtmlEscape(HtmlEscapeMode.element).convert(value);
 
 final _functionFrameEncoder = JsonUtf8Encoder(null, null, 8 * 1024);
-const _minimalFunctionErrorFrame = <String, Object?>{'type': 'error'};
+const _minimalFunctionErrorFrame = <String, Object?>{
+  'version': 1,
+  'type': 'error',
+};
 const _functionResponseTooLargeFrame = <String, Object?>{
   'version': 1,
   'type': 'error',

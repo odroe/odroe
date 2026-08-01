@@ -96,6 +96,7 @@ import 'routes.dart';
 void main() {
   runApp(
     App(
+      webPathUrls: true,
       modules: <Module>[
         QueryModule(),
         RpcModule.http(baseUri: rpcBaseUri()),
@@ -164,7 +165,12 @@ Query 数据，再由 Flutter 的 `DocumentModule` 解码。默认配置可往�
 同一个 adapter 配置分别创建服务端与客户端 serializer，并把客户端实例同时交给
 `RpcModule.http` 与 `DocumentModule`；Odroe 不依赖隐式全局 serializer。
 Flutter Web 的初始 handoff、流式 frame、语义 HTML 隐藏与 Router 站外导航在
-JavaScript 和 WebAssembly 构建中使用同一套浏览器实现。
+JavaScript 和 WebAssembly 构建中使用同一套浏览器实现。上面的路由应用在组合根
+`App` 显式设置 `webPathUrls: true`，于 `runApp` 前安装 Flutter 官方 Path URL
+strategy，使惰性 modules 中的 Router 也能让 typed path/search 与服务端、SSG
+地址保持一致。省略该参数会保留 Flutter 或宿主应用已经选择的 URL strategy；
+若浏览器地址和 prerender handoff 不同，客户端会丢弃那份旧 loads/query handoff，
+按当前地址重新加载。只有明确部署 hash routing 时才设置 `webPathUrls: false`。
 
 `ContextKey`、`RouteCapability` 与 `RequestKey` 按实例身份匹配，不按名称
 匹配。自定义 key 应保存为一个顶层 `final`，并在提供、读取或附加能力时复用
@@ -219,6 +225,10 @@ Odroe 会复制其结果，再写入自己拥有的协议头。`RpcClient` 不�
 `RpcProtocolException`。返回类型明确写成 `ServerResponse` 时会跳过这些
 分类，由调用方负责读取和释放原始响应。
 
+typed frame 必须使用 `version: 1`。`notFound` 只接受 HTTP 404，`redirect`
+frame 的 status 必须与 HTTP status 相同；不一致的 2xx 响应是协议错误，
+不一致的非 2xx 响应保留远端 HTTP status，不能伪装成本地控制流。
+
 RPC 有四个独立字节边界：服务端请求、服务端 typed 输出、客户端 HTTP 请求
 body，以及客户端 typed 响应；生成入口与默认 HTTP 模块均可直接配置：
 
@@ -243,8 +253,8 @@ final server = generated.createServer(
 `Server.maxFunctionResponseFrameBytes` 也默认 1 MiB，按完整 typed JSON
 envelope 的 UTF-8 字节计数；stream 每个 frame 独立计数，换行不计入。
 服务端直接编码 UTF-8 并在超限时停止：value 改为有界 500 error frame，stream
-写入一个有界终止 error frame 并取消上游。预算最小为 16 bytes，以保证仍可发送
-合法 error frame。显式 `ServerResponse` 保持旁路，由应用负责流式读取和限制。
+写入一个有界终止 error frame 并取消上游。预算最小为 28 bytes，以保证仍可发送
+带 `version: 1` 的合法 error frame。显式 `ServerResponse` 保持旁路，由应用负责流式读取和限制。
 
 畸形 JSON、未知 serializer tag 或不符合生成类型的 RPC 输入会在 handler 启动前
 返回受控 HTTP 400，不触发 `Server.onError`；handler 自身抛出的同类异常仍属于
@@ -549,6 +559,28 @@ mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口：
 接受 `SqlDialect.mysql`；显式错配会在该 statement 到达数据库前抛出
 `SqlException(SqlErrorCode.unsupported)`。
 
+仓库中的 [`example/app`](https://github.com/odroe/odroe/tree/main/example/app)
+把 `/posts/42` 跑成一条真实纵向链路：Flutter page → Query → 生成的 typed RPC →
+HTTP → Server → `DatabaseModule` → typed SQL。共享 route 只读公开数据库边界：
+
+```dart
+final titles = await postQueries
+    .selectTable(
+      posts,
+      where: posts.id.equals(context.data),
+      limit: 1,
+    )
+    .all(context.request.read(databaseKey));
+if (titles.isEmpty) throw const NotFound('Post not found.');
+return titles.single;
+```
+
+`lib/server.dart` 通过条件导出隔离平台 driver。Native 入口使用进程拥有的
+in-memory SQLite，request 只借用，并由 `Server.close()` 关闭；它是确定性的
+零配置示例，不代表持久化。Cloudflare 入口则在 `invocationModules` 中包装 D1
+binding，schema 与 seed 来自 `migrations/0001_posts.sql`。因此 Flutter Web、
+Wasm 与 Worker 产物都不需要触达 SQLite FFI。
+
 ```dart
 final statement = BoundSql.parts(
   <String>['SELECT "title" FROM "posts" WHERE "id" = ', ''],
@@ -637,6 +669,9 @@ callback 必须声明 `write` 或 `rowReturning`，因此 transaction control
 与会隐式提交的 DDL 不会被误放进框架管理的事务。
 由于 D1 raw result 无法区分空查询与写入，D1 的 `query` 还会在发送前要求
 `rowReturning`；`SqlQueries` 已自动提供该标记。
+
+`NotFound` 与 `Redirect` 同时由 `package:odroe/rpc.dart` 导出，因此只使用 RPC
+产品入口的 server-function 文件无需为了这些受控结果额外导入内部类型。
 
 ## CLI
 

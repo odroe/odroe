@@ -179,7 +179,7 @@ void main() {
     final rpc = await client.getUrl(
       Uri.parse(
         'http://127.0.0.1:$port/__odroe/functions/$id'
-        '?payload=%7B%22data%22%3A7%7D',
+        '?payload=%7B%22data%22%3A42%7D',
       ),
     );
     rpc.headers.set('origin', 'http://127.0.0.1:$port');
@@ -190,7 +190,29 @@ void main() {
     expect(jsonDecode(rpcBody), <String, Object?>{
       'version': 1,
       'type': 'data',
-      'data': 'Post 7',
+      'data': 'SQLite post 42',
+    });
+
+    final missing = await client.getUrl(
+      Uri.parse(
+        'http://127.0.0.1:$port/__odroe/functions/$id'
+        '?payload=%7B%22data%22%3A404%7D',
+      ),
+    );
+    missing.headers.set('origin', 'http://127.0.0.1:$port');
+    missing.headers.set('x-odroe-server-function', 'true');
+    final missingResponse = await missing.close();
+    final missingBody = await missingResponse.transform(utf8.decoder).join();
+    expect(
+      missingResponse.statusCode,
+      HttpStatus.notFound,
+      reason: missingBody,
+    );
+    expect(jsonDecode(missingBody), <String, Object?>{
+      'version': 1,
+      'type': 'notFound',
+      'message': 'Post not found.',
+      'errorType': 'NotFound',
     });
   });
 }

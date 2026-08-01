@@ -417,6 +417,133 @@ void main() {
     );
   });
 
+  test('rejects empty successful typed responses', () async {
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _RecordingTransport(<ServerResponse>[
+        ServerResponse(),
+        ServerResponse(status: 204),
+      ]),
+    );
+    const function = ServerFunctionRef<NoServerInput, Object?>(id: 'read');
+
+    for (var index = 0; index < 2; index++) {
+      await expectLater(
+        function(client, const NoServerInput()),
+        throwsA(isA<RpcProtocolException>()),
+      );
+    }
+  });
+
+  test('validates frame versions and control response statuses', () async {
+    final transport = _RecordingTransport(<ServerResponse>[
+      ServerResponse.json(<String, Object?>{'type': 'data', 'data': 1}),
+      ServerResponse.json(<String, Object?>{
+        'version': 2,
+        'type': 'data',
+        'data': 1,
+      }),
+      ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'notFound',
+        'message': 'missing',
+      }),
+      ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'notFound',
+        'message': 'missing',
+      }, status: 404),
+      ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'redirect',
+        'location': '/next',
+        'status': 302,
+      }),
+      ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'redirect',
+        'location': '/next',
+        'status': 307,
+      }, status: 302),
+      ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'redirect',
+        'location': '/next',
+        'status': 307,
+      }, status: 307),
+    ]);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: transport,
+    );
+    const function = ServerFunctionRef<NoServerInput, Object?>(id: 'read');
+
+    for (var index = 0; index < 3; index++) {
+      await expectLater(
+        function(client, const NoServerInput()),
+        throwsA(isA<RpcProtocolException>()),
+      );
+    }
+    await expectLater(
+      function(client, const NoServerInput()),
+      throwsA(
+        isA<NotFound>().having((error) => error.message, 'message', 'missing'),
+      ),
+    );
+    await expectLater(
+      function(client, const NoServerInput()),
+      throwsA(isA<RpcProtocolException>()),
+    );
+    await expectLater(
+      function(client, const NoServerInput()),
+      throwsA(
+        isA<RemoteServerException>().having(
+          (error) => error.status,
+          'status',
+          302,
+        ),
+      ),
+    );
+    await expectLater(
+      function(client, const NoServerInput()),
+      throwsA(
+        isA<Redirect>()
+            .having((error) => error.location.path, 'location', '/next')
+            .having((error) => error.status, 'status', 307),
+      ),
+    );
+    expect(transport.requests, hasLength(7));
+  });
+
+  test('round trips redirects from Server through RpcClient', () async {
+    final server = Server(
+      routes: const [],
+      functions: <String, ServerFunctionBinding>{
+        'move': ServerFunctionBinding(
+          ServerFunction<NoServerInput, Never>(
+            handler: (_) => throw Redirect(Uri.parse('/next'), status: 307),
+          ),
+        ),
+      },
+    );
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: _ServerTransport(server),
+    );
+
+    await expectLater(
+      const ServerFunctionRef<NoServerInput, Never>(id: 'move')(
+        client,
+        const NoServerInput(),
+      ),
+      throwsA(
+        isA<Redirect>()
+            .having((error) => error.location.path, 'location', '/next')
+            .having((error) => error.status, 'status', 307),
+      ),
+    );
+  });
+
   test('accepts a typed value frame exactly at its byte budget', () async {
     final frame = _encodedDataFrame('café');
     final exactClient = RpcClient(

@@ -338,7 +338,13 @@ import 'package:odroe/server_fetch.dart';
 import 'package:$packageName/${customServer ? 'server.dart' : 'routes.server.dart'}' as app;
 
 void main() {
-  final appServer = app.createServer();
+  final Object createdServer = app.createServer();
+  if (createdServer is! Server) {
+    throw StateError(
+      'Cloudflare createServer() must return Server synchronously.',
+    );
+  }
+  final appServer = createdServer;
   exportFetchHandler(
     appServer.invocationHandler,
     onError: appServer.onError,

@@ -237,6 +237,51 @@ Server createServer() => generated.createServer(
 );
 ```
 
+## One query, two runtimes
+
+The repository example makes `/posts/42` cross the complete product path:
+Flutter page → Query → generated typed RPC → HTTP → Server → `DatabaseModule`
+→ typed SQL. Its shared handler imports only `package:odroe/database.dart`:
+
+```dart
+final titles = await postQueries
+    .selectTable(
+      posts,
+      where: posts.id.equals(context.data),
+      limit: 1,
+    )
+    .all(context.request.read(databaseKey));
+if (titles.isEmpty) throw const NotFound('Post not found.');
+return titles.single;
+```
+
+One conditional export keeps platform drivers out of the wrong artifact:
+
+```dart
+export 'server_cloudflare.dart'
+    if (dart.library.io) 'server_native.dart'
+    show createServer;
+```
+
+The native entry opens one process-owned in-memory SQLite database.
+Initialization completes before the listener can bind, requests borrow it,
+and `Server.close()` closes it. This is a deterministic zero-configuration demo,
+not persistence. The Cloudflare entry creates an invocation-owned D1 wrapper;
+`migrations/0001_posts.sql` owns the schema and seed instead of running DDL in
+the Fetch bootstrap.
+
+With Wrangler installed, the example's local D1 path is:
+
+```sh
+dart run odroe build --server-target cloudflare web
+wrangler d1 migrations apply DB --local
+wrangler dev --local
+```
+
+Native returns `SQLite post 42`; local D1 returns `D1 post 42`. A missing ID
+returns a typed RPC 404. Applying a remote migration or deploying the Worker is
+a separate state-changing operation.
+
 ## PostgreSQL connections
 
 Keep `PostgresDatabase.open(...)` when one serialized connection is the right

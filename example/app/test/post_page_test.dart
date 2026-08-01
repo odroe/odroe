@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,25 +8,60 @@ import 'package:odroe/odroe_flutter.dart';
 import 'package:odroe/query_flutter.dart';
 import 'package:odroe/router_flutter.dart';
 import 'package:odroe/rpc.dart';
+import 'package:odroe/server_io.dart';
 import 'package:odroe_example/routes.dart';
+import 'package:odroe_example/server.dart' as example_server;
 
 void main() {
   testWidgets('generated RPC completes inside the Flutter event loop', (
     tester,
   ) async {
-    final transport = _ExampleTransport();
-    final client = RpcClient(
-      baseUri: Uri.parse('https://api.example.com'),
-      transport: transport,
-    );
-    final cancelled = Completer<void>();
-    final value = await routes.posts.postId.readTitle(
-      client,
-      42,
-      cancelled: cancelled.future,
-    );
+    final application = (await tester.runAsync(_startNativeApplication))!;
+    final transport = _realHttpTransport();
+    final client = RpcClient(baseUri: application.origin, transport: transport);
+    try {
+      final cancelled = Completer<void>();
+      final value = await tester.runAsync(
+        () => routes.posts.postId.readTitle(
+          client,
+          42,
+          cancelled: cancelled.future,
+        ),
+      );
 
-    expect(value, 'Post 42', reason: 'requests=${transport.requests.length}');
+      expect(value, 'SQLite post 42');
+    } finally {
+      transport.close();
+      await tester.runAsync(application.close);
+    }
+  });
+
+  testWidgets('generated RPC preserves a typed database miss', (tester) async {
+    final application = (await tester.runAsync(_startNativeApplication))!;
+    final transport = _realHttpTransport();
+    final client = RpcClient(baseUri: application.origin, transport: transport);
+
+    try {
+      final error = await tester.runAsync<Object?>(() async {
+        try {
+          await routes.posts.postId.readTitle(client, 404);
+          return null;
+        } on Object catch (error) {
+          return error;
+        }
+      });
+      expect(
+        error,
+        isA<NotFound>().having(
+          (error) => error.message,
+          'message',
+          'Post not found.',
+        ),
+      );
+    } finally {
+      transport.close();
+      await tester.runAsync(application.close);
+    }
   });
 
   testWidgets('malformed stream EOF fails inside the Flutter event loop', (
@@ -60,16 +96,40 @@ void main() {
   testWidgets('post page loads through Query and its generated RPC ref', (
     tester,
   ) async {
-    final transport = await _pumpPostPage(tester);
-
-    expect(find.text('Post 42; preview=true; tags=one,two'), findsOneWidget);
-    expect(transport.requests, hasLength(1));
-    expect(transport.requests.single.method, HttpMethod.get);
-    expect(
-      transport.requests.single.uri.path,
-      '/__odroe/functions/posts.read-title',
+    final application = (await tester.runAsync(_startNativeApplication))!;
+    final transport = _realHttpTransport();
+    final query = QueryClient(
+      options: const QueryClientOptions(
+        queries: QueryPolicy(
+          gcTime: Duration(minutes: 1),
+          retry: QueryRetry.never(),
+        ),
+      ),
     );
-    expect(transport.requests.single.cancelled, isNotNull);
+    try {
+      final client = RpcClient(
+        baseUri: application.origin,
+        transport: transport,
+      );
+      await _pumpPostPageWithModule(
+        tester,
+        RpcModule(client),
+        query: query,
+        waitForRealAsync: true,
+        expectedText: 'SQLite post 42; preview=true; tags=one,two',
+      );
+
+      expect(
+        find.text('SQLite post 42; preview=true; tags=one,two'),
+        findsOneWidget,
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      query.clear();
+      transport.close();
+      await tester.runAsync(application.close);
+    }
   });
 
   testWidgets('post page retries a failed RPC query', (tester) async {
@@ -156,22 +216,47 @@ Future<_ExampleTransport> _pumpPostPage(
   int failures = 0,
 }) async {
   final transport = _ExampleTransport(failures: failures);
-  final query = QueryClient(
-    options: const QueryClientOptions(
-      queries: QueryPolicy(gcTime: Duration.zero, retry: QueryRetry.never()),
+  await _pumpPostPageWithModule(
+    tester,
+    RpcModule(
+      RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: transport,
+      ),
     ),
+    expectedText: failures == 0
+        ? 'Post 42; preview=true; tags=one,two'
+        : 'Unable to load post.',
+    diagnostics: () => 'requests=${transport.requests.length}',
   );
-  addTearDown(query.clear);
-  final rpc = RpcClient(
-    baseUri: Uri.parse('https://api.example.com'),
-    transport: transport,
-  );
+  return transport;
+}
+
+Future<void> _pumpPostPageWithModule(
+  WidgetTester tester,
+  RpcModule rpc, {
+  required String expectedText,
+  String Function()? diagnostics,
+  QueryClient? query,
+  bool waitForRealAsync = false,
+}) async {
+  final resolvedQuery =
+      query ??
+      QueryClient(
+        options: const QueryClientOptions(
+          queries: QueryPolicy(
+            gcTime: Duration.zero,
+            retry: QueryRetry.never(),
+          ),
+        ),
+      );
+  addTearDown(resolvedQuery.clear);
 
   await tester.pumpWidget(
     App(
       modules: <Module>[
-        QueryModule(client: query),
-        RpcModule(rpc),
+        QueryModule(client: resolvedQuery),
+        rpc,
         RouterModule(
           routes: routeTree,
           initialLocation: Uri.parse(
@@ -183,18 +268,67 @@ Future<_ExampleTransport> _pumpPostPage(
     ),
   );
   await tester.pump();
+  if (waitForRealAsync) {
+    for (var attempt = 0; attempt < 100; attempt++) {
+      final state = resolvedQuery.getQueryState<String>(
+        QueryKey('post-title', <Object?>[42]),
+      );
+      if (state != null &&
+          state.status != QueryStatus.pending &&
+          state.fetchStatus == QueryFetchStatus.idle) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+  }
   await _pumpUntil(
     tester,
-    failures == 0
-        ? find.text('Post 42; preview=true; tags=one,two')
-        : find.text('Unable to load post.'),
+    find.text(expectedText),
     reason: () =>
-        'requests=${transport.requests.length}; '
-        'state=${query.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.status}; '
-        'fetch=${query.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.fetchStatus}; '
-        'error=${query.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.error}',
+        '${diagnostics?.call() ?? ''}; '
+        'state=${resolvedQuery.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.status}; '
+        'fetch=${resolvedQuery.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.fetchStatus}; '
+        'error=${resolvedQuery.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.error}',
   );
-  return transport;
+}
+
+HttpTransport _realHttpTransport() => HttpOverrides.runWithHttpOverrides(
+  () => HttpTransport(),
+  _RealHttpOverrides(),
+);
+
+final class _RealHttpOverrides extends HttpOverrides {}
+
+final class _NativeApplication {
+  const _NativeApplication(this.server, this.httpServer);
+
+  final Server server;
+  final HttpServer httpServer;
+
+  Uri get origin => Uri(
+    scheme: 'http',
+    host: httpServer.address.address,
+    port: httpServer.port,
+  );
+
+  Future<void> close() async {
+    await IoServer.close(httpServer);
+    await server.close();
+  }
+}
+
+Future<_NativeApplication> _startNativeApplication() async {
+  final server = await example_server.createServer();
+  try {
+    final httpServer = await IoServer.bind(server.handler, port: 0);
+    return _NativeApplication(server, httpServer);
+  } on Object {
+    await server.close();
+    rethrow;
+  }
 }
 
 Future<void> _pumpUntil(

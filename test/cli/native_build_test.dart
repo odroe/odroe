@@ -10,7 +10,7 @@ import '../support/process.dart';
 
 void main() {
   test(
-    'native artifact serves prerendered routes outside the source tree',
+    'native artifact serves SQLite RPC and routes outside the source tree',
     () async {
       final project = Directory('example/app').absolute;
       final artifactDirectory = Directory(
@@ -113,6 +113,53 @@ void main() {
       );
       expect(json.contentType, contains('application/json'));
       expect(json.vary, 'Accept');
+
+      final origin = 'http://127.0.0.1:$port';
+      final function = Uri.encodeComponent('posts.read-title');
+      final title = await _get(
+        client,
+        Uri.parse(
+          '$origin/__odroe/functions/$function'
+          '?payload=%7B%22data%22%3A42%7D',
+        ),
+        accept: 'application/json',
+        headers: <String, String>{
+          'origin': origin,
+          'x-odroe-server-function': 'true',
+        },
+        logs: logs,
+      );
+      expect(title.status, HttpStatus.ok, reason: '${title.body}\n$logs');
+      expect(jsonDecode(title.body), <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': 'SQLite post 42',
+      });
+
+      final missing = await _get(
+        client,
+        Uri.parse(
+          '$origin/__odroe/functions/$function'
+          '?payload=%7B%22data%22%3A404%7D',
+        ),
+        accept: 'application/json',
+        headers: <String, String>{
+          'origin': origin,
+          'x-odroe-server-function': 'true',
+        },
+        logs: logs,
+      );
+      expect(
+        missing.status,
+        HttpStatus.notFound,
+        reason: '${missing.body}\n$logs',
+      );
+      expect(jsonDecode(missing.body), <String, Object?>{
+        'version': 1,
+        'type': 'notFound',
+        'message': 'Post not found.',
+        'errorType': 'NotFound',
+      });
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
@@ -122,6 +169,7 @@ Future<({int status, String body, String? contentType, String? vary})> _get(
   HttpClient client,
   Uri uri, {
   required String accept,
+  Map<String, String> headers = const <String, String>{},
   required StringBuffer logs,
 }) async {
   final deadline = DateTime.now().add(const Duration(seconds: 20));
@@ -130,6 +178,9 @@ Future<({int status, String body, String? contentType, String? vary})> _get(
     try {
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, accept);
+      for (final entry in headers.entries) {
+        request.headers.set(entry.key, entry.value);
+      }
       final response = await request.close();
       return (
         status: response.statusCode,

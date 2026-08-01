@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Run the example post page through Flutter Query, generated typed RPC, a real
+  `DatabaseModule`, typed SQL, native SQLite, and local Cloudflare D1. Keep the
+  drivers platform-isolated, track the D1 schema as a migration, and export
+  `NotFound` and `Redirect` from the RPC product entrypoint. Validate typed
+  frame versions, reject empty typed responses, and require control-frame
+  status to match HTTP status. Raise the minimum server frame budget from 16
+  to 28 bytes so even the terminal fallback carries `version: 1`.
+- Let routed Flutter apps select path or hash URLs explicitly from `App` before
+  `runApp`, including when a lazy module iterable yields the Router later,
+  while preserving the host's URL strategy by default. Reject stale prerender
+  handoff when the live browser pathname or search differs, preserving typed
+  search during JavaScript and WebAssembly startup.
 - Export the PostgreSQL connection and pool types plus the HTTP client required
   by Odroe's own public driver and transport constructors.
 - Pin the documentation site's Wrangler deployment tool, add a no-upload

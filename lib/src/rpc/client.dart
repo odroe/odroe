@@ -258,9 +258,6 @@ final class RpcClient {
       );
     }
     if (text.isEmpty) {
-      if (_isSuccessful(response.status)) {
-        return <String, Object?>{'type': 'data', 'data': null};
-      }
       _invalidResponse(
         response.status,
         'The server returned an empty RPC response.',
@@ -426,7 +423,11 @@ final class RpcClient {
     if (decoded is! Map) {
       _invalidResponse(status, 'The server returned a non-object RPC frame.');
     }
-    return Map<String, Object?>.from(decoded);
+    final frame = Map<String, Object?>.from(decoded);
+    if (frame['version'] != 1) {
+      _invalidResponse(status, 'The server returned an unsupported RPC frame.');
+    }
+    return frame;
   }
 
   O _decodeFrame<O>(
@@ -451,13 +452,13 @@ final class RpcClient {
           _invalidResponse(status, 'The server returned an invalid redirect.');
         }
         final parsedLocation = Uri.tryParse(location);
-        if (parsedLocation == null) {
+        if (parsedLocation == null || status != redirectStatus) {
           _invalidResponse(status, 'The server returned an invalid redirect.');
         }
         throw Redirect(parsedLocation, status: redirectStatus);
       case 'notFound':
         final message = frame['message'];
-        if (message != null && message is! String) {
+        if (status != 404 || (message != null && message is! String)) {
           _invalidResponse(
             status,
             'The server returned an invalid not-found frame.',

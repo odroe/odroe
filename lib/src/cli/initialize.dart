@@ -471,6 +471,7 @@ import 'routes.dart';
 void main() {
   runApp(
     App(
+      webPathUrls: true,
       modules: <Module>[
         DocumentModule(),
         RouterModule(routes: routeTree),

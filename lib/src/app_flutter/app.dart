@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_web_plugins/url_strategy.dart' as web_navigation;
 
 import '../app/context.dart';
 import '../app/module.dart';
@@ -19,15 +20,27 @@ final class App extends StatefulWidget {
     super.key,
     required this.modules,
     required this.builder,
+    this.webPathUrls,
     this.loading = const SizedBox.shrink(),
     this.errorBuilder = _defaultErrorBuilder,
-  });
+  }) {
+    final pathUrls = webPathUrls;
+    if (pathUrls != null) _configureWebUrlStrategy(pathUrls);
+  }
 
   /// Modules selected by the application.
   ///
   /// The iterable is consumed once when the widget state initializes. Module
   /// ownership then follows [AppContext.create].
   final Iterable<Module> modules;
+
+  /// Selects Flutter Web pathname or hash URLs before [runApp].
+  ///
+  /// `true` installs Flutter's path strategy, `false` installs its hash
+  /// strategy, and `null` preserves the strategy selected by Flutter or the
+  /// host application. Routed Odroe applications should select this explicitly
+  /// so lazy module enumeration cannot configure browser history too late.
+  final bool? webPathUrls;
 
   /// Builds the application after every module is initialized.
   final AppBuilder builder;
@@ -149,4 +162,18 @@ void _reportCleanupError(Object error, StackTrace stackTrace) {
       context: ErrorDescription('while disposing application modules'),
     ),
   );
+}
+
+void _configureWebUrlStrategy(bool pathUrls) {
+  final current = web_navigation.urlStrategy;
+  if (pathUrls) {
+    if (current is! web_navigation.PathUrlStrategy) {
+      web_navigation.usePathUrlStrategy();
+    }
+    return;
+  }
+  if (current is web_navigation.PathUrlStrategy ||
+      current is! web_navigation.HashUrlStrategy) {
+    web_navigation.setUrlStrategy(const web_navigation.HashUrlStrategy());
+  }
 }

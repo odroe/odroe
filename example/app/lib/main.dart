@@ -11,6 +11,7 @@ import 'routes.dart';
 void main() {
   runApp(
     App(
+      webPathUrls: true,
       modules: <Module>[
         QueryModule(),
         RpcModule.http(baseUri: rpcBaseUri()),

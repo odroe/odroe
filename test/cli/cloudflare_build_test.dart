@@ -28,7 +28,15 @@ void main() {
       final bootstrap = await File(
         p.join(project.path, '.dart_tool', 'odroe', 'server_fetch.dart'),
       ).readAsString();
-      expect(bootstrap, contains('final appServer = app.createServer();'));
+      expect(
+        bootstrap,
+        contains('final Object createdServer = app.createServer();'),
+      );
+      expect(
+        bootstrap,
+        contains('Cloudflare createServer() must return Server synchronously.'),
+      );
+      expect(bootstrap, contains('final appServer = createdServer;'));
       expect(bootstrap, contains('appServer.invocationHandler'));
       expect(bootstrap, contains('onError: appServer.onError'));
       expect('app.createServer()'.allMatches(bootstrap), hasLength(1));
@@ -36,6 +44,12 @@ void main() {
       expect(javaScript, isNot(matches(RegExp(r'\beval\s*\('))));
       expect(javaScript, isNot(matches(RegExp(r'\bnew\s+Function\s*\('))));
       expect(await server.length(), lessThan(500 * 1024));
+      final dependencies = await File('${server.path}.deps').readAsString();
+      expect(dependencies, contains('server_cloudflare.dart'));
+      expect(dependencies, contains('database_d1.dart'));
+      expect(dependencies, isNot(contains('database_sqlite.dart')));
+      expect(dependencies, isNot(contains('/sqlite3-')));
+      expect(dependencies, isNot(contains('/lib/ffi/')));
 
       final smoke = await runTestProcess('node', <String>[
         '--input-type=module',
@@ -47,7 +61,7 @@ const response = await worker.fetch(
   new Request('https://example.test/posts/42?preview=true', {
     headers: {accept: 'application/json'},
   }),
-  {},
+  {DB: {}},
   {waitUntil() {}},
 );
 if (response.status !== 200) throw new Error(`status \${response.status}`);
@@ -384,15 +398,31 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
 
       final worker = File('${output.path}/worker.mjs');
       expect(worker.existsSync(), isTrue);
-      final config = File('${output.path}/wrangler.json');
-      await config.writeAsString(
-        jsonEncode(<String, Object>{
-          'name': 'odroe-cloudflare-build-test',
-          'main': 'worker.mjs',
-          'compatibility_date': '2026-07-29',
-          'compatibility_flags': <String>['enable_request_signal'],
-        }),
+      final sourceConfig =
+          jsonDecode(
+                await File(
+                  p.join(project.path, 'wrangler.jsonc'),
+                ).readAsString(),
+              )
+              as Map<String, Object?>;
+      sourceConfig
+        ..remove(r'$schema')
+        ..remove('assets')
+        ..['name'] = 'odroe-cloudflare-build-test'
+        ..['main'] = 'worker.mjs';
+      final databases = (sourceConfig['d1_databases']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+      databases.single['migrations_dir'] = p.relative(
+        p.join(project.path, 'migrations'),
+        from: output.path,
       );
+      expect(sourceConfig['compatibility_date'], '2026-08-01');
+      expect(sourceConfig['compatibility_flags'], <String>[
+        'enable_request_signal',
+      ]);
+      expect(databases.single['binding'], 'DB');
+      final config = File('${output.path}/wrangler.json');
+      await config.writeAsString(jsonEncode(sourceConfig));
 
       final runtime = await Directory.systemTemp.createTemp(
         'odroe-cloudflare-workerd-',
@@ -402,6 +432,35 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       });
       final xdgConfig = await Directory('${runtime.path}/xdg').create();
       final persistence = await Directory('${runtime.path}/state').create();
+      final wranglerEnvironment = <String, String>{
+        'CI': 'true',
+        'NO_COLOR': '1',
+        'WRANGLER_SEND_METRICS': 'false',
+        'WRANGLER_LOG_PATH': '${runtime.path}/wrangler.log',
+        'XDG_CONFIG_HOME': xdgConfig.path,
+      };
+      final migration = await Process.run(
+        wrangler!,
+        <String>[
+          'd1',
+          'migrations',
+          'apply',
+          'DB',
+          '--local',
+          '--config',
+          config.path,
+          '--persist-to',
+          persistence.path,
+        ],
+        workingDirectory: output.path,
+        environment: wranglerEnvironment,
+        includeParentEnvironment: true,
+      ).timeout(const Duration(seconds: 30));
+      expect(
+        migration.exitCode,
+        0,
+        reason: '${migration.stdout}\n${migration.stderr}',
+      );
       final port = await _unusedPort();
       var inspectorPort = await _unusedPort();
       while (inspectorPort == port) {
@@ -409,7 +468,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       }
 
       final process = await Process.start(
-        wrangler!,
+        wrangler,
         <String>[
           'dev',
           '--config',
@@ -428,13 +487,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
           '--show-interactive-dev-session=false',
         ],
         workingDirectory: output.path,
-        environment: <String, String>{
-          'CI': 'true',
-          'NO_COLOR': '1',
-          'WRANGLER_SEND_METRICS': 'false',
-          'WRANGLER_LOG_PATH': '${runtime.path}/wrangler.log',
-          'XDG_CONFIG_HOME': xdgConfig.path,
-        },
+        environment: wranglerEnvironment,
         includeParentEnvironment: true,
       );
       final logs = StringBuffer();
@@ -457,9 +510,10 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 2);
       addTearDown(() => client.close(force: true));
+      final origin = 'http://127.0.0.1:$port';
       final response = await _waitForResponse(
         client,
-        Uri.parse('http://127.0.0.1:$port/posts/42?preview=true'),
+        Uri.parse('$origin/posts/42?preview=true'),
         processExitCode: () => processExitCode,
         logs: logs,
       );
@@ -469,6 +523,49 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         contains('"location":"/posts/42?preview=true"'),
         reason: logs.toString(),
       );
+
+      final function = Uri.encodeComponent('posts.read-title');
+      final title = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$function').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{'data': 42}),
+          },
+        ),
+        headers: <String, String>{
+          'origin': origin,
+          'x-odroe-server-function': 'true',
+        },
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(title.statusCode, 200, reason: '${title.body}\n$logs');
+      expect(jsonDecode(title.body), <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': 'D1 post 42',
+      });
+
+      final missing = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$function').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{'data': 404}),
+          },
+        ),
+        headers: <String, String>{
+          'origin': origin,
+          'x-odroe-server-function': 'true',
+        },
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(missing.statusCode, 404, reason: '${missing.body}\n$logs');
+      final missingFrame = jsonDecode(missing.body) as Map<String, Object?>;
+      expect(missingFrame['version'], 1);
+      expect(missingFrame['type'], 'notFound');
+      expect(missingFrame['message'], 'Post not found.');
+      expect(missingFrame['errorType'], isA<String>());
     },
     skip: wrangler == null || wrangler.isEmpty
         ? 'Set ODROE_WRANGLER to run the local Workerd integration test.'
@@ -577,6 +674,7 @@ Future<int> _unusedPort() async {
 Future<({int statusCode, String body})> _waitForResponse(
   HttpClient client,
   Uri uri, {
+  Map<String, String> headers = const <String, String>{},
   required int? Function() processExitCode,
   required StringBuffer logs,
 }) async {
@@ -592,6 +690,9 @@ Future<({int statusCode, String body})> _waitForResponse(
           .getUrl(uri)
           .timeout(const Duration(seconds: 2));
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      for (final entry in headers.entries) {
+        request.headers.set(entry.key, entry.value);
+      }
       final response = await request.close().timeout(
         const Duration(seconds: 2),
       );
