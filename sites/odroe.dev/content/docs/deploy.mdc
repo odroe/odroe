@@ -15,6 +15,16 @@ your application.
 dart run odroe build --no-server web
 ```
 
+For a Flutter WebAssembly client, pass Flutter's target and flag after `--`:
+
+```sh
+dart run odroe build --no-server -- web --wasm
+```
+
+JavaScript and WebAssembly builds use the same browser DOM path for Document
+handoff, streamed frames, semantic HTML transition, and external Router
+navigation.
+
 Document routes are rendered through the real server. Pure document routes
 produce semantic HTML; Flutter routes also keep their bootstrap and handoff
 state. Files from `public/` are copied without a bundler.

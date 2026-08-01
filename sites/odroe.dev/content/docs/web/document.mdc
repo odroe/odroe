@@ -34,6 +34,9 @@ When a route also has a Flutter page, the server emits readable HTML and
 handoff state before Flutter takes over. Completed and pending Query values use
 the same explicit serializer contract; see
 [Query server handoff](/docs/core/query#server-handoff).
+The browser handoff, streamed frames, semantic HTML transition, and external
+Router navigation use the same DOM implementation in JavaScript and
+WebAssembly builds.
 
 ## Press
 

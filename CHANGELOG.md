@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Select browser DOM handoff and external navigation through JS interop so
+  Flutter Web keeps the same behavior in JavaScript and WebAssembly builds.
 - Freeze nested `QueryKey` list and map parts at construction so cache,
   hydration, and persistence identities cannot diverge after caller mutation.
 - Cancel destroyed mutations while they are paused for connectivity or serial

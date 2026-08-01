@@ -141,6 +141,9 @@ Choose the artifact intentionally:
 # Flutter Web plus prerendered assets, without a deployable server
 dart run odroe build --no-server web
 
+# The same artifact path, compiled with Flutter WebAssembly
+dart run odroe build --no-server -- web --wasm
+
 # Flutter Web plus the default native server artifact
 dart run odroe build web
 

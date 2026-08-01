@@ -165,6 +165,10 @@ void main() {
       expect(source, contains('flutter pub get'));
       expect(source, contains('dart run odroe build --no-server web'));
       expect(
+        source,
+        contains('dart run odroe build --no-server -- web --wasm'),
+      );
+      expect(
         RegExp(
           r'^dart run odroe build --no-server$',
           multiLine: true,
@@ -183,6 +187,11 @@ void main() {
     }
     expect(gettingStarted, contains('lib/routes/route.dart'));
     expect(gettingStarted, contains('lib/routes/page.dart'));
+    expect(
+      deployment,
+      contains('dart run odroe build --no-server -- web --wasm'),
+    );
+    expect(deployment, contains('same browser DOM path'));
     expect(gettingStarted, contains('MaterialApp.router'));
     expect(gettingStarted, contains('dart run odroe dev --server-only'));
     expect(gettingStarted, contains('flutter devices'));

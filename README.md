@@ -163,6 +163,8 @@ Query 数据，再由 Flutter 的 `DocumentModule` 解码。默认配置可往�
 `DateTime`、`Duration`、`Uri`、`BigInt` 与 `Uint8List`。自定义 wire 类型应从
 同一个 adapter 配置分别创建服务端与客户端 serializer，并把客户端实例同时交给
 `RpcModule.http` 与 `DocumentModule`；Odroe 不依赖隐式全局 serializer。
+Flutter Web 的初始 handoff、流式 frame、语义 HTML 隐藏与 Router 站外导航在
+JavaScript 和 WebAssembly 构建中使用同一套浏览器实现。
 
 `ContextKey`、`RouteCapability` 与 `RequestKey` 按实例身份匹配，不按名称
 匹配。自定义 key 应保存为一个顶层 `final`，并在提供、读取或附加能力时复用
@@ -639,6 +641,7 @@ dart run odroe dev -- -d <ios-device-id> --dart-define=ODROE_API_ORIGIN=https://
 dart run odroe dev -- -d chrome
 dart run odroe build --no-server -- apk --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe build --no-server web
+dart run odroe build --no-server -- web --wasm
 dart run odroe build web
 dart run odroe build --server-only --server-target cloudflare
 dart run odroe build --server-target cloudflare web
