@@ -243,16 +243,19 @@ Keep `PostgresDatabase.open(...)` when one serialized connection is the right
 boundary. Server workloads can choose a lazy pool instead:
 
 ```dart
+import 'package:odroe/database_postgres.dart';
+
 final database = PostgresDatabase.pool(
   host: 'localhost',
   database: 'app',
   username: 'app',
   password: secret,
+  settings: const PoolSettings(maxConnectionCount: 4),
 );
 ```
 
 The default `pool(...)` settings use
-`pg.PoolSettings(maxConnectionCount: 4)`. Treat that limit as a database-cost
+`PoolSettings(maxConnectionCount: 4)`. Treat that limit as a database-cost
 control and size it for the deployment. Set it explicitly when passing custom
 `PoolSettings`; the underlying default for a null limit is one connection.
 `poolUrl(...)` has the same one-connection default unless the URL sets
@@ -265,12 +268,15 @@ Concurrency remains bounded by the configured connection limit. Separate
 top-level calls are not guaranteed to reuse one session. Temporary tables,
 `SET`, and other session-local work are outside the Odroe pool contract. Use
 single-connection `open(...)` when that state must span statements, or complete
-the whole unit directly inside a caller-owned `pg.Pool.run(...)` callback.
+the whole unit directly inside a caller-owned `Pool.run(...)` callback.
 
 `PostgresDatabase.fromPool(pool)` borrows the pool by default. Closing the
 database leaves that pool open. Pass `ownsPool: true` when the database should
 close it. Pools created by `pool(...)` and `poolUrl(...)` are owned and released
-by `close()`.
+by `close()`. `Connection`, `ConnectionSettings`, `Pool`, and `PoolSettings`
+are all exported from `package:odroe/database_postgres.dart`. Applications only
+need a direct `package:postgres` dependency for advanced APIs that are not part
+of Odroe's public constructor signatures.
 
 ## Runtime matrix
 

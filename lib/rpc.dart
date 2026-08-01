@@ -1,6 +1,8 @@
 /// Typed Odroe RPC clients, references, transports, and serialization.
 library;
 
+export 'package:http/http.dart' show Client;
+
 export 'src/rpc/client.dart'
     show
         ServerFunctionRef,

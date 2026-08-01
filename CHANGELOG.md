@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Export the PostgreSQL connection and pool types plus the HTTP client required
+  by Odroe's own public driver and transport constructors.
 - Pin the documentation site's Wrangler deployment tool, add a no-upload
   dry-run gate, and document authorized deploy, version readback, and HTTP
   smoke checks.

@@ -260,7 +260,7 @@ unexpected failure，并按 500 上报。
 `RemoteServerException.status`。
 
 默认 `HttpTransport.maxRequestBodyBytes` 是 10 MiB。它会在调用
-`http.Client.send` 前完整缓冲 body，exact limit 可发送，超限会取消 body 并抛出
+`Client.send` 前完整缓冲 body，exact limit 可发送，超限会取消 body 并抛出
 公开的 `PayloadTooLargeException`。该预算不限制 GET query；typed RPC 也已在
 进入 transport 前生成完整 JSON，因此提高它不会把 JSON 调用或上传变成流式。
 这个异常发生在客户端、网络请求开始前；GET payload 只经过服务端输入预算。
@@ -282,7 +282,10 @@ final title = await routes.posts.postId.readTitle(
 `RpcClient` 会停止读取 typed value/stream 并取消上游订阅，默认
 `HttpTransport` 还会中止请求体、响应头与响应体。自定义 `RpcTransport`
 仍必须观察 `ServerRequest.cancelled`，以释放自身拥有的 I/O；调用方注入的
-自定义 `http.Client` 可能不支持物理中止，但不会阻止 typed 调用及时结束。
+自定义 `Client` 可能不支持物理中止，但不会阻止 typed 调用及时结束。
+`Client` 由 `package:odroe/rpc.dart` 直接导出，使用或注入标准 Client 不需要额外
+导入 `package:http`；实现 `BaseClient` 或使用 request/response 等高级 API 时，
+应用仍应直接依赖 `package:http`。
 需要总超时时可直接传入
 `Future<void>.delayed(const Duration(seconds: 10))`，Odroe 不预设 total、
 setup 或 stream idle timeout。
@@ -567,11 +570,14 @@ PostgreSQL 可继续使用 `PostgresDatabase.open(...)` 打开一个串行连接
 服务并发量选择惰性连接池：
 
 ```dart
+import 'package:odroe/database_postgres.dart';
+
 final database = PostgresDatabase.pool(
   host: 'localhost',
   database: 'app',
   username: 'app',
   password: secret,
+  settings: const PoolSettings(maxConnectionCount: 4),
 );
 ```
 
@@ -598,7 +604,7 @@ handler、loader 与 server function 通过 `context.read(databaseKey)` 取得�
 仍拥有底层 binding，Fetch 入口没有虚构的进程级 `onClose`。
 
 `pool(...)` 的默认 settings 是
-`pg.PoolSettings(maxConnectionCount: 4)`；这是控制数据库连接成本的旋钮，
+`PoolSettings(maxConnectionCount: 4)`；这是控制数据库连接成本的旋钮，
 应按部署环境明确调整。若传入自定义 `PoolSettings`，也应显式设置该字段；
 字段为空时底层默认上限是 1。`poolUrl(...)` 同理使用
 `max_connection_count` URL 参数，未设置时上限为 1。创建 pool 不会立即连接，
@@ -607,10 +613,12 @@ handler、loader 与 server function 通过 `context.read(databaseKey)` 取得�
 
 pool-backed 顶层调用不保证复用同一 session。临时表、`SET` 等 session-local
 工作不属于 Odroe pool 合同；需要跨语句持有这类状态时，使用单连接
-`open(...)`，或直接在调用方持有的 `pg.Pool.run(...)` callback 内完成整个
+`open(...)`，或直接在调用方持有的 `Pool.run(...)` callback 内完成整个
 工作单元。`fromPool(...)` 默认借用调用方的 pool；只有显式
 `ownsPool: true` 时，`close()` 才关闭它。`pool(...)` 与 `poolUrl(...)` 创建的
-pool 由数据库拥有，`close()` 会释放它。
+pool 由数据库拥有，`close()` 会释放它。`Connection`、`ConnectionSettings`、
+`Pool` 与 `PoolSettings` 均由 `package:odroe/database_postgres.dart` 导出；只有
+使用 PostgreSQL 包未出现在 Odroe 公开签名中的高级 API 时，应用才需要直接依赖它。
 
 driver 只在 fragments 之间插入 native placeholder，不解析或重写 SQL。SQLite 与
 PostgreSQL 已通过真实合同测试。D1 是 Preview，提供可选的本地

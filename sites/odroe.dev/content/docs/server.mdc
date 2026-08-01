@@ -225,12 +225,16 @@ the response body on overflow. A successful oversized response throws
 `RemoteServerException`.
 
 The default `HttpTransport.maxRequestBodyBytes` is 10 MiB. The transport fully
-buffers a body before `http.Client.send`; an exact-limit body is accepted, while
+buffers a body before `Client.send`; an exact-limit body is accepted, while
 overflow cancels the source and throws the public `PayloadTooLargeException`.
 This limit does not cover GET query parameters. Typed JSON has also already been
 serialized before it reaches the transport, so raising the limit does not make
 typed calls or uploads streaming. This exception is local and occurs before a
-network request starts; GET payloads only cross the server input budget.
+network request starts; GET payloads only cross the server input budget. The
+`Client` accepted by `HttpTransport` is exported directly from
+`package:odroe/rpc.dart`; using or injecting the standard Client needs no second
+`package:http` import. Extending `BaseClient` or using request and response APIs
+still requires a direct `package:http` dependency.
 
 A function explicitly typed to return `ServerResponse` bypasses the typed frame
 budget. The caller then owns streaming, limits, and body release.
@@ -357,7 +361,7 @@ sent. `RpcClient` stops typed value and stream consumption and cancels the
 upstream subscription. The default `HttpTransport` additionally aborts request
 bodies, response setup, and response bodies. A custom `RpcTransport` must
 observe `ServerRequest.cancelled` to release the I/O it owns. A caller-supplied
-`http.Client` may not support the physical abort trigger, but a typed call still
+`Client` may not support the physical abort trigger, but a typed call still
 ends promptly.
 
 The same signal can express a total timeout without a second API:

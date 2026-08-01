@@ -616,6 +616,28 @@ void main() {
     expect(source, contains('onClose: database.close'));
   });
 
+  test('Constructor dependency types stay on product entrypoints', () async {
+    final database = await File(
+      'content/docs/data/database.mdc',
+    ).readAsString();
+    final server = await File('content/docs/server.mdc').readAsString();
+    final readme = await File('../../README.md').readAsString();
+
+    expect(
+      database,
+      contains("import 'package:odroe/database_postgres.dart';"),
+    );
+    expect(database, contains('PoolSettings(maxConnectionCount: 4)'));
+    expect(database, contains('`Connection`, `ConnectionSettings`, `Pool`'));
+    expect(database, isNot(contains('pg.Pool')));
+    expect(server, contains('`Client.send`'));
+    expect(server, contains('Extending `BaseClient`'));
+    expect(server, isNot(contains('http.Client')));
+    expect(readme, contains('`Client.send`'));
+    expect(readme, contains('实现 `BaseClient`'));
+    expect(readme, isNot(contains('http.Client')));
+  });
+
   test(
     'Lifecycle ownership is consistent across public documentation',
     () async {
