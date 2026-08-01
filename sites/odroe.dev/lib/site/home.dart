@@ -291,6 +291,7 @@ HtmlElement _principles() => element(
 
 HtmlElement _principle(String number, String title, String body) => element(
   'article',
+  attributes: const <String, String?>{'class': 'principle'},
   children: <HtmlNode>[
     element(
       'span',

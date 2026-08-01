@@ -133,6 +133,31 @@ void main() {
     },
   );
 
+  test('homepage principle cards keep their layout contract', () async {
+    final server = Server(
+      routes: generated.serverRouteTree,
+      functions: generated.serverFunctions,
+      renderer: const DocumentRenderer(baseHref: '/').call,
+    );
+    final response = await server.handle(
+      ServerRequest(
+        method: HttpMethod.get,
+        uri: Uri(path: '/'),
+        headers: Headers.single(<String, String>{'accept': 'text/html'}),
+      ),
+    );
+    final body = await utf8.decodeStream(response.body);
+    final css = await File('public/site.css').readAsString();
+
+    expect(response.status, 200);
+    expect(
+      RegExp(r'<article class="principle">').allMatches(body),
+      hasLength(3),
+    );
+    expect(css, contains('.principle {'));
+    expect(css, contains('.principle p {'));
+  });
+
   test('social card is a 1200x630 PNG', () async {
     final bytes = await File('public/social-card.png').readAsBytes();
     final source = await File('public/social-card.svg').readAsString();
