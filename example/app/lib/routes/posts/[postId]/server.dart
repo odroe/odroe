@@ -2,7 +2,6 @@ import 'package:odroe/database.dart';
 import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 
-import '../../../models.dart' as models;
 import '../../../posts_database.dart';
 import 'route.dart' as definition;
 
@@ -18,16 +17,4 @@ final readTitle = ServerFunction<int, String>(
     if (titles.isEmpty) throw const NotFound('Post not found.');
     return titles.single;
   },
-);
-
-final watchViews = ServerFunction<NoServerInput, Stream<int>>(
-  handler: (_) => Stream<int>.fromIterable(const <int>[1, 2, 3]),
-);
-
-final doubleValues = ServerFunction<List<int>, List<int>>(
-  handler: (context) => context.data.map((value) => value * 2).toList(),
-);
-
-final normalizePost = ServerFunction<models.PostId, models.PostId>(
-  handler: (context) => models.PostId(context.data.value.abs()),
 );

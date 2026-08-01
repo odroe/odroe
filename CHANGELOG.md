@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Keep the full-stack reference application product-focused by removing
+  uncalled demonstration RPCs, including a custom `PostId` function that had
+  no registered serialization adapter. Preserve stream, collection, and
+  prefixed custom-type generation coverage in compiler tests instead.
 - Make `server.dart` the complete server product entrypoint. Move
   `ServerFunction`, `ServerFunctionBinding`, `ServerFunctionContext`, and
   `ServerFunctionHandler` out of `rpc.dart`; server files now import

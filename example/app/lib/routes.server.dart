@@ -114,17 +114,6 @@ final List<RouteNode> serverRouteTree = <RouteNode>[_serverRouteRoot];
 /// Server functions addressable by generated clients.
 final serverFunctions = <String, ServerFunctionBinding>{
   "posts.read-title": ServerFunctionBinding(posts_post_id_server.readTitle),
-  "lib/routes/posts/[postId]/server.dart#watchViews": ServerFunctionBinding(
-    posts_post_id_server.watchViews,
-  ),
-  "lib/routes/posts/[postId]/server.dart#doubleValues": ServerFunctionBinding(
-    posts_post_id_server.doubleValues,
-    decodeInput: (value) =>
-        (value as List).map((item) => item as int).toList(growable: false),
-  ),
-  "lib/routes/posts/[postId]/server.dart#normalizePost": ServerFunctionBinding(
-    posts_post_id_server.normalizePost,
-  ),
 };
 
 /// Creates the application server from generated routes.

@@ -150,6 +150,62 @@ ${_serverFunction(name: 'readPost', id: 'functionId')}
       expect(output.serverSource, contains('item as int'));
       expect(output.serverSource, contains('.toList(growable: false)'));
     });
+
+    test('emits stream refs and collection codecs', () {
+      final stream = _serverFunction(
+        name: 'watchValues',
+        input: 'NoServerInput',
+        output: 'Stream<int>',
+      );
+      final collection = _serverFunction(
+        name: 'doubleValues',
+        input: 'List<int>',
+        output: 'List<int>',
+      );
+      project.writeFunctions('$stream$collection');
+
+      final output = project.compile();
+
+      expect(output.diagnostics, isEmpty);
+      expect(
+        output.source,
+        contains('ServerStreamFunctionRef<NoServerInput, int>'),
+      );
+      expect(
+        output.source,
+        contains('ServerFunctionRef<List<int>, List<int>>'),
+      );
+      expect(output.source, contains('decodeOutput: (value) =>'));
+      expect(output.serverSource, contains('decodeInput: (value) =>'));
+    });
+
+    test('keeps prefixed custom types in generated client refs', () {
+      project.writeSharedType();
+      project.writeFunctions(
+        _serverFunction(
+          name: 'normalizeToken',
+          input: 'models.Token',
+          output: 'models.Token',
+        ),
+        imports: "import '../models.dart' as models;",
+      );
+
+      final output = project.compile();
+
+      expect(output.diagnostics, isEmpty);
+      expect(
+        output.source,
+        contains("import 'models.dart' as root_models_type;"),
+      );
+      expect(
+        output.source,
+        contains(
+          'ServerFunctionRef<root_models_type.Token, '
+          'root_models_type.Token>',
+        ),
+      );
+      expect(output.serverSource, isNot(contains("import 'models.dart'")));
+    });
   });
 }
 
@@ -157,11 +213,12 @@ String _serverFunction({
   required String name,
   String? id,
   String input = 'int',
+  String output = 'String',
 }) =>
     '''
-final $name = ServerFunction<$input, String>(
+final $name = ServerFunction<$input, $output>(
   ${id == null ? '' : 'id: $id,'}
-  handler: (_) => 'ok',
+  handler: (_) => throw UnimplementedError(),
 );
 ''';
 
@@ -185,10 +242,11 @@ final route = AppRoute<NoParams, NoSearch, NoData>();
   final Directory root;
   final File serverFile;
 
-  void writeFunctions(String functions) {
+  void writeFunctions(String functions, {String imports = ''}) {
     serverFile.writeAsStringSync('''
 import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
+$imports
 
 import 'route.dart' as definition;
 
@@ -196,6 +254,12 @@ final route = definition.route.server();
 
 $functions
 ''');
+  }
+
+  void writeSharedType() {
+    File(
+      '${root.path}/lib/models.dart',
+    ).writeAsStringSync('final class Token { const Token(); }\n');
   }
 
   void writeChildFunctions(String functions) {

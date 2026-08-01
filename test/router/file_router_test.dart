@@ -51,6 +51,11 @@ void main() {
     );
     expect(output.serverSource, contains('Server createServer('));
     expect(
+      RegExp(r': ServerFunctionBinding\(').allMatches(output.serverSource),
+      hasLength(1),
+      reason: 'The reference app should expose only its exercised RPC.',
+    );
+    expect(
       output.serverSource,
       contains('Iterable<Module> Function()? modules'),
     );

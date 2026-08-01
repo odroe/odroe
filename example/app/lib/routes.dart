@@ -2,7 +2,6 @@
 
 import 'package:odroe/router.dart';
 import 'package:odroe/rpc.dart';
-import 'models.dart' as posts_post_id_models_type;
 import 'routes/page.dart' as root_page;
 import 'routes/shell.dart' as root_shell;
 import 'routes/(account)/settings/page.dart' as account_settings_page;
@@ -239,36 +238,6 @@ final class AppPostsPostIdRoutes {
       const ServerFunctionRef<int, String>(
         id: "posts.read-title",
         method: HttpMethod.get,
-      );
-
-  /// Calls `watchViews` on the application server.
-  ServerStreamFunctionRef<NoServerInput, int> get watchViews =>
-      const ServerStreamFunctionRef<NoServerInput, int>(
-        id: "lib/routes/posts/[postId]/server.dart#watchViews",
-        method: HttpMethod.post,
-      );
-
-  /// Calls `doubleValues` on the application server.
-  ServerFunctionRef<List<int>, List<int>> get doubleValues =>
-      ServerFunctionRef<List<int>, List<int>>(
-        id: "lib/routes/posts/[postId]/server.dart#doubleValues",
-        method: HttpMethod.post,
-        decodeOutput: (value) =>
-            (value as List).map((item) => item as int).toList(growable: false),
-      );
-
-  /// Calls `normalizePost` on the application server.
-  ServerFunctionRef<
-    posts_post_id_models_type.PostId,
-    posts_post_id_models_type.PostId
-  >
-  get normalizePost =>
-      const ServerFunctionRef<
-        posts_post_id_models_type.PostId,
-        posts_post_id_models_type.PostId
-      >(
-        id: "lib/routes/posts/[postId]/server.dart#normalizePost",
-        method: HttpMethod.post,
       );
 
   /// Builds a destination for this route.
