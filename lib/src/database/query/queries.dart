@@ -107,6 +107,55 @@ final class SqlQueries {
     return _insert(table, assignments);
   }
 
+  /// Creates one INSERT containing multiple rows.
+  ///
+  /// [rows] and every row must be non-empty. Every row must assign the same
+  /// table columns, in the same order, as the first row. The complete input is
+  /// validated before SQL is constructed.
+  ///
+  /// The returned write is one statement and can use [SqlWrite.returning] on
+  /// dialects that support it. A database does not guarantee that returned rows
+  /// follow the input order; correlate them by a stable key, never by input
+  /// index. Callers remain responsible for keeping a batch within the selected
+  /// database's bound-parameter limit.
+  SqlWrite insertMany(
+    SqlTable<Object?> table,
+    Iterable<Iterable<SqlAssignment>> rows,
+  ) {
+    final validated = <List<SqlAssignment>>[];
+    for (final row in rows) {
+      final assignments = _validateAssignments(table, row);
+      if (assignments.isEmpty) {
+        throw ArgumentError(
+          'Every row in a multi-row INSERT must be non-empty.',
+        );
+      }
+      validated.add(assignments);
+    }
+    if (validated.isEmpty) {
+      throw ArgumentError('A multi-row INSERT requires at least one row.');
+    }
+
+    final first = validated.first;
+    for (final row in validated.skip(1)) {
+      if (row.length != first.length) {
+        throw ArgumentError(
+          'Every row in a multi-row INSERT must assign the same columns in '
+          'the same order.',
+        );
+      }
+      for (var index = 0; index < first.length; index++) {
+        if (!identical(row[index]._column, first[index]._column)) {
+          throw ArgumentError(
+            'Every row in a multi-row INSERT must assign the same columns in '
+            'the same order.',
+          );
+        }
+      }
+    }
+    return _insertMany(table, validated);
+  }
+
   /// Creates a single-row INSERT that does nothing on a matching conflict.
   ///
   /// [values] and [target] must both be non-empty. Every target column must
@@ -184,6 +233,32 @@ final class SqlQueries {
         builder.write(dialect.quoteIdentifier(column.name));
       }
       builder.write(') DO NOTHING');
+    }
+    return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
+  }
+
+  SqlWrite _insertMany(
+    SqlTable<Object?> table,
+    List<List<SqlAssignment>> rows,
+  ) {
+    final first = rows.first;
+    final builder = _BoundSqlBuilder(dialect)
+      ..write('INSERT INTO ')
+      ..write(_quoteTable(table))
+      ..write(' (');
+    for (final (index, assignment) in first.indexed) {
+      if (index != 0) builder.write(', ');
+      builder.write(dialect.quoteIdentifier(assignment._column.name));
+    }
+    builder.write(') VALUES ');
+    for (final (rowIndex, row) in rows.indexed) {
+      if (rowIndex != 0) builder.write(', ');
+      builder.write('(');
+      for (final (columnIndex, assignment) in row.indexed) {
+        if (columnIndex != 0) builder.write(', ');
+        builder.bind(assignment._value);
+      }
+      builder.write(')');
     }
     return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
   }

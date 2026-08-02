@@ -150,6 +150,46 @@ void main() {
       );
     });
 
+    test('runs one atomic typed multi-row INSERT', () async {
+      final table = 'odroe_mysql_many_$suffix';
+      tables.add(table);
+      await database.execute(
+        BoundSql.raw('''
+          CREATE TABLE `$table` (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            label VARCHAR(191) NOT NULL UNIQUE
+          )
+        '''),
+      );
+      final records = _MysqlBatchRecords(table);
+      const queries = SqlQueries(SqlDialect.mysql);
+
+      final inserted = await queries
+          .insertMany(records, <List<SqlAssignment>>[
+            <SqlAssignment>[records.label.set('First')],
+            <SqlAssignment>[records.label.set('Second')],
+          ])
+          .execute(database);
+      expect(inserted.affectedRows, 2);
+      expect(
+        await queries
+            .selectTable(records, orderBy: <SqlOrder>[records.id.ascending])
+            .all(database),
+        <_MysqlBatchRecord>[(id: 1, label: 'First'), (id: 2, label: 'Second')],
+      );
+
+      await expectLater(
+        queries
+            .insertMany(records, <List<SqlAssignment>>[
+              <SqlAssignment>[records.label.set('Temporary')],
+              <SqlAssignment>[records.label.set('First')],
+            ])
+            .execute(database),
+        _throwsSql(SqlErrorCode.constraint),
+      );
+      expect(await _count(database, table), 2);
+    });
+
     test('rolls back atomic and interactive transaction failures', () async {
       final table = 'odroe_mysql_transactions_$suffix';
       tables.add(table);
@@ -452,6 +492,22 @@ void main() {
       );
     });
   }, skip: skipReason);
+}
+
+typedef _MysqlBatchRecord = ({int id, String label});
+
+final class _MysqlBatchRecords extends SqlTable<_MysqlBatchRecord> {
+  _MysqlBatchRecords(super.name);
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<String> label = column<String>('label', sqlText);
+
+  @override
+  late final SqlProjection<_MysqlBatchRecord> projection =
+      SqlProjection<_MysqlBatchRecord>(<SqlSelection<Object?>>[
+        id,
+        label,
+      ], (row) => (id: id.read(row, 0), label: label.read(row, 1)));
 }
 
 final class _MysqlTestConfig {

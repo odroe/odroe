@@ -209,6 +209,47 @@ void main() {
       },
     );
 
+    test('runs atomic typed multi-row INSERT with RETURNING', () async {
+      await database.execute(
+        BoundSql.raw('''
+          CREATE TEMP TABLE typed_many_posts (
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            title TEXT NOT NULL UNIQUE
+          )
+        '''),
+      );
+      final posts = _ConflictPosts('typed_many_posts');
+      const queries = SqlQueries(SqlDialect.postgres);
+
+      final inserted = await queries
+          .insertMany(posts, <List<SqlAssignment>>[
+            <SqlAssignment>[posts.title.set('First')],
+            <SqlAssignment>[posts.title.set('Second')],
+          ])
+          .returning(posts.projection)
+          .all(database);
+      // SQL RETURNING does not guarantee input order; title is the stable key.
+      final insertedByTitle = <String, _ConflictPost>{
+        for (final post in inserted) post.title: post,
+      };
+      expect(
+        insertedByTitle.keys,
+        unorderedEquals(<String>['First', 'Second']),
+      );
+      expect(inserted.map((post) => post.id), unorderedEquals(<int>[1, 2]));
+
+      await expectLater(
+        queries
+            .insertMany(posts, <List<SqlAssignment>>[
+              <SqlAssignment>[posts.title.set('Temporary')],
+              <SqlAssignment>[posts.title.set('First')],
+            ])
+            .execute(database),
+        _throwsSql(SqlErrorCode.constraint),
+      );
+      expect(await _count(database, 'typed_many_posts'), 2);
+    });
+
     test('binds input without scanning or rewriting SQL fragments', () async {
       await database.execute(
         BoundSql.raw(
@@ -701,7 +742,7 @@ void main() {
 typedef _ConflictPost = ({int id, String title});
 
 final class _ConflictPosts extends SqlTable<_ConflictPost> {
-  _ConflictPosts() : super('typed_conflict_posts');
+  _ConflictPosts([super.name = 'typed_conflict_posts']);
 
   late final SqlTableColumn<int> id = column<int>('id', sqlInt);
   late final SqlTableColumn<String> title = column<String>('title', sqlText);

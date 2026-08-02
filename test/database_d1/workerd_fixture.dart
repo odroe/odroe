@@ -103,6 +103,52 @@ Future<void> _run(_Environment environment) async {
     _expect(preservedConflict.id == 1, 'preserved conflict id');
     _expect(preservedConflict.value == 'Original', 'preserved conflict value');
 
+    final insertedMany = await queries
+        .insertMany(conflictRecords, <List<SqlAssignment>>[
+          <SqlAssignment>[
+            conflictRecords.id.set(2),
+            conflictRecords.value.set('Second'),
+          ],
+          <SqlAssignment>[
+            conflictRecords.id.set(3),
+            conflictRecords.value.set('Third'),
+          ],
+        ])
+        .returning(conflictRecords.projection)
+        .all(database);
+    _expect(insertedMany.length == 2, 'multi-row returning count');
+    // SQL RETURNING does not guarantee input order; ID is the stable key.
+    final insertedById = <int, _ConflictRecord>{
+      for (final record in insertedMany) record.id: record,
+    };
+    _expect(insertedById[2]?.value == 'Second', 'multi-row value for ID 2');
+    _expect(insertedById[3]?.value == 'Third', 'multi-row value for ID 3');
+
+    await _expectSqlCode(
+      () => queries
+          .insertMany(conflictRecords, <List<SqlAssignment>>[
+            <SqlAssignment>[
+              conflictRecords.id.set(4),
+              conflictRecords.value.set('Temporary'),
+            ],
+            <SqlAssignment>[
+              conflictRecords.id.set(1),
+              conflictRecords.value.set('Duplicate'),
+            ],
+          ])
+          .execute(database),
+      SqlErrorCode.constraint,
+      'multi-row constraint',
+    );
+    final afterFailedMany = await queries
+        .selectTable(
+          conflictRecords,
+          orderBy: <SqlOrder>[conflictRecords.id.ascending],
+        )
+        .all(database);
+    _expect(afterFailedMany.length == 3, 'failed multi-row rolled back');
+    _expect(afterFailedMany.last.id == 3, 'failed multi-row inserted no tail');
+
     const name = "Odroe ?'); DROP TABLE records; --";
     final createdAt = DateTime.parse('2026-07-30T12:34:56.789+08:00');
     final inserted = await database.execute(

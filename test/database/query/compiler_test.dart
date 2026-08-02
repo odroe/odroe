@@ -23,6 +23,33 @@ void main() {
         expect(insert.statement.kind, SqlStatementKind.write);
         expect(insert.statement.dialect, dialect);
 
+        final insertMany = queries.insertMany(users, <List<SqlAssignment>>[
+          <SqlAssignment>[
+            users.email.set('grace@example.com'),
+            users.active.set(false),
+          ],
+          <SqlAssignment>[
+            users.email.set('linus@example.com'),
+            users.active.set(true),
+          ],
+        ]);
+        expect(insertMany.statement.fragments, <String>[
+          'INSERT INTO ${quote}users$quote '
+              '(${quote}email$quote, ${quote}active$quote) VALUES (',
+          ', ',
+          '), (',
+          ', ',
+          ')',
+        ]);
+        expect(_values(insertMany.statement), <Object?>[
+          'grace@example.com',
+          false,
+          'linus@example.com',
+          true,
+        ]);
+        expect(insertMany.statement.kind, SqlStatementKind.write);
+        expect(insertMany.statement.dialect, dialect);
+
         final select = queries.selectTable(
           users,
           where: users.id.greaterThan(10).and(users.nickname.equals(null)),
@@ -142,6 +169,32 @@ void main() {
         ]);
         expect(returning.statement.kind, SqlStatementKind.rowReturning);
         expect(returning.statement.dialect, dialect);
+
+        final manyReturning = queries
+            .insertMany(users, <List<SqlAssignment>>[
+              <SqlAssignment>[
+                users.email.set('grace@example.com'),
+                users.active.set(false),
+              ],
+              <SqlAssignment>[
+                users.email.set('linus@example.com'),
+                users.active.set(true),
+              ],
+            ])
+            .returning(users.projection);
+        expect(manyReturning.statement.fragments, <String>[
+          'INSERT INTO "users" ("email", "active") VALUES (',
+          ', ',
+          '), (',
+          ', ',
+          ') RETURNING "id", "email", "nickname", "active"',
+        ]);
+        expect(_values(manyReturning.statement), <Object?>[
+          'grace@example.com',
+          false,
+          'linus@example.com',
+          true,
+        ]);
       });
     }
 
@@ -463,6 +516,70 @@ void main() {
   });
 
   group('validation', () {
+    test(
+      'rejects every invalid multi-row INSERT before executor access',
+      () async {
+        final users = _Users();
+        final other = _Users();
+        final duplicateIdentity = users.column<String>('email', sqlText);
+        const queries = SqlQueries(SqlDialect.sqlite);
+        final executor = _RecordingExecutor(const <SqlRow>[]);
+
+        final invalidRows = <Iterable<Iterable<SqlAssignment>> Function()>[
+          () => const <List<SqlAssignment>>[],
+          () => <List<SqlAssignment>>[const <SqlAssignment>[]],
+          () => <List<SqlAssignment>>[
+            <SqlAssignment>[users.email.set('first@example.com')],
+            const <SqlAssignment>[],
+          ],
+          () => <List<SqlAssignment>>[
+            <SqlAssignment>[other.email.set('foreign@example.com')],
+          ],
+          () => <List<SqlAssignment>>[
+            <SqlAssignment>[
+              users.email.set('duplicate@example.com'),
+              users.email.set('duplicate-again@example.com'),
+            ],
+          ],
+          () => <List<SqlAssignment>>[
+            <SqlAssignment>[
+              users.email.set('first@example.com'),
+              users.active.set(true),
+            ],
+            <SqlAssignment>[users.email.set('second@example.com')],
+          ],
+          () => <List<SqlAssignment>>[
+            <SqlAssignment>[
+              users.email.set('first@example.com'),
+              users.active.set(true),
+            ],
+            <SqlAssignment>[
+              users.active.set(false),
+              users.email.set('second@example.com'),
+            ],
+          ],
+          () => <List<SqlAssignment>>[
+            <SqlAssignment>[
+              users.email.set('first@example.com'),
+              users.active.set(true),
+            ],
+            <SqlAssignment>[
+              duplicateIdentity.set('second@example.com'),
+              users.active.set(false),
+            ],
+          ],
+        ];
+
+        for (final rows in invalidRows) {
+          await expectLater(() async {
+            final write = queries.insertMany(users, rows());
+            await write.execute(executor);
+          }, throwsArgumentError);
+        }
+        expect(executor.executeCalls, 0);
+      },
+    );
+
     test('rejects columns owned by another table', () {
       final users = _Users();
       final other = _Users();
@@ -745,6 +862,7 @@ final class _RecordingExecutor implements SqlExecutor {
 
   final List<SqlRow> rows;
   BoundSql? statement;
+  int executeCalls = 0;
 
   @override
   Future<List<T>> query<T>(
@@ -756,6 +874,9 @@ final class _RecordingExecutor implements SqlExecutor {
   }
 
   @override
-  Future<SqlWriteResult> execute(BoundSql statement) =>
-      throw UnsupportedError('The recording executor only supports queries.');
+  Future<SqlWriteResult> execute(BoundSql statement) async {
+    executeCalls++;
+    this.statement = statement;
+    return SqlWriteResult(affectedRows: 0);
+  }
 }

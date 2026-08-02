@@ -84,6 +84,57 @@ void main() {
     ]);
   });
 
+  test('runs atomic multi-row INSERT with typed RETURNING', () async {
+    final inserted = await queries
+        .insertMany(users, <List<SqlAssignment>>[
+          <SqlAssignment>[
+            users.email.set('ada@example.com'),
+            users.nickname.set('Ada'),
+            users.active.set(true),
+          ],
+          <SqlAssignment>[
+            users.email.set('grace@example.com'),
+            users.nickname.set(null),
+            users.active.set(false),
+          ],
+        ])
+        .returning(users.projection)
+        .all(database);
+    // SQL RETURNING does not guarantee input order; email is the stable key.
+    final insertedByEmail = <String, _User>{
+      for (final user in inserted) user.email: user,
+    };
+    expect(
+      insertedByEmail.keys,
+      unorderedEquals(<String>['ada@example.com', 'grace@example.com']),
+    );
+    expect(inserted.map((user) => user.id), unorderedEquals(<int>[1, 2]));
+    expect(insertedByEmail['ada@example.com']?.nickname, 'Ada');
+    expect(insertedByEmail['ada@example.com']?.active, isTrue);
+    expect(insertedByEmail['grace@example.com']?.nickname, isNull);
+    expect(insertedByEmail['grace@example.com']?.active, isFalse);
+
+    await expectLater(
+      queries
+          .insertMany(users, <List<SqlAssignment>>[
+            <SqlAssignment>[
+              users.email.set('temporary@example.com'),
+              users.active.set(true),
+            ],
+            <SqlAssignment>[
+              users.email.set('ada@example.com'),
+              users.active.set(false),
+            ],
+          ])
+          .execute(database),
+      _throwsSql(SqlErrorCode.constraint),
+    );
+    final remaining = await queries.selectTable(users).all(database);
+    expect(<String, _User>{
+      for (final user in remaining) user.email: user,
+    }, insertedByEmail);
+  });
+
   test('inserts once for a targeted conflict and preserves the row', () async {
     final first = await queries
         .insertOnConflictDoNothing(
