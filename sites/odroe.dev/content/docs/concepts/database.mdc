@@ -40,10 +40,13 @@ insert, update, and delete statements for an explicit dialect:
 final posts = Posts();
 const queries = SqlQueries(SqlDialect.sqlite);
 
-final titles = await queries
-    .selectTable(posts, where: posts.id.equals(42), limit: 1)
-    .all(database);
+final title = await queries
+    .selectTable(posts, where: posts.id.equals(42))
+    .oneOrNull(database);
 ```
+
+Use `all` for collections. `oneOrNull` returns `null` for no row and rejects
+multiple rows, preserving an exact zero-or-one cardinality contract.
 
 Column assignment and predicate types are checked by Dart. Joined reads qualify
 columns; left joins require an explicitly optional result selection. Updating

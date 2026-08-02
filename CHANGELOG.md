@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add exact-cardinality `SqlRead.one` and `oneOrNull` terminals. Typed selects
+  probe at most two rows while preserving offsets and explicit limits up to
+  two; mutation `RETURNING` keeps its original statement and validates the
+  returned rows.
 - Persist the full-stack starter's native SQLite data at `.odroe/app.sqlite3`,
   allow an `ODROE_SQLITE_PATH` override, and preserve existing rows with an
   idempotent bootstrap. Give prerender an isolated temporary database and

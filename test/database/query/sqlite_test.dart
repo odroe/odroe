@@ -69,8 +69,8 @@ void main() {
           users.nickname.set('Ada'),
         ], where: users.email.equals('ada@example.com'))
         .returning(users.projection)
-        .all(database);
-    expect(updated.single.nickname, 'Ada');
+        .one(database);
+    expect(updated.nickname, 'Ada');
 
     final deleted = await queries
         .deleteWhere(users, where: users.email.equals('grace@example.com'))
@@ -99,6 +99,115 @@ void main() {
     );
 
     expect(await queries.selectTable(users).all(database), isEmpty);
+  });
+
+  test('checks zero, one, and multiple-row SELECT cardinality', () async {
+    final read = queries.selectTable(
+      users,
+      orderBy: <SqlOrder>[users.id.ascending],
+    );
+
+    expect(await read.oneOrNull(database), isNull);
+    await expectLater(read.one(database), throwsStateError);
+
+    await queries
+        .insert(users, <SqlAssignment>[users.email.set('only@example.com')])
+        .execute(database);
+    const only = (
+      id: 1,
+      email: 'only@example.com',
+      nickname: null,
+      active: true,
+    );
+    expect(await read.one(database), only);
+    expect(await read.oneOrNull(database), only);
+
+    await database.atomicWrite(<BoundSql>[
+      queries.insert(users, <SqlAssignment>[
+        users.email.set('second@example.com'),
+      ]).statement,
+      queries.insert(users, <SqlAssignment>[
+        users.email.set('third@example.com'),
+      ]).statement,
+    ]);
+    expect(await read.all(database), hasLength(3));
+    await expectLater(read.one(database), throwsStateError);
+    await expectLater(read.oneOrNull(database), throwsStateError);
+  });
+
+  test('supports nullable single-column projections', () async {
+    await queries
+        .insert(users, <SqlAssignment>[
+          users.email.set('nullable@example.com'),
+          users.nickname.set(null),
+        ])
+        .execute(database);
+
+    final nullableNickname = queries.select(
+      from: users,
+      projection: SqlProjection.column(users.nickname),
+      where: users.email.equals('nullable@example.com'),
+    );
+    expect(await nullableNickname.one(database), isNull);
+    expect(await nullableNickname.oneOrNull(database), isNull);
+
+    final missingNickname = queries.select(
+      from: users,
+      projection: SqlProjection.column(users.nickname),
+      where: users.email.equals('missing@example.com'),
+    );
+    expect(await missingNickname.oneOrNull(database), isNull);
+    await expectLater(missingNickname.one(database), throwsStateError);
+  });
+
+  test('can roll back a RETURNING cardinality failure', () async {
+    await database.atomicWrite(<BoundSql>[
+      queries.insert(users, <SqlAssignment>[
+        users.email.set('first@example.com'),
+      ]).statement,
+      queries.insert(users, <SqlAssignment>[
+        users.email.set('second@example.com'),
+      ]).statement,
+    ]);
+    final setInactive = queries
+        .updateAll(users, <SqlAssignment>[
+          users.active.set(false),
+        ], confirm: allRows)
+        .returning(users.projection);
+
+    await expectLater(setInactive.one(database), throwsStateError);
+    expect(
+      await queries
+          .select(
+            from: users,
+            projection: SqlProjection.column(users.active),
+            orderBy: <SqlOrder>[users.id.ascending],
+          )
+          .all(database),
+      <bool>[false, false],
+    );
+
+    await queries
+        .updateAll(users, <SqlAssignment>[
+          users.active.set(true),
+        ], confirm: allRows)
+        .execute(database);
+    await expectLater(
+      database.transaction<void>((transaction) async {
+        await setInactive.one(transaction);
+      }),
+      throwsStateError,
+    );
+    expect(
+      await queries
+          .select(
+            from: users,
+            projection: SqlProjection.column(users.active),
+            orderBy: <SqlOrder>[users.id.ascending],
+          )
+          .all(database),
+      <bool>[true, true],
+    );
   });
 
   test(

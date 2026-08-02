@@ -91,9 +91,11 @@ final class SqlQueries {
           ..write('$offset');
       }
     }
-    return SqlRead<R>._(
+    return SqlRead<R>._select(
       builder.build(kind: SqlStatementKind.rowReturning),
       projection.decode,
+      limit: limit,
+      offset: offset,
     );
   }
 
@@ -396,17 +398,104 @@ final class SqlQueries {
 }
 
 /// A compiled row-returning operation.
+///
+/// For a mutation with `RETURNING`, the database applies the write before
+/// projection decoding and cardinality checks. Use
+/// [TransactionalSqlDatabase.transaction] where supported when either failure
+/// must roll back the side effects. Otherwise, constrain the mutation so its
+/// returned row count is already guaranteed.
 final class SqlRead<R> {
-  const SqlRead._(this.statement, this._decode);
+  const SqlRead._(this.statement, this._decode)
+    : _isSelect = false,
+      _limit = null,
+      _offset = null;
+
+  const SqlRead._select(
+    this.statement,
+    this._decode, {
+    required int? limit,
+    required int? offset,
+  }) : _isSelect = true,
+       _limit = limit,
+       _offset = offset;
 
   /// Bound statement available as an explicit low-level escape hatch.
   final BoundSql statement;
 
   final R Function(SqlRow row) _decode;
+  final bool _isSelect;
+  final int? _limit;
+  final int? _offset;
 
   /// Executes this operation through [SqlExecutor.query].
   Future<List<R>> all(SqlExecutor executor) =>
       executor.query<R>(statement, _decode);
+
+  /// Returns the only row produced by this operation.
+  ///
+  /// Throws [StateError] when the operation returns no rows or multiple rows.
+  /// Typed `SELECT` operations fetch at most two rows for this check. An
+  /// explicit query limit of zero, one, or two is preserved.
+  Future<R> one(SqlExecutor executor) async {
+    final rows = await _cardinalityRows(executor);
+    if (rows.isEmpty) {
+      throw StateError(
+        'Expected exactly one SQL row, but no rows were returned.',
+      );
+    }
+    if (rows.length > 1) {
+      throw StateError(
+        'Expected exactly one SQL row, but multiple rows were returned.',
+      );
+    }
+    return _decode(rows.single);
+  }
+
+  /// Returns the only row produced by this operation, or `null` for no rows.
+  ///
+  /// Throws [StateError] when multiple rows are returned. Typed `SELECT`
+  /// operations fetch at most two rows for this check. An explicit query limit
+  /// of zero, one, or two is preserved.
+  ///
+  /// If [R] is nullable, `null` cannot distinguish no row from one row whose
+  /// projection decodes to `null`; use [one] or [all] when that distinction
+  /// matters.
+  Future<R?> oneOrNull(SqlExecutor executor) async {
+    final rows = await _cardinalityRows(executor);
+    if (rows.length > 1) {
+      throw StateError(
+        'Expected at most one SQL row, but multiple rows were returned.',
+      );
+    }
+    return rows.isEmpty ? null : _decode(rows.single);
+  }
+
+  Future<List<SqlRow>> _cardinalityRows(SqlExecutor executor) =>
+      executor.query<SqlRow>(_cardinalityStatement(), _identityRow);
+
+  BoundSql _cardinalityStatement() {
+    if (!_isSelect || (_limit != null && _limit <= 2)) return statement;
+
+    final fragments = List<String>.of(statement.fragments);
+    final last = fragments.last;
+    final currentSuffix = _limit == null
+        ? ''
+        : _paginationSuffix(_limit, _offset);
+    if (currentSuffix.isNotEmpty && !last.endsWith(currentSuffix)) {
+      throw StateError(
+        'Typed SQL pagination does not match the compiled SELECT statement.',
+      );
+    }
+    fragments[fragments.length - 1] =
+        '${last.substring(0, last.length - currentSuffix.length)}'
+        '${_paginationSuffix(2, _offset)}';
+    return BoundSql.parts(
+      fragments,
+      statement.values,
+      kind: statement.kind,
+      dialect: statement.dialect,
+    );
+  }
 }
 
 /// A compiled non-row-returning INSERT, UPDATE, or DELETE.
@@ -424,9 +513,9 @@ final class SqlWrite {
 
   /// Adds a row-returning [projection] to this mutation.
   ///
-  /// The result type exposes only [SqlRead.all], so RETURNING statements cannot
-  /// accidentally use [SqlExecutor.execute]. MySQL rejects this operation
-  /// before any database call.
+  /// The result type exposes only row-returning terminals, so RETURNING
+  /// statements cannot accidentally use [SqlExecutor.execute]. MySQL rejects
+  /// this operation before any database call.
   SqlRead<R> returning<R>(SqlProjection<R> projection) {
     final dialect = statement.dialect!;
     if (!supportsSqlReturning(dialect)) {
@@ -470,6 +559,11 @@ final class SqlWrite {
     );
   }
 }
+
+String _paginationSuffix(int limit, int? offset) =>
+    ' LIMIT $limit${offset == null ? '' : ' OFFSET $offset'}';
+
+SqlRow _identityRow(SqlRow row) => row;
 
 final class _BoundSqlBuilder {
   _BoundSqlBuilder(this._dialect);

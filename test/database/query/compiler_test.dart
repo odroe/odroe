@@ -105,6 +105,100 @@ void main() {
     });
   });
 
+  group('single-row terminals', () {
+    for (final dialect in SqlDialect.values) {
+      for (final terminal in <String>['one', 'oneOrNull']) {
+        test('${dialect.name} $terminal limits cardinality reads without '
+            'changing all', () async {
+          final users = _Users();
+          final queries = SqlQueries(dialect);
+
+          final unbounded = queries.selectTable(users);
+          final unboundedExecutor = _RecordingExecutor(<SqlRow>[_userRow(1)]);
+          if (terminal == 'one') {
+            await unbounded.one(unboundedExecutor);
+          } else {
+            await unbounded.oneOrNull(unboundedExecutor);
+          }
+          expect(
+            unboundedExecutor.statement!.fragments.last,
+            endsWith(' LIMIT 2'),
+          );
+
+          final limited = queries.selectTable(users, limit: 20, offset: 7);
+          final original = limited.statement;
+          final limitedExecutor = _RecordingExecutor(<SqlRow>[_userRow(1)]);
+          if (terminal == 'one') {
+            await limited.one(limitedExecutor);
+          } else {
+            await limited.oneOrNull(limitedExecutor);
+          }
+          expect(
+            limitedExecutor.statement!.fragments.last,
+            endsWith(' LIMIT 2 OFFSET 7'),
+          );
+          expect(original.fragments.last, endsWith(' LIMIT 20 OFFSET 7'));
+
+          final allExecutor = _RecordingExecutor(<SqlRow>[_userRow(1)]);
+          await limited.all(allExecutor);
+          expect(allExecutor.statement, same(original));
+        });
+
+        test('${dialect.name} $terminal preserves limits up to two', () async {
+          final users = _Users();
+          final queries = SqlQueries(dialect);
+
+          for (final limit in <int>[0, 1, 2]) {
+            final read = queries.selectTable(users, limit: limit, offset: 7);
+            final executor = _RecordingExecutor(<SqlRow>[_userRow(1)]);
+            if (terminal == 'one') {
+              await read.one(executor);
+            } else {
+              await read.oneOrNull(executor);
+            }
+            expect(executor.statement, same(read.statement));
+            expect(
+              executor.statement!.fragments.last,
+              endsWith(' LIMIT $limit OFFSET 7'),
+            );
+          }
+        });
+      }
+    }
+
+    for (final terminal in <String>['one', 'oneOrNull']) {
+      test(
+        '$terminal does not decode rows before cardinality is known',
+        () async {
+          final users = _Users();
+          var decodeCalls = 0;
+          final read = const SqlQueries(SqlDialect.sqlite).select(
+            from: users,
+            projection: SqlProjection<String>(
+              <SqlSelection<Object?>>[users.email],
+              (row) {
+                decodeCalls++;
+                return users.email.read(row, 0);
+              },
+            ),
+          );
+          final executor = _RecordingExecutor(<SqlRow>[
+            _emailRow(1),
+            _emailRow(2),
+          ]);
+
+          if (terminal == 'one') {
+            await expectLater(read.one(executor), throwsStateError);
+          } else {
+            await expectLater(read.oneOrNull(executor), throwsStateError);
+          }
+
+          expect(decodeCalls, 0);
+        },
+      );
+    }
+  });
+
   group('relational reads', () {
     for (final dialect in SqlDialect.values) {
       test('${dialect.name} qualifies a typed LEFT JOIN', () {
@@ -529,3 +623,36 @@ List<Object?> _values(BoundSql statement) => <Object?>[
 
 Matcher _throwsSql(SqlErrorCode code) =>
     throwsA(isA<SqlException>().having((error) => error.code, 'code', code));
+
+SqlRow _userRow(int id) => SqlRow(
+  <String>['id', 'email', 'nickname', 'active'],
+  <SqlValue>[
+    SqlValue.integer(id),
+    SqlValue.text('user$id@example.com'),
+    const SqlValue.nullValue(),
+    const SqlValue.boolean(true),
+  ],
+);
+
+SqlRow _emailRow(int id) =>
+    SqlRow(<String>['email'], <SqlValue>[SqlValue.text('user$id@example.com')]);
+
+final class _RecordingExecutor implements SqlExecutor {
+  _RecordingExecutor(this.rows);
+
+  final List<SqlRow> rows;
+  BoundSql? statement;
+
+  @override
+  Future<List<T>> query<T>(
+    BoundSql statement,
+    T Function(SqlRow row) decode,
+  ) async {
+    this.statement = statement;
+    return <T>[for (final row in rows) decode(row)];
+  }
+
+  @override
+  Future<SqlWriteResult> execute(BoundSql statement) =>
+      throw UnsupportedError('The recording executor only supports queries.');
+}

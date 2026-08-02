@@ -24,15 +24,14 @@ final readTitle = ServerFunction<int, String>(
   id: 'posts.read-title',
   method: HttpMethod.get,
   handler: (context) async {
-    final titles = await postQueries
+    final title = await postQueries
         .selectTable(
           posts,
           where: posts.id.equals(context.data),
-          limit: 1,
         )
-        .all(context.request.read(databaseKey));
-    if (titles.isEmpty) throw const NotFound('Post not found.');
-    return titles.single;
+        .oneOrNull(context.request.read(databaseKey));
+    if (title == null) throw const NotFound('Post not found.');
+    return title;
   },
 );
 ```
@@ -40,7 +39,9 @@ final readTitle = ServerFunction<int, String>(
 The input is `int`, the result is `String`, and the stable wire ID is
 `posts.read-title`. `odroe generate` discovers this declaration and emits the
 matching client reference in `lib/routes.dart`. Do not hand-edit generated
-targets or change a released function ID casually.
+targets or change a released function ID casually. `oneOrNull` returns `null`
+for no row and rejects multiple rows, so the primary-key cardinality remains
+explicit without a manual limit or list unpacking.
 
 ## Keep the schema shared
 

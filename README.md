@@ -589,16 +589,18 @@ mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口：
 API、runtime contract 与锁定工具链；route 只读公开数据库边界：
 
 ```dart
-final titles = await postQueries
+final title = await postQueries
     .selectTable(
       posts,
       where: posts.id.equals(context.data),
-      limit: 1,
     )
-    .all(context.request.read(databaseKey));
-if (titles.isEmpty) throw const NotFound('Post not found.');
-return titles.single;
+    .oneOrNull(context.request.read(databaseKey));
+if (title == null) throw const NotFound('Post not found.');
+return title;
 ```
+
+`oneOrNull` 明确要求结果为零行或一行：零行返回 `null`，多行直接拒绝，避免
+在调用端重复维护 `limit`、列表判空与 `single` 解包。
 
 `lib/server.dart` 通过条件导出隔离平台 driver。Native 入口使用进程拥有的文件
 SQLite，默认路径为 `.odroe/app.sqlite3`，request 只借用，并由

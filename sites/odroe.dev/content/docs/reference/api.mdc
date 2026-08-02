@@ -55,6 +55,28 @@ Server route files normally import only `server.dart`. Client code imports
 Do not import native drivers into shared route or Worker code. Put the driver in
 the runtime-specific server entry and expose only `DatabaseModule` to handlers.
 
+### Typed SQL terminals
+
+| Terminal | Result contract |
+| --- | --- |
+| `SqlRead.all(executor)` | Decodes every returned row into a list |
+| `SqlRead.one(executor)` | Returns exactly one row; rejects zero or multiple rows |
+| `SqlRead.oneOrNull(executor)` | Returns one row or `null`; rejects multiple rows |
+
+For typed selects, `one` and `oneOrNull` execute a query capped at two rows so
+they can reject duplicates without transferring an unbounded result. Limits of
+zero, one, or two and every valid offset are preserved; a larger or omitted
+limit becomes two for the cardinality probe. A mutation with
+`RETURNING` cannot be capped portably, so the database applies the mutation
+before Odroe checks all returned rows or decodes the projection. Use an
+interactive transaction where the driver supports one when either failure must
+roll back the write. D1 has no interactive transaction callback, so its SQL
+predicate or schema constraint must guarantee the expected row count instead.
+
+When the projection type itself is nullable, `oneOrNull` cannot distinguish no
+row from one row that decodes to `null`. Use `one` or `all` when presence must
+remain observable.
+
 ## Documents and content
 
 | Entrypoint | Owns |

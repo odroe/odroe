@@ -247,16 +247,18 @@ Flutter page → Query → generated typed RPC → HTTP → Server → `Database
 → typed SQL. Its shared handler imports only `package:odroe/database.dart`:
 
 ```dart
-final titles = await postQueries
+final title = await postQueries
     .selectTable(
       posts,
       where: posts.id.equals(context.data),
-      limit: 1,
     )
-    .all(context.request.read(databaseKey));
-if (titles.isEmpty) throw const NotFound('Post not found.');
-return titles.single;
+    .oneOrNull(context.request.read(databaseKey));
+if (title == null) throw const NotFound('Post not found.');
+return title;
 ```
+
+`oneOrNull` accepts exactly zero or one decoded row. It returns `null` for no
+row and rejects multiple rows instead of silently selecting one.
 
 One conditional export keeps platform drivers out of the wrong artifact:
 

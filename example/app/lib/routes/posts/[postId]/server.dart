@@ -11,10 +11,10 @@ final readTitle = ServerFunction<int, String>(
   id: 'posts.read-title',
   method: HttpMethod.get,
   handler: (context) async {
-    final titles = await postQueries
-        .selectTable(posts, where: posts.id.equals(context.data), limit: 1)
-        .all(context.request.read(databaseKey));
-    if (titles.isEmpty) throw const NotFound('Post not found.');
-    return titles.single;
+    final title = await postQueries
+        .selectTable(posts, where: posts.id.equals(context.data))
+        .oneOrNull(context.request.read(databaseKey));
+    if (title == null) throw const NotFound('Post not found.');
+    return title;
   },
 );

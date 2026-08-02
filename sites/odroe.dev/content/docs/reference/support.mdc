@@ -31,8 +31,8 @@ but the deployment or provider boundary is still deliberately narrow.
 - MySQL/MariaDB does not currently expose a pool and has no portable
   `RETURNING` contract;
 - D1 exposes atomic batches, not an interactive transaction callback;
-- query results are materialized lists; there is no streaming database query
-  surface yet;
+- there is no streaming database query surface yet; drivers materialize result
+  sets, while typed single-row selects cap the SQL result at two rows;
 - browser RPC is same-origin; native apps must provide an explicit HTTP(S)
   origin;
 - local tests do not imply a remote deployment, signed mobile release, DNS

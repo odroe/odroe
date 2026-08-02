@@ -158,12 +158,18 @@ void main() {
       final database = File(
         p.join(project.path, 'lib', 'posts_database.dart'),
       ).readAsStringSync();
+      final routeServer = File(
+        p.join(project.path, 'lib', 'routes', 'server.dart'),
+      ).readAsStringSync();
       expect(nativeServer, contains('ODROE_SQLITE_PATH'));
       expect(nativeServer, contains("'.odroe/app.sqlite3'"));
       expect(nativeServer, contains('databasePath.isEmpty'));
       expect(nativeServer, contains('SqliteDatabase.open(databaseFile.path)'));
       expect(database, contains('CREATE TABLE IF NOT EXISTS posts'));
       expect(database, contains('ON CONFLICT(id) DO NOTHING'));
+      expect(routeServer, contains('.oneOrNull('));
+      expect(routeServer, isNot(contains('limit: 1')));
+      expect(routeServer, isNot(contains('.all(')));
       final gitIgnore = File(p.join(project.path, '.gitignore'));
       expect(
         const LineSplitter().convert(gitIgnore.readAsStringSync()),
