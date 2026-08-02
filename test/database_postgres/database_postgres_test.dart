@@ -238,6 +238,14 @@ void main() {
       );
       expect(inserted.map((post) => post.id), unorderedEquals(<int>[1, 2]));
 
+      final secondId = insertedByTitle['Second']!.id;
+      expect(
+        await queries
+            .selectTable(posts, where: posts.id.isIn(<int>[secondId]))
+            .all(database),
+        <_ConflictPost>[(id: secondId, title: 'Second')],
+      );
+
       await expectLater(
         queries
             .insertMany(posts, <List<SqlAssignment>>[

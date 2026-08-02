@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add type-safe `SqlTableColumn.isIn` and `isNotIn` predicates across SQLite,
+  PostgreSQL, MySQL/MariaDB, and D1. Non-null candidates are encoded eagerly;
+  empty `isIn` and explicit Dart `null` candidates compile to portable predicates,
+  while empty `isNotIn` is rejected before it can expose a full-table mutation.
 - Add `odroe create <directory>` as the guarded source-stage product path from
   a nonexistent target through Flutter scaffold, Odroe dependency resolution,
   and the full-stack starter. Reject existing targets and remove only the

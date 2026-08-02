@@ -72,6 +72,14 @@ final post = await sql
     .selectTable(posts, where: posts.id.equals(42))
     .oneOrNull(database);
 
+final selected = await sql
+    .selectTable(
+      posts,
+      where: posts.id.isIn(<int>[42, 44]),
+      orderBy: <SqlOrder>[posts.id.ascending],
+    )
+    .all(database);
+
 final authorName = authors.displayName.optional.as('author_name');
 final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
   <SqlSelection<Object?>>[posts.title, authorName],
@@ -125,6 +133,19 @@ The dialect is explicit. `posts.title.set(42)` is an analyzer error.
 Joined reads qualify every column automatically. For a `LEFT JOIN`, use the
 result-only `.optional` selection to decode a non-null schema column as
 nullable; it cannot be used for INSERT or UPDATE. Mutations remain single-table.
+
+`isIn` and `isNotIn` bind each non-null candidate through the receiving
+column's codec and snapshot the iterable structure immediately. Empty `isIn`
+compiles to a predicate that never matches; empty `isNotIn` throws
+`ArgumentError` before it can turn a guarded mutation into a full-table
+operation. A Dart `null` candidate is normalized to an explicit `IS NULL` or
+`IS NOT NULL` branch instead of being placed inside the membership list. The
+column codec remains authoritative for non-null Dart candidates and may encode
+one as SQL `NULL`. Without a Dart null candidate, nullable rows retain SQL's
+three-valued behavior and match neither operator. Inputs are not deduplicated
+or auto-chunked, so callers own every provider's parameter limit. Use the
+explicit `updateAll` / `deleteAll` plus `allRows` path when all rows are
+intended.
 
 `insertOnConflictDoNothing` requires non-empty values and an explicit conflict
 target. Every target column must belong to the table, and the column list must

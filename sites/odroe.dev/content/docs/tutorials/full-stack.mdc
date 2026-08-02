@@ -18,7 +18,7 @@ Both shapes keep the same owners visible instead of demonstrating each library
 in isolation:
 
 ```text
-Post and CreatePost records
+Post, CreatePost, and ListPostsInput records
   → generated typed RPC codecs
   → ServerFunction handlers
   → typed SQL
@@ -41,6 +41,7 @@ Put only cross-runtime data in `lib/posts.dart`:
 ```dart
 typedef Post = ({int id, String title});
 typedef CreatePost = ({String title});
+typedef ListPostsInput = ({List<int> ids, String sort});
 ```
 
 This library can be imported by Flutter and by route server files. Keep SQL
@@ -83,8 +84,9 @@ operations, migrations, and resource lifetimes remain visible.
 
 The generated starter declares these functions on its root route and uses
 `NoServerInput` for the list. The reference app evolves them under `/posts`,
-adds a sort input, and imports the same domain source with a prefix. The route
-compiler uses that prefix to forward only client-safe types into `routes.dart`:
+adds a typed sort and optional ID filter, and imports the same domain source
+with a prefix. The route compiler uses that prefix to forward only client-safe
+types into `routes.dart`:
 
 ```dart
 import 'package:odroe/database.dart';
@@ -96,17 +98,28 @@ import 'route.dart' as definition;
 
 final route = definition.route.server();
 
-final listPosts = ServerFunction<String, List<models.Post>>(
+final listPosts = ServerFunction<models.ListPostsInput, List<models.Post>>(
   id: 'posts.list',
   method: HttpMethod.get,
   handler: (context) {
-    final order = switch (context.data) {
+    final input = context.data;
+    if (input.ids.length > 100) {
+      throw const HttpError(
+        400,
+        'Post ID filter cannot contain more than 100 values.',
+      );
+    }
+    final order = switch (input.sort) {
       'newest' => posts.id.descending,
       'oldest' => posts.id.ascending,
       _ => throw const HttpError(400, 'Invalid post sort.'),
     };
     return postQueries
-        .selectTable(posts, orderBy: <SqlOrder>[order])
+        .selectTable(
+          posts,
+          where: input.ids.isEmpty ? null : posts.id.isIn(input.ids),
+          orderBy: <SqlOrder>[order],
+        )
         .all(context.request.read(databaseKey));
   },
 );
@@ -126,6 +139,10 @@ final createPost = ServerFunction<models.CreatePost, models.Post>(
   },
 );
 ```
+
+The reference product rejects more than 100 IDs before SQL construction. The
+core predicate preserves every candidate and leaves provider parameter budgets
+visible to each application instead of silently deduplicating or chunking.
 
 Creation is one statement. The application does not guess the next ID and does
 not insert followed by an unrelated select. `one` requires exactly one returned
@@ -161,10 +178,11 @@ dart run odroe generate
 dart analyze --fatal-infos
 ```
 
-For `CreatePost`, `Post`, and `List<Post>`, the compiler emits four symmetric
-operations: client input encoding, server input decoding, server output
-encoding, and client output decoding. Records use field-name objects on the
-wire. Lists recurse into the record codec.
+For `CreatePost`, `ListPostsInput`, `Post`, and `List<Post>`, the compiler emits
+four symmetric operations: client input encoding, server input decoding,
+server output encoding, and client output decoding. Records use field-name
+objects on the wire. Collections such as `ListPostsInput.ids` and `List<Post>`
+recurse into their element codec.
 
 The generated source remains ordinary Dart and is analyzed with the rest of
 the application. Do not edit `lib/routes.dart` or `lib/routes.server.dart`.
@@ -243,7 +261,7 @@ QueryBuilder<List<Post>>(
     key: listKey,
     query: (query) => generated.routes.posts.listPosts(
       rpc,
-      sort,
+      (ids: const <int>[], sort: sort),
       cancelled: query.cancelToken.whenCancelled.then<void>((_) {}),
     ),
   ),
@@ -344,8 +362,9 @@ server sources and preserves the last-known-good Worker when generation or
 compilation fails. Rebuild Flutter Web explicitly after page or asset changes.
 
 The generated starter must list `D1 post 42`, create a post through D1
-`INSERT ... RETURNING`, and list it again. The reference app additionally reads
-the created ID through `posts.read`. An empty title must return controlled HTTP
+`INSERT ... RETURNING`, and list it again. The reference app additionally
+filters the list through typed ID membership and reads the created ID through
+`posts.read`. An empty title must return controlled HTTP
 400 without adding a row. These checks prove the Fetch host,
 invocation-scoped D1 adapter, generated record codecs, and typed SQL path. They
 do not prove a remote deployment.

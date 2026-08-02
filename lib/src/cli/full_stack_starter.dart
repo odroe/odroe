@@ -1,4 +1,4 @@
-/// Adds the starter-specific route to Odroe's verified full-stack sources.
+/// Adds the starter-specific domain and route to verified full-stack sources.
 Map<String, String> fullStackStarterSources({
   required String packageName,
   required Map<String, String> sharedSources,
@@ -6,6 +6,7 @@ Map<String, String> fullStackStarterSources({
   final deploymentName = _deploymentName(packageName);
   return <String, String>{
     ...sharedSources,
+    'lib/posts.dart': _postsSource,
     'lib/routes/route.dart': _routeSource,
     'lib/routes/page.dart': _pageSource,
     'lib/routes/server.dart': _routeServerSource,
@@ -23,6 +24,12 @@ Map<String, String> fullStackStarterSources({
     ),
   };
 }
+
+const _postsSource = '''
+typedef Post = ({int id, String title});
+
+typedef CreatePost = ({String title});
+''';
 
 String _deploymentName(String packageName) {
   final value = packageName.toLowerCase().replaceAll('_', '-');

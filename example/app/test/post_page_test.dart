@@ -38,10 +38,14 @@ void main() {
 
       database = SqliteDatabase.open(path);
       await initializePostsDatabase(database);
-      final post = await postQueries
-          .selectTable(posts, where: posts.id.equals(created.id))
-          .one(database);
-      expect(post, created);
+      final persisted = await postQueries
+          .selectTable(
+            posts,
+            where: posts.id.isIn(<int>[42, created.id]),
+            orderBy: <SqlOrder>[posts.id.ascending],
+          )
+          .all(database);
+      expect(persisted, <Post>[(id: 42, title: 'SQLite post 42'), created]);
     } finally {
       await database?.close();
       if (state.existsSync()) await state.delete(recursive: true);
@@ -79,9 +83,42 @@ void main() {
     final client = RpcClient(baseUri: application.origin, transport: transport);
     try {
       final initial = (await tester.runAsync(
-        () => routes.posts.listPosts(client, 'newest'),
+        () => routes.posts.listPosts(client, (
+          ids: const <int>[],
+          sort: 'newest',
+        )),
       ))!;
       expect(initial, <Post>[(id: 42, title: 'SQLite post 42')]);
+
+      final selected = (await tester.runAsync(
+        () => routes.posts.listPosts(client, (
+          ids: <int>[42, 404],
+          sort: 'newest',
+        )),
+      ))!;
+      expect(selected, <Post>[(id: 42, title: 'SQLite post 42')]);
+
+      final oversizedError = await tester.runAsync<Object?>(() async {
+        try {
+          await routes.posts.listPosts(client, (
+            ids: List<int>.generate(101, (index) => index),
+            sort: 'newest',
+          ));
+          return null;
+        } on Object catch (error) {
+          return error;
+        }
+      });
+      expect(
+        oversizedError,
+        isA<RemoteServerException>()
+            .having((error) => error.status, 'status', 400)
+            .having(
+              (error) => error.message,
+              'message',
+              'Post ID filter cannot contain more than 100 values.',
+            ),
+      );
 
       final created = (await tester.runAsync(
         () => routes.posts.createPost(client, (title: '  Created post  ')),
@@ -95,7 +132,10 @@ void main() {
       expect(post, created);
 
       final ordered = (await tester.runAsync(
-        () => routes.posts.listPosts(client, 'newest'),
+        () => routes.posts.listPosts(client, (
+          ids: const <int>[],
+          sort: 'newest',
+        )),
       ))!;
       expect(ordered.first, created);
     } finally {

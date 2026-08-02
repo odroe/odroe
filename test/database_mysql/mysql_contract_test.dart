@@ -173,7 +173,11 @@ void main() {
       expect(inserted.affectedRows, 2);
       expect(
         await queries
-            .selectTable(records, orderBy: <SqlOrder>[records.id.ascending])
+            .selectTable(
+              records,
+              where: records.id.isIn(<int>[2, 1]),
+              orderBy: <SqlOrder>[records.id.ascending],
+            )
             .all(database),
         <_MysqlBatchRecord>[(id: 1, label: 'First'), (id: 2, label: 'Second')],
       );

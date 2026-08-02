@@ -17,6 +17,7 @@ This is the smallest useful domain model for the generated full-stack product:
 // lib/posts.dart
 typedef Post = ({int id, String title});
 typedef CreatePost = ({String title});
+typedef ListPostsInput = ({List<int> ids, String sort});
 ```
 
 Keep that file client-safe. It must not import SQLite, D1, `dart:io`, a server
@@ -43,17 +44,28 @@ import 'route.dart' as definition;
 
 final route = definition.route.server();
 
-final listPosts = ServerFunction<String, List<models.Post>>(
+final listPosts = ServerFunction<models.ListPostsInput, List<models.Post>>(
   id: 'posts.list',
   method: HttpMethod.get,
   handler: (context) {
-    final order = switch (context.data) {
+    final input = context.data;
+    if (input.ids.length > 100) {
+      throw const HttpError(
+        400,
+        'Post ID filter cannot contain more than 100 values.',
+      );
+    }
+    final order = switch (input.sort) {
       'newest' => posts.id.descending,
       'oldest' => posts.id.ascending,
       _ => throw const HttpError(400, 'Invalid post sort.'),
     };
     return postQueries
-        .selectTable(posts, orderBy: <SqlOrder>[order])
+        .selectTable(
+          posts,
+          where: input.ids.isEmpty ? null : posts.id.isIn(input.ids),
+          orderBy: <SqlOrder>[order],
+        )
         .all(context.request.read(databaseKey));
   },
 );
@@ -74,8 +86,13 @@ final createPost = ServerFunction<models.CreatePost, models.Post>(
 );
 ```
 
-`odroe generate` resolves `models.Post` and `models.CreatePost`, reads their
-named fields, and emits the four transformations required by one typed call:
+The handler caps the product-level filter before SQL construction. Generated
+typing does not replace application validation or a database provider's bind
+parameter budget.
+
+`odroe generate` resolves `models.Post`, `models.CreatePost`, and
+`models.ListPostsInput`, reads their named fields, and emits the four
+transformations required by one typed call:
 
 ```text
 Flutter record
@@ -92,8 +109,8 @@ handler record
 ```
 
 The same output codec is applied to each stream item. Collection codecs recurse,
-so `List<Post>` remains `List<Post>` on both sides instead of becoming
-`List<dynamic>` or failing as an unregistered `Record` at runtime.
+so `ListPostsInput.ids` and `List<Post>` preserve their element types instead of
+becoming `List<dynamic>` or failing as an unregistered `Record` at runtime.
 
 ## Call records directly from Flutter
 
@@ -105,7 +122,10 @@ final created = await generated.routes.posts.createPost(
   (title: 'Typed from Flutter'),
 );
 
-final posts = await generated.routes.posts.listPosts(rpc, 'newest');
+final posts = await generated.routes.posts.listPosts(
+  rpc,
+  (ids: <int>[42, 44], sort: 'newest'),
+);
 
 print(created.id);
 print(posts.first.title);

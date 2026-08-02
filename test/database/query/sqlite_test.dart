@@ -135,6 +135,109 @@ void main() {
     }, insertedByEmail);
   });
 
+  test('executes typed membership predicates for reads and writes', () async {
+    await queries
+        .insertMany(users, <List<SqlAssignment>>[
+          <SqlAssignment>[
+            users.email.set('ada@example.com'),
+            users.nickname.set('Ada'),
+          ],
+          <SqlAssignment>[
+            users.email.set('grace@example.com'),
+            users.nickname.set(null),
+          ],
+          <SqlAssignment>[
+            users.email.set('linus@example.com'),
+            users.nickname.set('Linus'),
+          ],
+        ])
+        .execute(database);
+
+    expect(
+      await queries
+          .selectTable(
+            users,
+            where: users.id.isIn(<int>[3, 1]),
+            orderBy: <SqlOrder>[users.id.ascending],
+          )
+          .all(database),
+      <_User>[
+        (id: 1, email: 'ada@example.com', nickname: 'Ada', active: true),
+        (id: 3, email: 'linus@example.com', nickname: 'Linus', active: true),
+      ],
+    );
+    expect(
+      await queries
+          .selectTable(
+            users,
+            where: users.nickname.isIn(<String?>['Ada', null]),
+            orderBy: <SqlOrder>[users.id.ascending],
+          )
+          .all(database),
+      <_User>[
+        (id: 1, email: 'ada@example.com', nickname: 'Ada', active: true),
+        (id: 2, email: 'grace@example.com', nickname: null, active: true),
+      ],
+    );
+    expect(
+      await queries
+          .selectTable(users, where: users.nickname.isNotIn(<String?>['Ada']))
+          .all(database),
+      <_User>[
+        (id: 3, email: 'linus@example.com', nickname: 'Linus', active: true),
+      ],
+    );
+    expect(
+      await queries
+          .selectTable(
+            users,
+            where: users.nickname.isNotIn(<String?>['Ada', null]),
+          )
+          .all(database),
+      <_User>[
+        (id: 3, email: 'linus@example.com', nickname: 'Linus', active: true),
+      ],
+    );
+    expect(
+      await queries
+          .selectTable(users, where: users.id.isIn(const <int>[]))
+          .all(database),
+      isEmpty,
+    );
+    expect(
+      () => queries.updateWhere(users, <SqlAssignment>[
+        users.active.set(false),
+      ], where: users.id.isNotIn(const <int>[])),
+      throwsArgumentError,
+    );
+    expect(
+      () => queries.deleteWhere(users, where: users.id.isNotIn(const <int>[])),
+      throwsArgumentError,
+    );
+
+    final updated = await queries
+        .updateWhere(users, <SqlAssignment>[
+          users.active.set(false),
+        ], where: users.id.isIn(<int>[1, 3]))
+        .execute(database);
+    expect(updated.affectedRows, 2);
+
+    final deleted = await queries
+        .deleteWhere(users, where: users.id.isNotIn(<int>[1, 3]))
+        .execute(database);
+    expect(deleted.affectedRows, 1);
+    expect(
+      await queries
+          .select(
+            from: users,
+            projection: SqlProjection.column(users.id),
+            orderBy: <SqlOrder>[users.id.ascending],
+          )
+          .all(database),
+      <int>[1, 3],
+    );
+  });
+
   test('inserts once for a targeted conflict and preserves the row', () async {
     final first = await queries
         .insertOnConflictDoNothing(

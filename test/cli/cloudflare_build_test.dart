@@ -589,7 +589,12 @@ Server createServer() {
         client,
         Uri.parse('$origin/__odroe/functions/$listFunction').replace(
           queryParameters: <String, String>{
-            'payload': jsonEncode(<String, Object?>{'data': 'newest'}),
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{
+                'ids': <int>[42, 404],
+                'sort': 'newest',
+              },
+            }),
           },
         ),
         headers: rpcHeaders,
@@ -604,6 +609,35 @@ Server createServer() {
           <String, Object?>{'id': 42, 'title': 'D1 post 42'},
         ],
       });
+
+      final oversizedList = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{
+                'ids': List<int>.generate(101, (index) => index),
+                'sort': 'newest',
+              },
+            }),
+          },
+        ),
+        headers: rpcHeaders,
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(
+        oversizedList.statusCode,
+        400,
+        reason: '${oversizedList.body}\n$logs',
+      );
+      expect(
+        jsonDecode(oversizedList.body),
+        containsPair(
+          'message',
+          'Post ID filter cannot contain more than 100 values.',
+        ),
+      );
 
       final createFunction = Uri.encodeComponent('posts.create');
       final created = await _waitForResponse(
@@ -652,7 +686,9 @@ Server createServer() {
         client,
         Uri.parse('$origin/__odroe/functions/$listFunction').replace(
           queryParameters: <String, String>{
-            'payload': jsonEncode(<String, Object?>{'data': 'newest'}),
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{'ids': const <int>[], 'sort': 'newest'},
+            }),
           },
         ),
         headers: rpcHeaders,
@@ -710,7 +746,9 @@ Server createServer() {
         client,
         Uri.parse('$origin/__odroe/functions/$listFunction').replace(
           queryParameters: <String, String>{
-            'payload': jsonEncode(<String, Object?>{'data': 'newest'}),
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{'ids': const <int>[], 'sort': 'newest'},
+            }),
           },
         ),
         headers: rpcHeaders,

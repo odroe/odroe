@@ -27,10 +27,12 @@ dart run odroe build web
 Native 的 `CREATE TABLE IF NOT EXISTS` 与公共 typed SQL
 `insertOnConflictDoNothing(..., target: [posts.id])` 只是固定初始 schema 的
 starter bootstrap，不会修改已有表结构。`Posts` projection 解码完整的
-`Post` 记录。`Post` 与 `CreatePost` 放在客户端安全的 `lib/posts.dart`，route
-compiler 为输入、输出、列表和 stream item 生成对称 codec，不需要手写 JSON
-adapter。创建使用单条 typed `INSERT ... RETURNING`，由数据库生成 ID 并返回
-完整 `Post`。Native schema 演进需要应用自己的 migration 流程。构建预渲染时，Odroe CLI 会把
+`Post` 记录。`Post`、`CreatePost` 与 `ListPostsInput` 放在客户端安全的
+`lib/posts.dart`，route compiler 为输入、输出、列表和 stream item 生成对称
+codec，不需要手写 JSON adapter。列表可用 typed `ids` 经 `isIn` 限定数据库行；
+空列表表示不过滤，非空过滤最多接受 100 个 ID，并在 SQL 构造前拒绝超限输入。
+创建使用单条 typed `INSERT ... RETURNING`，由数据库生成 ID 并返回完整 `Post`。
+Native schema 演进需要应用自己的 migration 流程。构建预渲染时，Odroe CLI 会把
 `ODROE_SQLITE_PATH` 覆盖为一次性临时文件，并在结束后删除，因而不会读取或改写
 开发数据库。
 

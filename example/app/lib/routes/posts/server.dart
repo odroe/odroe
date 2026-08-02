@@ -7,17 +7,28 @@ import 'route.dart' as definition;
 
 final route = definition.route.server();
 
-final listPosts = ServerFunction<String, List<models.Post>>(
+final listPosts = ServerFunction<models.ListPostsInput, List<models.Post>>(
   id: 'posts.list',
   method: HttpMethod.get,
   handler: (context) {
-    final order = switch (context.data) {
+    final input = context.data;
+    if (input.ids.length > 100) {
+      throw const HttpError(
+        400,
+        'Post ID filter cannot contain more than 100 values.',
+      );
+    }
+    final order = switch (input.sort) {
       'newest' => posts.id.descending,
       'oldest' => posts.id.ascending,
       _ => throw const HttpError(400, 'Invalid post sort.'),
     };
     return postQueries
-        .selectTable(posts, orderBy: <SqlOrder>[order])
+        .selectTable(
+          posts,
+          where: input.ids.isEmpty ? null : posts.id.isIn(input.ids),
+          orderBy: <SqlOrder>[order],
+        )
         .all(context.request.read(databaseKey));
   },
 );

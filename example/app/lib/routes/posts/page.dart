@@ -72,11 +72,10 @@ final class _PostsPageState extends State<_PostsPage> {
     _listKey = QueryKey<List<Post>>('posts.list', <Object?>[widget.sort]);
     _listOptions = QueryOptions<List<Post>>(
       key: _listKey,
-      query: (query) => generated.routes.posts.listPosts(
-        widget.rpc,
-        widget.sort,
-        cancelled: query.cancelToken.whenCancelled.then<void>((_) {}),
-      ),
+      query: (query) => generated.routes.posts.listPosts(widget.rpc, (
+        ids: const <int>[],
+        sort: widget.sort,
+      ), cancelled: query.cancelToken.whenCancelled.then<void>((_) {})),
     );
   }
 

@@ -194,6 +194,7 @@ void main() {
       expect(database, isNot(contains('INSERT INTO posts')));
       expect(models, contains('typedef Post = ({int id, String title});'));
       expect(models, contains('typedef CreatePost = ({String title});'));
+      expect(models, isNot(contains('ListPostsInput')));
       expect(routeServer, contains('ServerFunction<NoServerInput'));
       expect(routeServer, contains("id: 'posts.list'"));
       expect(routeServer, contains("id: 'posts.create'"));

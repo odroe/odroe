@@ -473,6 +473,19 @@ final class SqlQueries {
         _requireColumnIn(tables, predicate.column);
         _writeColumnReference(builder, predicate.column, aliases);
         builder.write(predicate.negated ? ' IS NOT NULL' : ' IS NULL');
+      case _MembershipPredicate():
+        _requireColumnIn(tables, predicate.column);
+        if (predicate.values.isEmpty) {
+          builder.write('0 = 1');
+          return;
+        }
+        _writeColumnReference(builder, predicate.column, aliases);
+        builder.write(predicate.negated ? ' NOT IN (' : ' IN (');
+        for (final (index, value) in predicate.values.indexed) {
+          if (index != 0) builder.write(', ');
+          builder.bind(value);
+        }
+        builder.write(')');
       case _LogicalPredicate():
         builder.write('(');
         _writePredicate(builder, tables, aliases, predicate.left);
@@ -490,6 +503,7 @@ final class SqlQueries {
         predicate.right,
       ],
       _NullPredicate() => <SqlTableColumn<Object?>>[predicate.column],
+      _MembershipPredicate() => <SqlTableColumn<Object?>>[predicate.column],
       _LogicalPredicate() => <SqlTableColumn<Object?>>[
         ..._predicateColumns(predicate.left),
         ..._predicateColumns(predicate.right),

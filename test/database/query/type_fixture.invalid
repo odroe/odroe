@@ -7,5 +7,8 @@ void invalidTypeFixture() {
   table.email.set(null);
   table.active.equals('yes');
   table.email.equalsColumn(table.active);
+  table.email.isIn(<int>[42]);
+  table.email.isIn(<String?>['ada@example.com', null]);
+  table.id.isNotIn(<String>['42']);
   table.email.optional.set('write');
 }

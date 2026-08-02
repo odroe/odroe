@@ -322,12 +322,18 @@ void main() {
       ]);
     }
 
-    expect(tutorial, contains('Post and CreatePost records'));
+    expect(tutorial, contains('Post, CreatePost, and ListPostsInput records'));
     expect(
       tutorial,
       contains('ServerFunction<models.CreatePost, models.Post>'),
     );
-    expect(tutorial, contains('ServerFunction<String, List<models.Post>>'));
+    expect(
+      tutorial,
+      contains('ServerFunction<models.ListPostsInput, List<models.Post>>'),
+    );
+    expect(tutorial, contains('posts.id.isIn(input.ids)'));
+    expect(tutorial, contains('input.ids.length > 100'));
+    expect(tutorial, contains('before SQL construction'));
     expect(tutorial, contains('DatabaseModule.borrowed(database)'));
     expect(tutorial, contains('D1SqlDatabase'));
     expect(tutorial, contains('generated.routes.posts.createPost'));
@@ -776,6 +782,16 @@ void main() {
     expect(source, contains('does not auto-chunk'));
     expect(source, contains('does not promise input order'));
     expect(source, contains('MySQL/MariaDB executes the multi-row write'));
+    expect(
+      source,
+      contains('`isIn` and `isNotIn` bind each non-null candidate'),
+    );
+    expect(source, contains('empty `isNotIn` throws `ArgumentError`'));
+    expect(source, contains('normalized to an explicit `IS NULL`'));
+    expect(source, contains('may encode one as SQL `NULL`'));
+    expect(source, contains("retain SQL's three-valued behavior"));
+    expect(source, contains("callers own every provider's parameter limit"));
+    expect(source, contains('`updateAll` / `deleteAll` plus `allRows`'));
     expect(source, contains('Future<void> close()'));
     expect(source, contains('DatabaseModule.owned'));
     expect(source, contains('DatabaseModule.borrowed'));

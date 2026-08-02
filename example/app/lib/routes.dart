@@ -223,6 +223,9 @@ final class AppPostsRoutes {
   /// Routes below filesystem route "/posts/[postId]".
   final AppPostsPostIdRoutes postId = const AppPostsPostIdRoutes();
 
+  static Object? _encodelistPosts(posts_models_type.ListPostsInput value) =>
+      <String, Object?>{"ids": value.ids, "sort": value.sort};
+
   static List<posts_models_type.Post> _decodelistPosts(Object? value) =>
       (value as List)
           .map(
@@ -241,10 +244,18 @@ final class AppPostsRoutes {
           .toList(growable: false);
 
   /// Calls `listPosts` on the application server.
-  ServerFunctionRef<String, List<posts_models_type.Post>> get listPosts =>
-      const ServerFunctionRef<String, List<posts_models_type.Post>>(
+  ServerFunctionRef<
+    posts_models_type.ListPostsInput,
+    List<posts_models_type.Post>
+  >
+  get listPosts =>
+      const ServerFunctionRef<
+        posts_models_type.ListPostsInput,
+        List<posts_models_type.Post>
+      >(
         id: "posts.list",
         method: HttpMethod.get,
+        encodeInput: _encodelistPosts,
         decodeOutput: _decodelistPosts,
       );
 

@@ -588,6 +588,14 @@ final post = await sql
     .selectTable(posts, where: posts.id.equals(42))
     .oneOrNull(database);
 
+final selected = await sql
+    .selectTable(
+      posts,
+      where: posts.id.isIn(<int>[42, 44]),
+      orderBy: <SqlOrder>[posts.id.ascending],
+    )
+    .all(database);
+
 final authorName = authors.displayName.optional.as('author_name');
 final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
   <SqlSelection<Object?>>[posts.title, authorName],
@@ -646,6 +654,16 @@ await sql.updateAll(
 与 `allRows` 两次确认。联表查询会自动限定列名；`LEFT JOIN` 右侧的非空
 schema column 通过结果专用的 `.optional` 解码，不能用于写入。
 mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口。
+
+`isIn` / `isNotIn` 在构造 predicate 时立即消费 iterable，并通过 column codec
+绑定每个非空值；Dart `null` 会先归一化，不进入 codec。后续增删或重排输入集合不会
+改变查询；元素值是否复制由 column codec 决定。
+它们保留非空候选的顺序与重复项，不自动去重、
+分块或绕过 provider 参数上限。空 `isIn` 永不匹配；空 `isNotIn` 会直接拒绝，避免
+动态排除集合让 UPDATE/DELETE 静默变成全表操作。真正的全表 mutation 应继续使用
+`updateAll` / `deleteAll` 与 `allRows`。候选中的 `null` 会展开为明确的
+`IS NULL` / `IS NOT NULL` 分支；候选不含 `null` 时，nullable database value
+保留 SQL 三值语义，不匹配 `IN` 或 `NOT IN`。
 
 `insertOnConflictDoNothing` 要求非空 values 与显式 conflict target；列清单必须
 匹配所选数据库接受的 conflict arbiter，其他索引形态继续使用 `BoundSql`。

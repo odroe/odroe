@@ -76,6 +76,26 @@ imports `rpc.dart`; Fetch and IO imports stay at their host entrypoints.
 Do not import native drivers into shared route or Worker code. Put the driver in
 the runtime-specific server entry and expose only `DatabaseModule` to handlers.
 
+### Typed SQL predicates
+
+| Predicate | Contract |
+| --- | --- |
+| `column.equals(value)` / `notEquals(value)` | Bound equality; nullable `null` becomes `IS NULL` / `IS NOT NULL` |
+| `column.isIn(values)` | Bound membership; an empty iterable never matches |
+| `column.isNotIn(values)` | Bound exclusion; rejects an empty iterable |
+| ordered comparisons | Reject `null` before statement construction |
+| `column.isNull` / `isNotNull` | Explicit SQL null checks |
+
+Membership iterables are consumed immediately and non-null candidates are
+encoded through the column codec. Their order and duplicates remain visible in
+the bound statement; Odroe does not deduplicate or chunk around provider
+parameter limits. Explicit Dart `null` candidates are normalized into
+null-check branches before codec binding. A custom codec remains authoritative
+for non-null Dart candidates and may bind SQL `NULL`. Without a Dart null
+candidate, nullable rows retain SQL's three-valued behavior. Rejecting empty
+`isNotIn` prevents dynamic exclusions from bypassing the visible `updateAll` /
+`deleteAll` and `allRows` contract.
+
 ### Typed SQL terminals
 
 | Terminal | Result contract |

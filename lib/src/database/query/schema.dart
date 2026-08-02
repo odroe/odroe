@@ -91,6 +91,24 @@ final class SqlTableColumn<T> implements SqlSelection<T> {
     );
   }
 
+  /// Tests whether this column equals one of [values].
+  ///
+  /// The iterable is consumed and non-null values are encoded immediately. An
+  /// empty collection never matches. A Dart `null` candidate is normalized through
+  /// [isNull]. Without one, a nullable database value retains SQL's unknown
+  /// `IN` result and does not match.
+  SqlPredicate isIn(Iterable<T> values) => _membership(values, negated: false);
+
+  /// Tests whether this column differs from every value in [values].
+  ///
+  /// The iterable is consumed and non-null values are encoded immediately. An
+  /// empty collection is rejected so a dynamic exclusion cannot silently turn a
+  /// guarded mutation into a full-table operation. A Dart `null` candidate is
+  /// normalized through [isNotNull]. Without one, a nullable database value
+  /// retains SQL's unknown `NOT IN` result and does not match.
+  SqlPredicate isNotIn(Iterable<T> values) =>
+      _membership(values, negated: true);
+
   /// Creates a type-safe equality predicate between two columns.
   ///
   /// Nullable and non-nullable columns with the same value type can be
@@ -155,6 +173,33 @@ final class SqlTableColumn<T> implements SqlSelection<T> {
       operator,
       resultColumn.bind(value),
     );
+  }
+
+  SqlPredicate _membership(Iterable<T> values, {required bool negated}) {
+    final encoded = <SqlValue>[];
+    var includesNull = false;
+    for (final value in values) {
+      if (value == null) {
+        includesNull = true;
+      } else {
+        encoded.add(resultColumn.bind(value));
+      }
+    }
+
+    if (negated && encoded.isEmpty && !includesNull) {
+      throw ArgumentError('isNotIn requires at least one candidate.');
+    }
+
+    if (encoded.isEmpty && includesNull) {
+      return negated ? isNotNull : isNull;
+    }
+    final membership = _MembershipPredicate(
+      this as SqlTableColumn<Object?>,
+      encoded,
+      negated: negated,
+    );
+    if (!includesNull) return membership;
+    return negated ? membership.and(isNotNull) : membership.or(isNull);
   }
 }
 
@@ -275,6 +320,15 @@ final class _NullPredicate extends SqlPredicate {
   const _NullPredicate(this.column, {required this.negated}) : super._();
 
   final SqlTableColumn<Object?> column;
+  final bool negated;
+}
+
+final class _MembershipPredicate extends SqlPredicate {
+  const _MembershipPredicate(this.column, this.values, {required this.negated})
+    : super._();
+
+  final SqlTableColumn<Object?> column;
+  final List<SqlValue> values;
   final bool negated;
 }
 

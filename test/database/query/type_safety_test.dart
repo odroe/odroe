@@ -31,6 +31,9 @@ void main() {
         'argument_type_not_assignable',
         'argument_type_not_assignable',
         'argument_type_not_assignable',
+        'argument_type_not_assignable',
+        'argument_type_not_assignable',
+        'argument_type_not_assignable',
         'undefined_getter',
       ],
     );

@@ -124,6 +124,17 @@ Future<void> _run(_Environment environment) async {
     _expect(insertedById[2]?.value == 'Second', 'multi-row value for ID 2');
     _expect(insertedById[3]?.value == 'Third', 'multi-row value for ID 3');
 
+    final selectedMembership = await queries
+        .selectTable(
+          conflictRecords,
+          where: conflictRecords.id.isIn(<int>[3, 1]),
+          orderBy: <SqlOrder>[conflictRecords.id.ascending],
+        )
+        .all(database);
+    _expect(selectedMembership.length == 2, 'membership row count');
+    _expect(selectedMembership.first.id == 1, 'membership first ID');
+    _expect(selectedMembership.last.id == 3, 'membership last ID');
+
     await _expectSqlCode(
       () => queries
           .insertMany(conflictRecords, <List<SqlAssignment>>[

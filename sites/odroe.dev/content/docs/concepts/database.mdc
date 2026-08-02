@@ -50,6 +50,38 @@ multiple rows, preserving an exact zero-or-one cardinality contract. The table
 projection can decode a complete application record; the caller does not need
 to rebuild an entity from unrelated scalar queries.
 
+## Membership stays typed
+
+Batch reads and filters remain on the same typed predicate path:
+
+```dart
+final selected = await queries
+    .selectTable(
+      posts,
+      where: posts.id.isIn(<int>[42, 44]),
+      orderBy: <SqlOrder>[posts.id.ascending],
+    )
+    .all(database);
+```
+
+`isIn` and `isNotIn` consume the iterable immediately and encode every non-null
+candidate through the column codec. Adding, removing, or reordering source
+collection entries later cannot change the predicate; copying an element's
+mutable payload remains the codec's contract. Non-null candidate order and
+duplicates are retained; Odroe does not auto-deduplicate, chunk, or bypass a
+provider's bound-parameter limit.
+
+Empty collections are safe and explicit: `isIn([])` never matches, while
+`isNotIn([])` throws `ArgumentError`. A dynamic exclusion cannot silently turn
+an UPDATE or DELETE into a full-table mutation; intentional full-table writes
+keep using `updateAll` or `deleteAll` with `allRows`.
+
+An explicit Dart `null` candidate becomes an `IS NULL` or `IS NOT NULL` branch
+instead of entering the membership list. A custom codec remains authoritative
+for every non-null Dart candidate and may encode one as SQL `NULL`. Without a
+Dart null candidate, a nullable database value keeps SQL's three-valued
+behavior and matches neither `IN` nor `NOT IN`.
+
 Idempotent inserts keep the conflict key visible:
 
 ```dart

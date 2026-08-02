@@ -19,11 +19,12 @@ final class TypeFixtureTable extends SqlTable<({String email, bool active})> {
       ], (row) => (email: email.read(row, 0), active: active.read(row, 1)));
 }
 
-List<SqlPredicate> validColumnComparisons(TypeFixtureTable table) =>
-    <SqlPredicate>[
-      table.id.equalsColumn(table.ownerId),
-      table.ownerId.equalsColumn(table.id),
-    ];
+List<SqlPredicate> validPredicates(TypeFixtureTable table) => <SqlPredicate>[
+  table.id.equalsColumn(table.ownerId),
+  table.ownerId.equalsColumn(table.id),
+  table.email.isIn(<String>['ada@example.com']),
+  table.ownerId.isNotIn(<int?>[1, null]),
+];
 
 SqlProjection<String?> validOptionalProjection(TypeFixtureTable table) =>
     SqlProjection.column(table.email.optional);

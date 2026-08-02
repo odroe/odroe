@@ -116,6 +116,21 @@ final List<RouteNode> serverRouteTree = <RouteNode>[_serverRouteRoot];
 final serverFunctions = <String, ServerFunctionBinding>{
   "posts.list": ServerFunctionBinding(
     posts_server.listPosts,
+    decodeInput: (value) => ((Map<String, Object?> record) {
+      if (record.length != 2 ||
+          !record.containsKey("ids") ||
+          !record.containsKey("sort")) {
+        throw FormatException(
+          "Expected models.ListPostsInput fields: ids, sort",
+        );
+      }
+      return (
+        ids: (record["ids"] as List)
+            .map((item) => item as int)
+            .toList(growable: false),
+        sort: record["sort"] as String,
+      );
+    })(value as Map<String, Object?>),
     encodeOutput: (value) => ((List<posts_models_type.Post> typed) => typed
         .map((item) => <String, Object?>{"id": item.id, "title": item.title})
         .toList(growable: false))(value as List<posts_models_type.Post>),

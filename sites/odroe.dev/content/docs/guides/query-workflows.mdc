@@ -56,7 +56,7 @@ QueryOptions<List<Post>> _createListOptions() {
     key: QueryKey<List<Post>>('posts.list', <Object?>[sort]),
     query: (query) => routes.listPosts(
       rpc,
-      sort,
+      (ids: const <int>[], sort: sort),
       cancelled: query.cancelToken.whenCancelled.then<void>((_) {}),
     ),
   );
