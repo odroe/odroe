@@ -3,6 +3,27 @@ import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('canonicalizes and validates the server function namespace', () {
+    expect(
+      Server(routes: const [], functionPath: '/rpc/').functionPath,
+      '/rpc',
+    );
+    for (final path in <String>[
+      '',
+      '/',
+      'rpc',
+      '/rpc//v1',
+      '/rpc/../v1',
+      '/rpc?debug=true',
+    ]) {
+      expect(
+        () => Server(routes: const [], functionPath: path),
+        throwsArgumentError,
+        reason: path,
+      );
+    }
+  });
+
   test('server configuration is an immutable snapshot', () {
     Future<ServerResponse> middleware(RequestContext _, Next next) => next();
     final definition = AppRoute<NoParams, NoSearch, NoData>(path: '/');

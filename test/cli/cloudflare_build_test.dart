@@ -546,6 +546,27 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         'data': 'D1 post 42',
       });
 
+      final extraSegment = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$function/extra').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{'data': 42}),
+          },
+        ),
+        headers: <String, String>{
+          'origin': origin,
+          'x-odroe-server-function': 'true',
+        },
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(
+        extraSegment.statusCode,
+        404,
+        reason: '${extraSegment.body}\n$logs',
+      );
+      expect(jsonDecode(extraSegment.body), containsPair('type', 'notFound'));
+
       final missing = await _waitForResponse(
         client,
         Uri.parse('$origin/__odroe/functions/$function').replace(

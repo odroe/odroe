@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Require exactly one encoded function ID segment under the RPC namespace,
+  preserving `%2F` inside IDs while rejecting empty or extra path segments
+  before a function can run. Validate and canonicalize custom function paths
+  consistently on clients and servers.
 - Keep the full-stack reference application product-focused by removing
   uncalled demonstration RPCs, including a custom `PostId` function that had
   no registered serialization adapter. Preserve stream, collection, and

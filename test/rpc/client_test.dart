@@ -24,6 +24,26 @@ void main() {
       RpcClient.defaultMaxResponseFrameBytes,
     );
     expect(RpcClient.defaultMaxResponseFrameBytes, 1024 * 1024);
+
+    expect(
+      RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: _RecordingTransport(const <ServerResponse>[]),
+        functionPath: '/rpc/',
+      ).functionPath,
+      '/rpc',
+    );
+    for (final path in <String>['', '/', 'rpc']) {
+      expect(
+        () => RpcClient(
+          baseUri: Uri.parse('https://api.example.com'),
+          transport: _RecordingTransport(const <ServerResponse>[]),
+          functionPath: path,
+        ),
+        throwsArgumentError,
+        reason: path,
+      );
+    }
   });
 
   test('resolves fresh application headers once per RPC request', () async {

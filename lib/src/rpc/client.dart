@@ -6,6 +6,7 @@ import '../server/context.dart';
 import '../server/http.dart';
 import 'cancellation.dart';
 import 'function.dart';
+import 'path.dart';
 import 'serializer.dart';
 
 /// Typed reference to a server function that returns one value.
@@ -82,9 +83,10 @@ final class RpcClient {
     required this.transport,
     Serializer? serializer,
     this.headersProvider,
-    this.functionPath = '/__odroe/functions',
+    String functionPath = '/__odroe/functions',
     this.maxResponseFrameBytes = defaultMaxResponseFrameBytes,
-  }) : serializer = serializer ?? Serializer() {
+  }) : serializer = serializer ?? Serializer(),
+       functionPath = normalizeFunctionPath(functionPath) {
     if (maxResponseFrameBytes <= 0) {
       throw ArgumentError.value(
         maxResponseFrameBytes,

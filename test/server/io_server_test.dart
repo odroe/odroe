@@ -8,6 +8,38 @@ import 'package:odroe/server_io.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('IO adapter rejects extra RPC path segments', () async {
+    var calls = 0;
+    final app = Server(
+      routes: const [],
+      functions: <String, ServerFunctionBinding>{
+        'write': ServerFunctionBinding(
+          ServerFunction<NoServerInput, int>(handler: (_) => ++calls),
+        ),
+      },
+    );
+    final server = await IoServer.bind(app.handle, port: 0);
+    addTearDown(server.close);
+    final client = HttpClient();
+    addTearDown(client.close);
+    final uri = Uri.parse(
+      'http://127.0.0.1:${server.port}/__odroe/functions/write/extra',
+    );
+
+    final request = await client.postUrl(uri);
+    request.headers
+      ..contentType = ContentType.json
+      ..set('origin', uri.origin)
+      ..set('x-odroe-server-function', 'true');
+    request.write('{"data":null}');
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+
+    expect(response.statusCode, HttpStatus.notFound, reason: body);
+    expect(jsonDecode(body), containsPair('type', 'notFound'));
+    expect(calls, 0);
+  });
+
   test('IO adapter sends only the bounded typed function error', () async {
     const maxFrameBytes = 64;
     final app = Server(

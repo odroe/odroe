@@ -5,6 +5,47 @@ import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('matches exactly one encoded function id segment', () async {
+    var calls = 0;
+    final function = ServerFunction<NoServerInput, int>(
+      handler: (_) => ++calls,
+    );
+    final server = Server(
+      routes: const [],
+      functions: <String, ServerFunctionBinding>{
+        'read': ServerFunctionBinding(function),
+        'team/read': ServerFunctionBinding(function),
+      },
+      allowRpcWithoutOrigin: true,
+    );
+
+    final exact = await server.handle(_request('/__odroe/functions/read'));
+    expect(exact.status, 200);
+    expect(jsonDecode(await exact.readText()), containsPair('data', 1));
+
+    for (final path in <String>[
+      '/__odroe/functions',
+      '/__odroe/functions/',
+      '/__odroe/functions/read/extra',
+    ]) {
+      final response = await server.handle(_request(path));
+      expect(response.status, 404, reason: path);
+      expect(
+        jsonDecode(await response.readText()),
+        containsPair('type', 'notFound'),
+        reason: path,
+      );
+    }
+    expect(calls, 1);
+
+    final encoded = await server.handle(
+      _request('/__odroe/functions/team%2Fread'),
+    );
+    expect(encoded.status, 200);
+    expect(jsonDecode(await encoded.readText()), containsPair('data', 2));
+    expect(calls, 2);
+  });
+
   test('validates server function payload and response budgets', () {
     final server = Server(routes: const []);
     expect(server.maxFunctionPayload, Server.defaultMaxFunctionPayload);
@@ -244,15 +285,16 @@ Server _server<O>({
   onError: (_, _, _) {},
 );
 
-ServerRequest _request() => ServerRequest.bytes(
-  method: HttpMethod.post,
-  uri: Uri.parse('http://localhost/__odroe/functions/test'),
-  headers: Headers.single(<String, String>{
-    'content-type': 'application/json; charset=utf-8',
-    'x-odroe-server-function': 'true',
-  }),
-  body: utf8.encode('{"data":null}'),
-);
+ServerRequest _request([String path = '/__odroe/functions/test']) =>
+    ServerRequest.bytes(
+      method: HttpMethod.post,
+      uri: Uri.parse('http://localhost$path'),
+      headers: Headers.single(<String, String>{
+        'content-type': 'application/json; charset=utf-8',
+        'x-odroe-server-function': 'true',
+      }),
+      body: utf8.encode('{"data":null}'),
+    );
 
 final class _AdaptedValue {
   const _AdaptedValue();

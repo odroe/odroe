@@ -9,6 +9,7 @@ import '../router/load.dart';
 import '../router/match.dart';
 import '../router/route.dart';
 import '../rpc/function.dart';
+import '../rpc/path.dart';
 import '../rpc/serializer.dart';
 import 'accept.dart';
 import 'context.dart';
@@ -55,7 +56,7 @@ final class Server {
     this.renderer,
     ServerErrorHandler? onError,
     ServerCloseHandler? onClose,
-    this.functionPath = '/__odroe/functions',
+    String functionPath = '/__odroe/functions',
     this.maxFunctionPayload = defaultMaxFunctionPayload,
     this.maxFunctionResponseFrameBytes = defaultMaxFunctionResponseFrameBytes,
     this.exposeErrors = false,
@@ -65,13 +66,11 @@ final class Server {
        middleware = List<Middleware>.unmodifiable(middleware),
        modules = modules ?? _emptyModules,
        serializer = serializer ?? Serializer(),
+       functionPath = normalizeFunctionPath(functionPath),
        onError = onError ?? defaultServerErrorHandler,
        _onClose = onClose,
        _flutterRoutes = HashSet<Object>.identity()
-         ..addAll(flutterRoutes.map((route) => route.identity)),
-       _functionPrefix = functionPath.endsWith('/')
-           ? functionPath
-           : '$functionPath/' {
+         ..addAll(flutterRoutes.map((route) => route.identity)) {
     if (maxFunctionPayload <= 0) {
       throw ArgumentError.value(
         maxFunctionPayload,
@@ -151,7 +150,6 @@ final class Server {
 
   final Set<Object> _flutterRoutes;
   final Set<Completer<void>> _activeInvocations = <Completer<void>>{};
-  final String _functionPrefix;
   late final RouteMatcher _matcher;
   Future<void>? _closeFuture;
 
@@ -306,15 +304,15 @@ final class Server {
     ServerRequest request,
     RequestContext context,
   ) async {
-    final rpcId = _rpcId(request.uri.path);
+    final rpc = _rpcTarget(request.uri.path);
     late final ServerResponse response;
     try {
       response = await runMiddleware(
         context,
         middleware,
-        () => rpcId == null
+        () => !rpc.matches
             ? _handleRoute(context)
-            : _handleFunction(context, rpcId),
+            : _handleFunction(context, rpc.id),
       );
     } on Redirect catch (redirect) {
       response = _controlResponse(
@@ -331,7 +329,7 @@ final class Server {
     } on NotFound catch (error) {
       response = _failure(
         request,
-        rpc: rpcId != null,
+        rpc: rpc.matches,
         status: 404,
         title: 'Page not found',
         message: error.message,
@@ -340,7 +338,7 @@ final class Server {
     } on HttpError catch (error) {
       response = _failure(
         request,
-        rpc: rpcId != null,
+        rpc: rpc.matches,
         status: error.status,
         title: 'Request failed',
         message: error.message,
@@ -350,7 +348,7 @@ final class Server {
     } on PayloadTooLargeException catch (error) {
       response = _failure(
         request,
-        rpc: rpcId != null,
+        rpc: rpc.matches,
         status: 413,
         title: 'Payload too large',
         message: '$error',
@@ -360,7 +358,7 @@ final class Server {
       _reportUnexpected(request, error, stackTrace, context.invocation);
       response = _failure(
         request,
-        rpc: rpcId != null,
+        rpc: rpc.matches,
         status: 500,
         title: 'Internal server error',
         message: exposeErrors ? '$error' : 'Internal server error.',
@@ -419,15 +417,26 @@ final class Server {
     return ServerResponse.json(frame, status: status, headers: responseHeaders);
   }
 
-  String? _rpcId(String path) {
-    if (!path.startsWith(_functionPrefix)) return null;
-    final value = path.substring(_functionPrefix.length).split('/').first;
-    return value.isEmpty ? null : Uri.decodeComponent(value);
+  ({bool matches, String? id}) _rpcTarget(String path) {
+    if (!path.startsWith(functionPath)) {
+      return (matches: false, id: null);
+    }
+    if (path.length == functionPath.length) {
+      return (matches: true, id: null);
+    }
+    if (path.codeUnitAt(functionPath.length) != 0x2f) {
+      return (matches: false, id: null);
+    }
+    final value = path.substring(functionPath.length + 1);
+    if (value.isEmpty || value.contains('/')) {
+      return (matches: true, id: null);
+    }
+    return (matches: true, id: Uri.decodeComponent(value));
   }
 
   Future<ServerResponse> _handleFunction(
     RequestContext context,
-    String id,
+    String? id,
   ) async {
     final rejection = rejectCrossOriginRpc(
       context.request,
@@ -435,6 +444,7 @@ final class Server {
     );
     if (rejection != null) return rejection;
 
+    if (id == null) throw const NotFound('Server function not found.');
     final binding = functions[id];
     if (binding == null) throw const NotFound('Server function not found.');
     if (context.request.method != binding.method) {
