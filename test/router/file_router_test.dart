@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:odroe/odroe_flutter.dart';
-import 'package:odroe/query_flutter.dart';
 import 'package:odroe/router_flutter.dart';
 import 'package:odroe/rpc.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';

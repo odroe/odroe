@@ -7,6 +7,7 @@ import 'package:odroe/src/router_compiler/compiler.dart';
 
 import 'build.dart';
 import 'cloudflare_development.dart';
+import 'create.dart';
 import 'development.dart';
 import 'initialize.dart';
 import 'project.dart';
@@ -16,6 +17,7 @@ Future<int> runOdroe(
   List<String> arguments, {
   StringSink? output,
   StringSink? errors,
+  CreateCommandRunner? createCommandRunner,
 }) async {
   final out = output ?? stdout;
   final err = errors ?? stderr;
@@ -31,6 +33,24 @@ Future<int> runOdroe(
       abbr: 'w',
       negatable: false,
       help: 'Recompile when route files change.',
+    );
+  final create = ArgParser()
+    ..addFlag('help', abbr: 'h', negatable: false)
+    ..addOption(
+      'platforms',
+      defaultsTo: 'android,ios,web',
+      help: 'Comma-separated Flutter platforms.',
+    )
+    ..addOption('org', help: 'Reverse-domain organization identifier.')
+    ..addOption('project-name', help: 'Dart package name for the project.')
+    ..addOption(
+      'odroe-path',
+      help: 'Odroe package checkout to use as a path dependency.',
+    )
+    ..addFlag(
+      'offline',
+      negatable: false,
+      help: 'Resolve the Odroe dependency from the local package cache.',
     );
   final dev = _generationParser()
     ..addOption('host', defaultsTo: '127.0.0.1')
@@ -99,6 +119,7 @@ Future<int> runOdroe(
     );
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
+    ..addCommand('create', create)
     ..addCommand('init', init)
     ..addCommand('generate', generate)
     ..addCommand('dev', dev)
@@ -121,13 +142,31 @@ Future<int> runOdroe(
     out.writeln(
       _commandUsage(
         command.name!,
-        _parserFor(command.name!, init, generate, dev, build),
+        _parserFor(command.name!, create, init, generate, dev, build),
       ),
     );
     return 0;
   }
 
   try {
+    if (command.name == 'create') {
+      if (command.rest.length != 1) {
+        err.writeln('odroe create requires exactly one target directory.');
+        return 64;
+      }
+      await createProject(
+        directory: command.rest.single,
+        odroePath: command.option('odroe-path'),
+        platforms: command.option('platforms')!,
+        organization: command.option('org'),
+        projectName: command.option('project-name'),
+        offline: command.flag('offline'),
+        out: out,
+        err: err,
+        runCommand: createCommandRunner,
+      );
+      return 0;
+    }
     if (command.name == 'init' && command.rest.isNotEmpty) {
       err.writeln('odroe init does not accept positional arguments.');
       return 64;
@@ -260,11 +299,13 @@ ArgParser _generationParser() => _projectParser()
 
 ArgParser _parserFor(
   String name,
+  ArgParser create,
   ArgParser init,
   ArgParser generate,
   ArgParser dev,
   ArgParser build,
 ) => switch (name) {
+  'create' => create,
   'init' => init,
   'generate' => generate,
   'dev' => dev,
@@ -317,6 +358,7 @@ Future<int> _watchRoutes(
 String _usage(ArgParser parser) =>
     'Usage: dart run odroe <command> [arguments]\n\n'
     'Commands:\n'
+    '  create    Create a new full-stack Flutter application.\n'
     '  init      Initialize an empty Flutter application.\n'
     '  generate  Generate client and server route targets.\n'
     '  dev       Watch source, run Odroe, and run Flutter.\n'

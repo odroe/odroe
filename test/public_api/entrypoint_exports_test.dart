@@ -19,6 +19,7 @@ void main() {
     bool handler(server.ServerFunctionContext<int> context) => context.data > 0;
     final function = server.ServerFunction<int, bool>(handler: handler);
     final binding = server.ServerFunctionBinding(function);
+    final serverContextKey = server.ContextKey<String>('serverContext');
     const noInput = server.NoServerInput();
     const notFound = rpc.NotFound('missing');
     final redirect = rpc.Redirect(Uri.parse('/next'));
@@ -28,6 +29,7 @@ void main() {
     expect(notFound.message, 'missing');
     expect(redirect.location.path, '/next');
     expect(binding.function, same(function));
+    expect(serverContextKey.name, 'serverContext');
     expect(noInput, isA<server.NoServerInput>());
     expect(<Object>[
       fromConnection,

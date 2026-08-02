@@ -6,6 +6,7 @@
 /// {@canonicalFor function.ServerFunctionHandler}
 library;
 
+export 'odroe.dart';
 export 'src/rpc/function.dart'
     show
         NoServerInput,

@@ -26,8 +26,9 @@ but the deployment or provider boundary is still deliberately narrow.
 
 ## Deliberate boundaries
 
-- one package does not mean one import; runtime-specific entrypoints keep IO,
-  FFI, and JavaScript interop out of the wrong reachable program;
+- application composition can use one `odroe_flutter.dart` import, while
+  runtime-specific source still uses narrow entrypoints to keep IO, FFI, and
+  JavaScript interop out of the wrong reachable program;
 - Odroe's database layer is typed SQL, not a full ORM or migration framework;
 - MySQL/MariaDB does not currently expose a pool and has no portable
   `RETURNING` or conflict-target insert contract;

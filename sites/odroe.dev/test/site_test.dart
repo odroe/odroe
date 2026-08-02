@@ -250,7 +250,10 @@ void main() {
 
     for (final source in <String>[readme, gettingStarted]) {
       expect(source, contains('flutter pub get'));
-      expect(source, contains('dart run odroe init --full-stack'));
+      expect(
+        source,
+        contains('dart run odroe create ../my_app --odroe-path .'),
+      );
       expect(source, contains('dart run odroe dev -- -d chrome'));
       expect(source, contains('dart run odroe build --no-server web'));
       expect(
@@ -259,7 +262,7 @@ void main() {
       );
       _expectInOrder('Primary product path', source, <String>[
         'flutter pub get',
-        'dart run odroe init --full-stack',
+        'dart run odroe create ../my_app --odroe-path .',
         'dart run odroe dev -- -d chrome',
       ]);
     }
@@ -394,7 +397,10 @@ void main() {
     expect(server, contains('Android, iOS, and desktop apps must pass'));
     expect(server, contains('baseUri: rpcBaseUri(),'));
     expect(homepage, contains('RpcModule.http(baseUri: rpcBaseUri())'));
-    expect(homepage, contains(r'$ dart run odroe init'));
+    expect(
+      homepage,
+      contains(r'$ dart run odroe create ../my_app --odroe-path .'),
+    );
     expect(homepage, contains(r'$ dart run odroe dev -- -d chrome'));
     expect(homepage, contains(r'$ dart run odroe build --no-server web'));
 

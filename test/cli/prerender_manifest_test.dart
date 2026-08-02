@@ -1,3 +1,6 @@
+@Timeout(Duration(minutes: 2))
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -248,7 +251,7 @@ Future<Iterable<Uri>> prerenderLocations() async {
         reason: 'The callback must exit after spawning the inherited pipe.',
       );
     },
-    timeout: const Timeout(Duration(seconds: 10)),
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }
 

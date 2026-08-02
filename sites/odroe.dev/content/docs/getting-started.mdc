@@ -6,49 +6,40 @@ language: en
 ---
 # Build your first product
 
-This path starts with an empty Flutter application and ends with one working
+This path starts with a nonexistent application path and ends with one working
 vertical slice: Flutter → Query → typed RPC → Server → typed SQL → SQLite.
 The same project also contains a D1 migration and a locked local Cloudflare
 toolchain. No global Wrangler install is required.
 
 ## Create the application
 
-Odroe is currently consumed from source. Keep the checkout and application
-beside each other while the next public package release is prepared:
+Odroe is currently consumed from source. Let its create command own the complete
+source-stage setup while the next public package release is prepared:
 
 ```sh
 git clone https://github.com/odroe/odroe.git
-flutter create --empty --platforms=android,ios,web my_app
-cd my_app
-```
-
-Add the checkout as a direct dependency:
-
-```yaml
-dependencies:
-  odroe:
-    path: ../odroe
-```
-
-Resolve the dependency, then initialize the complete product in the current
-application:
-
-```sh
+cd odroe
 flutter pub get
-dart run odroe init --full-stack
+dart run odroe create ../my_app --odroe-path .
+cd ../my_app
 ```
 
-`init --full-stack` verifies that this is an empty Flutter application and that
-it resolves the same Odroe checkout that is running the command. It preflights
-every destination before writing, rejects custom or linked targets, and rolls
-the whole operation back on failure. There is deliberately no `--force`.
+`create` requires a target that does not exist. It builds Flutter's empty
+Android, iOS, and Web scaffold in a private directory beside that target, adds
+the selected Odroe checkout, and runs the staged package's own
+`odroe init --full-stack`. Only the complete product is published to the
+requested path. A failed or interrupted stage removes the private staging
+directory; a target that appears meanwhile is preserved and publication stops.
+There is deliberately no `--force`. Use `--platforms`, `--org`, or
+`--project-name` when the Flutter host needs explicit values. Add `--offline`
+only when the package cache is already complete.
 
 ## Know what was created
 
 ```text
 my_app/
 ├── lib/
-│   ├── main.dart              # Flutter composition root
+│   ├── main.dart              # one-import Flutter composition root
 │   ├── posts.dart             # client-safe Post and CreatePost records
 │   ├── posts_database.dart    # shared schema and typed query builder
 │   ├── rpc_origin.dart        # browser/native origin policy

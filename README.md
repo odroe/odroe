@@ -13,7 +13,7 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 | 入口 | 能力 |
 | --- | --- |
 | `odroe.dart` | 平台中立的 `Module`、binding、`AppContext` 与生命周期 |
-| `odroe_flutter.dart` | Flutter `App` 组合根与 Flutter binding |
+| `odroe_flutter.dart` | Flutter `App` 组合根、binding 与常用 Module 构造器 |
 | `query.dart` | 平台中立的 Query、Mutation、cache、hydration 与 persistence |
 | `query_flutter.dart` | Query Flutter provider、builders 与 `QueryModule` |
 | `router.dart` | 基于 Roux 的中立强类型 route、params/search、matching 与 URL 生成 |
@@ -30,7 +30,7 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 | `database_mysql.dart` | Preview MySQL/MariaDB driver |
 | `database_d1.dart` | Preview Cloudflare D1 binding adapter |
 | `rpc.dart` | 强类型 refs、client、transport、serialization 与 `RpcModule` |
-| `server.dart` | adapter-neutral HTTP、server functions、serializer、middleware、route 与 `Server` |
+| `server.dart` | 平台中立应用 core、HTTP、server functions、serializer、middleware、route 与 `Server` |
 | `server_io.dart` | Dart IO host 与 prerenderer |
 | `server_fetch.dart` | Preview Fetch/JavaScript host adapter |
 
@@ -43,31 +43,29 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 
 ## 创建应用
 
-当前版本通过源码使用。以下命令从两项目录的共同父目录执行，让 Odroe checkout
-与应用保持同级；已有 checkout 时跳过 `git clone`：
+当前版本通过源码使用。`odroe create` 从空路径创建 Flutter 宿主、添加当前
+Odroe checkout，并由目标工程自己的 CLI 初始化完整全栈 starter：
 
 ```sh
 git clone https://github.com/odroe/odroe.git
-flutter create --empty --platforms=android,ios,web my_app
-cd my_app
-```
-
-```yaml
-dependencies:
-  odroe:
-    path: ../odroe
-```
-
-```sh
+cd odroe
 flutter pub get
-dart run odroe init --full-stack
+dart run odroe create ../my_app --odroe-path .
+cd ../my_app
 dart run odroe dev -- -d chrome
 ```
+
+默认创建 Android、iOS 与 Web；可用 `--platforms`、`--org` 和
+`--project-name` 显式控制 Flutter scaffold。缓存已准备时可加 `--offline`。
+目标路径必须不存在且直接父目录必须存在；CLI 先在同父目录的私有 staging 中
+完成全部工作，成功后才发布目标。失败或已处理的中断只清理该 staging。它不
+覆盖已有路径，也不执行 npm、数据库迁移、构建、远程部署或平台配置变更。
+依赖解析默认可能访问当前配置的 pub registry；`--offline` 才是纯缓存模式。
 
 ```text
 my_app/
 ├── lib/
-│   ├── main.dart              # Query + RPC + Document + Router
+│   ├── main.dart              # one-import Flutter composition root
 │   ├── posts.dart             # 客户端安全的 Post / CreatePost records
 │   ├── posts_database.dart    # shared typed schema and query
 │   ├── rpc_origin.dart
@@ -106,11 +104,7 @@ Native 默认把 SQLite 数据保存在项目的 `.odroe/app.sqlite3`，初始�
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:odroe/document_flutter.dart';
 import 'package:odroe/odroe_flutter.dart';
-import 'package:odroe/query_flutter.dart';
-import 'package:odroe/router_flutter.dart';
-import 'package:odroe/rpc.dart';
 
 import 'rpc_origin.dart';
 import 'routes.dart';
@@ -472,8 +466,9 @@ final updatePost = ServerFunction<int, bool>(
 );
 ```
 
-`server.dart` 是完整的服务端产品入口，直接导出 server function、受控 HTTP
-结果与 serializer 类型；route server 不需要再导入 `rpc.dart`。`rpc.dart`
+`server.dart` 是完整的服务端产品入口，直接导出平台中立的应用 core、server
+function、受控 HTTP 结果与 serializer 类型；route server 不需要再导入
+`odroe.dart` 或 `rpc.dart`。`rpc.dart`
 专注于生成的 client refs、transport、serialization 与 `RpcModule`，并保留
 client 和 server 共用的协议类型。
 
@@ -823,6 +818,7 @@ callback 必须声明 `write` 或 `rowReturning`，因此 transaction control
 ## CLI
 
 ```sh
+dart run odroe create ../my_app --odroe-path .
 dart run odroe init
 dart run odroe generate
 dart run odroe dev --server-only

@@ -15,9 +15,14 @@ their neutral contract where useful.
 | Entrypoint | Owns |
 | --- | --- |
 | `odroe.dart` | `AppContext`, `Module`, typed bindings, registry lifecycle |
-| `odroe_flutter.dart` | Flutter `App` composition and context bindings |
+| `odroe_flutter.dart` | Flutter `App`, bindings, and the common `QueryModule`, `RpcModule`, `DocumentModule`, and `RouterModule` composition surface |
 | `router.dart` | Typed routes, codecs, matching, loads, URL generation |
 | `router_flutter.dart` | Flutter Router module, pages, shells, navigation |
+
+Application `main.dart` can import only `odroe_flutter.dart` for the common
+composition modules. Route pages, custom Query clients, RPC transports, server
+hosts, and database implementations should still import the narrow entrypoint
+that owns their behavior.
 
 ## Query and RPC
 
@@ -50,12 +55,13 @@ prefixes should use `QueryKey<Object?>`.
 
 | Entrypoint | Owns |
 | --- | --- |
-| `server.dart` | `Server`, routes, functions, middleware, requests/responses, controlled errors |
+| `server.dart` | Platform-neutral application core, `Server`, routes, functions, middleware, requests/responses, controlled errors |
 | `server_io.dart` | `dart:io` HTTP adapter and prerendering |
 | `server_fetch.dart` | Fetch adapter, invocation bindings, export helper |
 
-Server route files normally import only `server.dart`. Client code imports
-`rpc.dart`; Fetch and IO imports stay at their host entrypoints.
+Server route files normally import only `server.dart`; it also owns the
+`Module`, `AppContext`, and binding types used by server composition. Client code
+imports `rpc.dart`; Fetch and IO imports stay at their host entrypoints.
 
 ## Data
 

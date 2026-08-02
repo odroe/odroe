@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add `odroe create <directory>` as the guarded source-stage product path from
+  a nonexistent target through Flutter scaffold, Odroe dependency resolution,
+  and the full-stack starter. Reject existing targets and remove only the
+  private same-parent staging directory when any subprocess fails; publish the
+  requested target only after the complete product succeeds.
+- Make `odroe_flutter.dart` the selective Flutter composition root for
+  `QueryModule`, `RpcModule`, `DocumentModule`, `RouterModule`, and `routerKey`.
+  Generate one Odroe import in application `main.dart` while keeping route,
+  server, and database source on narrow product entrypoints; atomically upgrade
+  untouched starters that used the previous imports.
+- Let adapter-neutral `server.dart` expose the platform-neutral application
+  core its public server contracts already use. Generated server trees now need
+  one Odroe server import instead of repeating `odroe.dart`.
 - Add `odroe dev --server-target cloudflare --server-only` with a
   project-local Wrangler runtime, required initial route generation and
   source-to-Worker compilation, Dart source watching, atomic server JavaScript

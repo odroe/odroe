@@ -1,0 +1,531 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:odroe/src/cli/cli.dart';
+import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
+
+import '../support/dart_command_lock.dart';
+
+void main() {
+  test('create composes Flutter, dependency, and Odroe commands', () async {
+    final parent = await Directory.systemTemp.createTemp('odroe_create_test_');
+    addTearDown(() => parent.delete(recursive: true));
+    final target = p.join(parent.path, 'my app');
+    final resolvedTarget = p.join(parent.resolveSymbolicLinksSync(), 'my app');
+    final calls = <_Command>[];
+    final output = StringBuffer();
+    final errors = StringBuffer();
+
+    final code = await runOdroe(
+      <String>[
+        'create',
+        target,
+        '--platforms',
+        'web,android,web',
+        '--org',
+        'dev.odroe',
+        '--project-name',
+        'my_app',
+        '--odroe-path',
+        Directory.current.path,
+        '--offline',
+      ],
+      output: output,
+      errors: errors,
+      createCommandRunner:
+          (
+            executable,
+            arguments, {
+            required workingDirectory,
+            required out,
+            required err,
+            environment,
+          }) async {
+            calls.add((
+              executable: executable,
+              arguments: List<String>.of(arguments),
+              workingDirectory: workingDirectory,
+            ));
+            return 0;
+          },
+    );
+
+    expect(code, 0, reason: errors.toString());
+    expect(errors, isEmpty);
+    expect(calls, hasLength(3));
+    expect(
+      p.basenameWithoutExtension(calls[0].executable),
+      Platform.isWindows ? 'dart' : 'flutter',
+    );
+    expect(
+      calls[0].arguments,
+      containsAllInOrder(<String>[
+        'create',
+        '--empty',
+        '--no-pub',
+        '--no-overwrite',
+        '--platforms=web,android',
+        '--org=dev.odroe',
+        '--project-name=my_app',
+      ]),
+    );
+    final staging = calls[0].arguments.last;
+    expect(p.dirname(staging), p.dirname(resolvedTarget));
+    expect(p.basename(staging), startsWith('.odroe-create-'));
+    expect(calls[0].workingDirectory, p.dirname(resolvedTarget));
+    expect(
+      calls[1].arguments,
+      containsAllInOrder(<String>['pub', 'add', '--offline']),
+    );
+    final descriptor = calls[1].arguments.last;
+    expect(descriptor, startsWith('odroe@'));
+    expect(jsonDecode(descriptor.substring('odroe@'.length)), <String, Object?>{
+      'path': p.relative(
+        Directory.current.resolveSymbolicLinksSync(),
+        from: resolvedTarget,
+      ),
+    });
+    expect(calls[1].workingDirectory, staging);
+    expect(calls[2].arguments, const <String>[
+      'run',
+      'odroe',
+      'init',
+      '--full-stack',
+    ]);
+    expect(calls[2].workingDirectory, staging);
+    expect(output.toString(), contains('Created the full-stack Odroe'));
+    expect(Directory(target).existsSync(), isTrue);
+    expect(Directory(staging).existsSync(), isFalse);
+  });
+
+  test('create rolls back every failed subprocess stage', () async {
+    for (var failedStage = 0; failedStage < 3; failedStage++) {
+      final parent = await Directory.systemTemp.createTemp(
+        'odroe_create_failure_',
+      );
+      addTearDown(() {
+        if (parent.existsSync()) parent.deleteSync(recursive: true);
+      });
+      final target = p.join(parent.path, 'app_$failedStage');
+      var stage = 0;
+      String? staging;
+      final errors = StringBuffer();
+
+      final code = await runOdroe(
+        <String>['create', '--odroe-path', Directory.current.path, target],
+        output: StringBuffer(),
+        errors: errors,
+        createCommandRunner:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required out,
+              required err,
+              environment,
+            }) async {
+              staging ??= arguments.last;
+              File(
+                p.join(staging!, 'partial-$stage'),
+              ).writeAsStringSync('partial');
+              return stage++ == failedStage ? 7 : 0;
+            },
+      );
+
+      expect(code, 7, reason: 'failedStage=$failedStage');
+      expect(Directory(target).existsSync(), isFalse);
+      expect(errors.toString(), contains('failed.'));
+      expect(
+        errors.toString(),
+        contains('Removed the incomplete staging path'),
+      );
+    }
+  });
+
+  test('create rolls back when its command runner throws', () async {
+    final parent = await Directory.systemTemp.createTemp('odroe_create_throw_');
+    addTearDown(() => parent.delete(recursive: true));
+    final target = p.join(parent.path, 'app');
+    final errors = StringBuffer();
+
+    await expectLater(
+      runOdroe(
+        <String>['create', '--odroe-path', Directory.current.path, target],
+        output: StringBuffer(),
+        errors: errors,
+        createCommandRunner:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required out,
+              required err,
+              environment,
+            }) async => throw StateError('runner stopped'),
+      ),
+      throwsStateError,
+    );
+
+    expect(Directory(target).existsSync(), isFalse);
+    expect(errors.toString(), contains('Removed the incomplete staging path'));
+  });
+
+  test('create never touches an existing target', () async {
+    final parent = await Directory.systemTemp.createTemp(
+      'odroe_create_existing_',
+    );
+    addTearDown(() => parent.delete(recursive: true));
+    final target = Directory(p.join(parent.path, 'app'))..createSync();
+    final sentinel = File(p.join(target.path, 'sentinel'))
+      ..writeAsStringSync('owned');
+    var called = false;
+    final errors = StringBuffer();
+
+    final code = await runOdroe(
+      <String>['create', '--odroe-path', Directory.current.path, target.path],
+      output: StringBuffer(),
+      errors: errors,
+      createCommandRunner:
+          (
+            executable,
+            arguments, {
+            required workingDirectory,
+            required out,
+            required err,
+            environment,
+          }) async {
+            called = true;
+            return 0;
+          },
+    );
+
+    expect(code, 1);
+    expect(called, isFalse);
+    expect(sentinel.readAsStringSync(), 'owned');
+    expect(errors.toString(), contains('will not overwrite'));
+    expect(
+      errors.toString(),
+      isNot(contains('Removed the incomplete staging')),
+    );
+  });
+
+  test('create validates arguments before reserving the target', () async {
+    final parent = await Directory.systemTemp.createTemp(
+      'odroe_create_invalid_',
+    );
+    addTearDown(() => parent.delete(recursive: true));
+    final target = p.join(parent.path, 'app');
+    var called = false;
+    Future<int> run(List<String> arguments, StringBuffer errors) => runOdroe(
+      arguments,
+      output: StringBuffer(),
+      errors: errors,
+      createCommandRunner:
+          (
+            executable,
+            arguments, {
+            required workingDirectory,
+            required out,
+            required err,
+            environment,
+          }) async {
+            called = true;
+            return 0;
+          },
+    );
+
+    final missingSourceErrors = StringBuffer();
+    expect(await run(<String>['create', target], missingSourceErrors), 64);
+    expect(missingSourceErrors.toString(), contains('--odroe-path'));
+
+    final platformErrors = StringBuffer();
+    expect(
+      await run(<String>[
+        'create',
+        '--odroe-path',
+        Directory.current.path,
+        '--platforms',
+        'web,watchos',
+        target,
+      ], platformErrors),
+      64,
+    );
+    expect(platformErrors.toString(), contains('watchos'));
+
+    final nameErrors = StringBuffer();
+    expect(
+      await run(<String>[
+        'create',
+        '--odroe-path',
+        Directory.current.path,
+        '--project-name',
+        'Bad-Name',
+        target,
+      ], nameErrors),
+      64,
+    );
+    expect(nameErrors.toString(), contains('Invalid Flutter project name'));
+    expect(called, isFalse);
+    expect(FileSystemEntity.typeSync(target), FileSystemEntityType.notFound);
+  });
+
+  test('create preserves a target that appears before publication', () async {
+    final parent = await Directory.systemTemp.createTemp(
+      'odroe_create_publish_race_',
+    );
+    addTearDown(() => parent.delete(recursive: true));
+    final target = p.join(parent.path, 'app');
+    final errors = StringBuffer();
+
+    final code = await runOdroe(
+      <String>['create', '--odroe-path', Directory.current.path, target],
+      output: StringBuffer(),
+      errors: errors,
+      createCommandRunner:
+          (
+            executable,
+            arguments, {
+            required workingDirectory,
+            required out,
+            required err,
+            environment,
+          }) async {
+            if (arguments case ['run', 'odroe', 'init', '--full-stack']) {
+              final external = Directory(target)..createSync();
+              File(
+                p.join(external.path, 'sentinel'),
+              ).writeAsStringSync('owned');
+            }
+            return 0;
+          },
+    );
+
+    expect(code, 1);
+    expect(File(p.join(target, 'sentinel')).readAsStringSync(), 'owned');
+    expect(errors.toString(), contains('appeared before'));
+    expect(
+      parent.listSync().where(
+        (entity) => p.basename(entity.path).startsWith('.odroe-create-'),
+      ),
+      isEmpty,
+    );
+  });
+
+  test('create preserves spaces and Unicode in a path descriptor', () async {
+    final parent = await Directory.systemTemp.createTemp('odroe_create_path_');
+    addTearDown(() => parent.delete(recursive: true));
+    final source = Directory(p.join(parent.path, 'odroe source 你好'))
+      ..createSync();
+    File(
+      p.join(source.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: odroe\n');
+    File(p.join(source.path, 'lib', 'odroe.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('library;\n');
+    final target = p.join(parent.path, 'new app 你好');
+    String? descriptor;
+
+    expect(
+      await runOdroe(
+        <String>[
+          'create',
+          '--project-name',
+          'new_app',
+          '--odroe-path',
+          source.path,
+          target,
+        ],
+        output: StringBuffer(),
+        errors: StringBuffer(),
+        createCommandRunner:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required out,
+              required err,
+              environment,
+            }) async {
+              if (arguments.contains('pub') && arguments.contains('add')) {
+                descriptor = arguments.last;
+              }
+              return 0;
+            },
+      ),
+      0,
+    );
+    expect(
+      jsonDecode(descriptor!.substring('odroe@'.length)),
+      <String, Object?>{
+        'path': p.relative(
+          source.resolveSymbolicLinksSync(),
+          from: Directory(target).resolveSymbolicLinksSync(),
+        ),
+      },
+    );
+  });
+
+  test('create defaults to Android, iOS, and Web', () async {
+    final parent = await Directory.systemTemp.createTemp(
+      'odroe_create_defaults_',
+    );
+    addTearDown(() => parent.delete(recursive: true));
+    final target = p.join(parent.path, 'app');
+    List<String>? flutterCreate;
+
+    expect(
+      await runOdroe(
+        <String>['create', '--odroe-path', Directory.current.path, target],
+        output: StringBuffer(),
+        errors: StringBuffer(),
+        createCommandRunner:
+            (
+              executable,
+              arguments, {
+              required workingDirectory,
+              required out,
+              required err,
+              environment,
+            }) async {
+              flutterCreate ??= List<String>.of(arguments);
+              return 0;
+            },
+      ),
+      0,
+    );
+    expect(flutterCreate, contains('--platforms=android,ios,web'));
+  });
+
+  test('create help exposes its product contract', () async {
+    final rootHelp = StringBuffer();
+    final createHelp = StringBuffer();
+    final errors = StringBuffer();
+
+    expect(await runOdroe(<String>['--help'], output: rootHelp), 0);
+    expect(rootHelp.toString(), contains('create    Create a new full-stack'));
+    expect(await runOdroe(<String>['create', '--help'], output: createHelp), 0);
+    expect(createHelp.toString(), contains('--platforms'));
+    expect(createHelp.toString(), contains('--odroe-path'));
+    expect(
+      await runOdroe(
+        <String>['create'],
+        output: StringBuffer(),
+        errors: errors,
+      ),
+      64,
+    );
+    expect(errors.toString(), contains('exactly one target'));
+  });
+
+  test(
+    'create removes only its staging path after an interrupt',
+    () async {
+      final parent = await Directory.systemTemp.createTemp(
+        'odroe_create_interrupt_',
+      );
+      addTearDown(() => parent.delete(recursive: true));
+      final target = p.join(parent.path, 'app');
+      final marker = File(p.join(parent.path, 'ready'));
+      final process = await Process.start(dartExecutable, <String>[
+        'run',
+        'test/fixtures/create_interruption.dart',
+        target,
+        Directory.current.path,
+        marker.path,
+      ]);
+      addTearDown(() => process.kill(ProcessSignal.sigkill));
+      final output = process.stdout.transform(utf8.decoder).join();
+      final errors = process.stderr.transform(utf8.decoder).join();
+
+      await _waitForFile(marker);
+      expect(process.kill(ProcessSignal.sigint), isTrue);
+      expect(await process.exitCode.timeout(const Duration(seconds: 10)), 130);
+      expect(await output, contains('Flutter project creation'));
+      expect(await errors, contains('Removed the incomplete staging path'));
+      expect(FileSystemEntity.typeSync(target), FileSystemEntityType.notFound);
+      expect(
+        parent.listSync().where(
+          (entity) => p.basename(entity.path).startsWith('.odroe-create-'),
+        ),
+        isEmpty,
+      );
+    },
+    skip: Platform.isWindows
+        ? 'Windows Process.kill does not emit a console SIGINT event.'
+        : false,
+  );
+
+  test(
+    'create emits an analyzable real Flutter full-stack application',
+    () async {
+      final parent = await Directory.systemTemp.createTemp(
+        'odroe_create_real_',
+      );
+      addTearDown(() => parent.delete(recursive: true));
+      final target = p.join(parent.path, 'real_app');
+      final output = StringBuffer();
+      final errors = StringBuffer();
+
+      await withDartCommandLock(() async {
+        final code = await runOdroe(
+          <String>[
+            'create',
+            '--platforms',
+            'web',
+            '--project-name',
+            'real_app',
+            '--odroe-path',
+            Directory.current.path,
+            '--offline',
+            target,
+          ],
+          output: output,
+          errors: errors,
+        );
+
+        expect(code, 0, reason: '${errors.toString()}\n${output.toString()}');
+        final main = File(
+          p.join(target, 'lib', 'main.dart'),
+        ).readAsStringSync();
+        expect(
+          RegExp(r"import 'package:odroe/").allMatches(main),
+          hasLength(1),
+        );
+        expect(main, contains("import 'package:odroe/odroe_flutter.dart';"));
+        expect(main, contains('QueryModule()'));
+        expect(
+          File(p.join(target, 'lib', 'routes.server.dart')).existsSync(),
+          isTrue,
+        );
+        expect(File(p.join(target, 'wrangler.jsonc')).existsSync(), isTrue);
+
+        final analyze = await Process.run(dartExecutable, const <String>[
+          'analyze',
+          '--fatal-infos',
+        ], workingDirectory: target);
+        expect(
+          analyze.exitCode,
+          0,
+          reason: '${analyze.stdout}\n${analyze.stderr}',
+        );
+      });
+    },
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
+}
+
+typedef _Command = ({
+  String executable,
+  List<String> arguments,
+  String workingDirectory,
+});
+
+Future<void> _waitForFile(File file) async {
+  for (var attempt = 0; attempt < 200; attempt++) {
+    if (file.existsSync()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+  throw TimeoutException('Timed out waiting for ${file.path}.');
+}

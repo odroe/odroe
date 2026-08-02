@@ -68,8 +68,13 @@ use `buildLabelKey.provideFactory(registry, createLabel)`.
 ## Flutter composition
 
 `App` creates one application context and exposes it to a builder.
+`odroe_flutter.dart` selectively exports the common application modules, so the
+composition file needs one Odroe import. Capability implementation files keep
+using their narrower Query, Router, RPC, server, or database entrypoint.
 
 ```dart
+import 'package:odroe/odroe_flutter.dart';
+
 runApp(
   App(
     webPathUrls: true,

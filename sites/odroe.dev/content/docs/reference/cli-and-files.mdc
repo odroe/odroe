@@ -6,8 +6,14 @@ language: en
 ---
 # CLI and generated files
 
-Run the CLI from an application that directly depends on the active Odroe
-package:
+Create a source-stage product from the Odroe checkout:
+
+```sh
+dart run odroe create <directory> --odroe-path <odroe-checkout>
+```
+
+Run project commands from an application that directly depends on the active
+Odroe package:
 
 ```sh
 dart run odroe <command> [odroe options] -- [flutter options]
@@ -20,12 +26,32 @@ passed directly, for example `dart run odroe build apk`.
 
 | Command | Purpose | Important options |
 | --- | --- | --- |
+| `create` | Create a guarded full-stack Flutter application | target directory, `--odroe-path`, `--platforms`, `--org`, `--project-name`, `--offline` |
 | `init` | Initialize an empty Flutter application | `--project`, `--full-stack` |
 | `generate` | Generate client and server route targets | `--routes`, `--output`, `--server-output`, `--watch` |
 | `dev` | Watch sources, run one selected server runtime, and optionally run Flutter | `--host`, `--port`, `--server-target`, `--server-only` |
 | `build` | Build Flutter, prerendered HTML, and/or a server artifact | target and options below |
 
-Every command accepts `--project`, defaulting to the current directory.
+`init`, `generate`, `dev`, and `build` accept `--project`, defaulting to the
+current directory.
+
+## Creation
+
+`create` requires one nonexistent target whose direct parent already exists.
+It creates a private same-parent staging directory, runs
+`flutter create --empty --no-pub`, adds Odroe as a path dependency, and invokes
+the staged package's own `odroe init --full-stack`. The requested target is
+published only after all three stages succeed. The default platform set is
+`android,ios,web`.
+
+Validation happens before staging. A failed Flutter create, dependency
+resolution, initializer, process start, or handled interrupt removes only the
+private staging directory. A target that appears before publication is left
+untouched. The command never overwrites an existing file, directory, or symlink
+and never runs npm, migrations, builds, remote deployment, DNS, or platform
+configuration changes. Dependency resolution may access the configured pub
+registry by default. During the source stage `--odroe-path` is required;
+`--offline` is the explicit cache-only mode.
 
 ## Initializers
 

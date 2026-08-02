@@ -1,3 +1,6 @@
+@Timeout(Duration(minutes: 3))
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -46,6 +49,10 @@ void main() {
       generated.serverSource,
     );
     expect(main.readAsStringSync(), contains('DocumentModule()'));
+    expect(
+      RegExp(r"import 'package:odroe/").allMatches(main.readAsStringSync()),
+      hasLength(1),
+    );
     expect(main.readAsStringSync(), contains('webPathUrls: true'));
     expect(
       main.readAsStringSync(),
@@ -125,6 +132,11 @@ void main() {
         p.join(project.path, '.dart_tool', 'odroe', 'server.dart'),
       );
       expect(bootstrap.readAsStringSync(), contains('/server.dart'));
+      final main = File(p.join(project.path, 'lib', 'main.dart'));
+      expect(
+        RegExp(r"import 'package:odroe/").allMatches(main.readAsStringSync()),
+        hasLength(1),
+      );
 
       final package =
           jsonDecode(
@@ -268,6 +280,43 @@ void main() {
       FileRouteCompiler(projectRoot: project).compile().serverSource,
       allOf(contains('posts.list'), contains('posts.create')),
     );
+  });
+
+  test('init upgrades the previous Flutter composition imports', () async {
+    for (final fixture in <({bool fullStack, String source})>[
+      (fullStack: false, source: _legacyBasicMain),
+      (fullStack: true, source: _legacyFullStackMain),
+    ]) {
+      final project = await _createProject();
+      addTearDown(() => project.delete(recursive: true));
+      final main = File(p.join(project.path, 'lib', 'main.dart'))
+        ..writeAsStringSync(fixture.source);
+      final errors = StringBuffer();
+      final arguments = <String>[
+        'init',
+        if (fixture.fullStack) '--full-stack',
+        '--project',
+        project.path,
+      ];
+
+      expect(
+        await runOdroe(arguments, output: StringBuffer(), errors: errors),
+        0,
+        reason: errors.toString(),
+      );
+      final source = main.readAsStringSync();
+      expect(
+        RegExp(r"import 'package:odroe/").allMatches(source),
+        hasLength(1),
+      );
+      expect(source, contains("package:odroe/odroe_flutter.dart"));
+      expect(
+        await runOdroe(arguments, output: StringBuffer(), errors: errors),
+        0,
+        reason: errors.toString(),
+      );
+      expect(main.readAsStringSync(), source);
+    }
   });
 
   test('full-stack init emits an analyzable Flutter project', () async {
@@ -634,6 +683,57 @@ const _fullStackFiles = <String>[
   'package-lock.json',
   'wrangler.jsonc',
 ];
+
+const _legacyBasicMain = '''
+import 'package:flutter/material.dart';
+import 'package:odroe/document_flutter.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/router_flutter.dart';
+
+import 'routes.dart';
+
+void main() {
+  runApp(
+    App(
+      webPathUrls: true,
+      modules: <Module>[
+        DocumentModule(),
+        RouterModule(routes: routeTree),
+      ],
+      builder: (app) => MaterialApp.router(
+        routerConfig: app.read(routerKey),
+      ),
+    ),
+  );
+}
+''';
+
+const _legacyFullStackMain = '''
+import 'package:flutter/material.dart';
+import 'package:odroe/document_flutter.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/query_flutter.dart';
+import 'package:odroe/router_flutter.dart';
+import 'package:odroe/rpc.dart';
+
+import 'rpc_origin.dart';
+import 'routes.dart';
+
+void main() {
+  runApp(
+    App(
+      webPathUrls: true,
+      modules: <Module>[
+        QueryModule(),
+        RpcModule.http(baseUri: rpcBaseUri()),
+        DocumentModule(),
+        RouterModule(routes: routeTree),
+      ],
+      builder: (app) => MaterialApp.router(routerConfig: app.read(routerKey)),
+    ),
+  );
+}
+''';
 
 Future<Directory> _createProject() async {
   final project = await Directory.systemTemp.createTemp('odroe_init_test_');

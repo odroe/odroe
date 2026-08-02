@@ -61,7 +61,12 @@ bool initializeProject(
     if (entry.key.endsWith('.dart')) {
       final allowed = <String>[expected];
       if (entry.key == 'lib/main.dart') {
-        allowed.addAll(<String>[_flutterEmptyMainSource, _mainSource]);
+        allowed.addAll(<String>[
+          _flutterEmptyMainSource,
+          _mainSource,
+          _legacyMainSource,
+          if (fullStack) _legacyFullStackMainSource,
+        ]);
       } else if (fullStack && entry.key == 'lib/routes/route.dart') {
         allowed.add(_routeSource);
       } else if (fullStack && entry.key == 'lib/routes/page.dart') {
@@ -616,6 +621,28 @@ class MainApp extends StatelessWidget {
 
 const _mainSource = '''
 import 'package:flutter/material.dart';
+import 'package:odroe/odroe_flutter.dart';
+
+import 'routes.dart';
+
+void main() {
+  runApp(
+    App(
+      webPathUrls: true,
+      modules: <Module>[
+        DocumentModule(),
+        RouterModule(routes: routeTree),
+      ],
+      builder: (app) => MaterialApp.router(
+        routerConfig: app.read(routerKey),
+      ),
+    ),
+  );
+}
+''';
+
+const _legacyMainSource = '''
+import 'package:flutter/material.dart';
 import 'package:odroe/document_flutter.dart';
 import 'package:odroe/odroe_flutter.dart';
 import 'package:odroe/router_flutter.dart';
@@ -633,6 +660,33 @@ void main() {
       builder: (app) => MaterialApp.router(
         routerConfig: app.read(routerKey),
       ),
+    ),
+  );
+}
+''';
+
+const _legacyFullStackMainSource = '''
+import 'package:flutter/material.dart';
+import 'package:odroe/document_flutter.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/query_flutter.dart';
+import 'package:odroe/router_flutter.dart';
+import 'package:odroe/rpc.dart';
+
+import 'rpc_origin.dart';
+import 'routes.dart';
+
+void main() {
+  runApp(
+    App(
+      webPathUrls: true,
+      modules: <Module>[
+        QueryModule(),
+        RpcModule.http(baseUri: rpcBaseUri()),
+        DocumentModule(),
+        RouterModule(routes: routeTree),
+      ],
+      builder: (app) => MaterialApp.router(routerConfig: app.read(routerKey)),
     ),
   );
 }

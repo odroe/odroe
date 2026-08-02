@@ -7,7 +7,8 @@ language: en
 # Build one complete post feature
 
 Start from the project created in [First product](/docs/getting-started).
-`odroe init --full-stack` generates one root page with post list and create; it
+`odroe create` finishes by running `odroe init --full-stack`, which generates
+one root page with post list and create; it
 does not generate a `/posts` route or a detail page. This tutorial first explains
 that generated slice, then follows the repository's reference app as the
 evolution path: list and create move to `/posts`, and `/posts/[postId]` adds a

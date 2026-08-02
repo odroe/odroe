@@ -1,9 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:odroe/document_flutter.dart';
 import 'package:odroe/odroe_flutter.dart';
-import 'package:odroe/query_flutter.dart';
-import 'package:odroe/router_flutter.dart';
-import 'package:odroe/rpc.dart';
 
 import 'rpc_origin.dart';
 import 'routes.dart';
