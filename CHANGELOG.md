@@ -6,6 +6,15 @@
   preserving `%2F` inside IDs while rejecting empty or extra path segments
   before a function can run. Validate and canonicalize custom function paths
   consistently on clients and servers.
+- Add `odroe init --full-stack` as an atomic user-project starter spanning
+  Flutter, Query, typed RPC, Server, typed SQL, native SQLite, and Cloudflare
+  D1. Preserve the small default starter, allow untouched starters to upgrade,
+  and reject custom files, unsafe paths, or partial writes without `--force`.
+- Make the full-stack reference application's local Cloudflare path
+  reproducible with its own locked Wrangler toolchain, Node and npm engine
+  gates, D1 migration and development scripts, and a direct Getting Started
+  handoff.
+  Keep installed Node and Wrangler state out of the Dart publication archive.
 - Keep the full-stack reference application product-focused by removing
   uncalled demonstration RPCs, including a custom `PostId` function that had
   no registered serialization adapter. Preserve stream, collection, and

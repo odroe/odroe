@@ -6,6 +6,8 @@ import 'package:odroe/src/router_compiler/compiler.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/dart_command_lock.dart';
+
 void main() {
   test('init creates one runnable product and is idempotent', () async {
     final project = await _createProject();
@@ -78,6 +80,260 @@ void main() {
       expect(file.lastModifiedSync().toUtc(), unchangedTime, reason: file.path);
     }
   });
+
+  test(
+    'full-stack init creates one vertical product and is idempotent',
+    () async {
+      final project = await _createProject();
+      addTearDown(() => project.delete(recursive: true));
+      final output = StringBuffer();
+      final errors = StringBuffer();
+
+      final code = await runOdroe(
+        <String>['init', '--full-stack', '--project', project.path],
+        output: output,
+        errors: errors,
+      );
+
+      expect(code, 0, reason: errors.toString());
+      expect(errors, isEmpty);
+      expect(output.toString(), contains('Odroe full-stack starter'));
+      expect(output.toString(), contains('npm ci'));
+      expect(
+        output.toString(),
+        contains('build --server-target cloudflare web'),
+      );
+      final ownedFiles = <File>[
+        for (final path in _fullStackFiles) File(p.join(project.path, path)),
+      ];
+      for (final file in ownedFiles) {
+        expect(file.existsSync(), isTrue, reason: file.path);
+      }
+      final compiler = FileRouteCompiler(projectRoot: project);
+      final generated = compiler.compile();
+      expect(generated.diagnostics, isEmpty);
+      expect(generated.routeCount, 1);
+      expect(generated.staticRoutes, <String>['/']);
+      expect(generated.hasFlutter, isTrue);
+      expect(generated.source, contains('readTitle'));
+      expect(generated.serverSource, contains('posts.read-title'));
+      expect(compiler.outputFile.readAsStringSync(), generated.source);
+      expect(
+        compiler.serverOutputFile.readAsStringSync(),
+        generated.serverSource,
+      );
+      final bootstrap = File(
+        p.join(project.path, '.dart_tool', 'odroe', 'server.dart'),
+      );
+      expect(bootstrap.readAsStringSync(), contains('/server.dart'));
+
+      final package =
+          jsonDecode(
+                File(p.join(project.path, 'package.json')).readAsStringSync(),
+              )
+              as Map<String, Object?>;
+      final lock =
+          jsonDecode(
+                File(
+                  p.join(project.path, 'package-lock.json'),
+                ).readAsStringSync(),
+              )
+              as Map<String, Object?>;
+      final wrangler =
+          jsonDecode(
+                File(p.join(project.path, 'wrangler.jsonc')).readAsStringSync(),
+              )
+              as Map<String, Object?>;
+      expect(package['name'], 'init-fixture');
+      expect(lock['name'], 'init-fixture');
+      expect(
+        ((lock['packages']! as Map<String, Object?>)['']!
+            as Map<String, Object?>)['name'],
+        'init-fixture',
+      );
+      expect(wrangler['name'], 'init-fixture');
+      final gitIgnore = File(p.join(project.path, '.gitignore'));
+      expect(
+        const LineSplitter().convert(gitIgnore.readAsStringSync()),
+        containsAll(<String>['node_modules/', '.wrangler/']),
+      );
+
+      final files = <File>[
+        ...ownedFiles,
+        gitIgnore,
+        compiler.outputFile,
+        compiler.serverOutputFile,
+        bootstrap,
+      ];
+      final unchangedTime = DateTime.utc(2001, 2, 3, 4, 5, 6);
+      for (final file in files) {
+        file.setLastModifiedSync(unchangedTime);
+      }
+      final secondOutput = StringBuffer();
+      expect(
+        await runOdroe(
+          <String>['init', '--full-stack', '--project', project.path],
+          output: secondOutput,
+          errors: errors,
+        ),
+        0,
+        reason: errors.toString(),
+      );
+      expect(
+        secondOutput.toString(),
+        contains('Odroe full-stack starter is current.'),
+      );
+      for (final file in files) {
+        expect(
+          file.lastModifiedSync().toUtc(),
+          unchangedTime,
+          reason: file.path,
+        );
+      }
+    },
+  );
+
+  test('full-stack init upgrades the untouched basic starter', () async {
+    final project = await _createProject();
+    addTearDown(() => project.delete(recursive: true));
+    final errors = StringBuffer();
+    expect(
+      await runOdroe(
+        <String>['init', '--project', project.path],
+        output: StringBuffer(),
+        errors: errors,
+      ),
+      0,
+      reason: errors.toString(),
+    );
+    final output = StringBuffer();
+
+    expect(
+      await runOdroe(
+        <String>['init', '--full-stack', '--project', project.path],
+        output: output,
+        errors: errors,
+      ),
+      0,
+      reason: errors.toString(),
+    );
+    expect(output.toString(), contains('Odroe full-stack starter'));
+    expect(
+      FileRouteCompiler(projectRoot: project).compile().serverSource,
+      contains('posts.read-title'),
+    );
+  });
+
+  test('full-stack init emits an analyzable Flutter project', () async {
+    final project = await _createProject();
+    addTearDown(() => project.delete(recursive: true));
+    final pubGet = await withDartCommandLock(
+      () => Process.run('flutter', <String>[
+        'pub',
+        'get',
+        '--offline',
+      ], workingDirectory: project.path),
+    );
+    expect(pubGet.exitCode, 0, reason: '${pubGet.stdout}\n${pubGet.stderr}');
+    final errors = StringBuffer();
+    expect(
+      await runOdroe(
+        <String>['init', '--full-stack', '--project', project.path],
+        output: StringBuffer(),
+        errors: errors,
+      ),
+      0,
+      reason: errors.toString(),
+    );
+
+    final analyze = await withDartCommandLock(
+      () => Process.run(dartExecutable, <String>[
+        'analyze',
+        '--fatal-infos',
+      ], workingDirectory: project.path),
+    );
+    expect(analyze.exitCode, 0, reason: '${analyze.stdout}\n${analyze.stderr}');
+  });
+
+  test(
+    'full-stack init rejects unsafe targets without partial writes',
+    () async {
+      final cases = <String, void Function(Directory, Directory)>{
+        'custom text': (project, _) =>
+            File(p.join(project.path, 'migrations', '0001_posts.sql'))
+              ..createSync(recursive: true)
+              ..writeAsStringSync('application owned\n'),
+        'directory at leaf': (project, _) =>
+            Directory(p.join(project.path, 'package.json')).createSync(),
+        'file at parent': (project, _) => File(
+          p.join(project.path, 'migrations'),
+        ).writeAsStringSync('not a directory'),
+        if (!Platform.isWindows)
+          'linked parent': (project, outside) =>
+              Link(p.join(project.path, 'migrations')).createSync(outside.path),
+      };
+
+      for (final entry in cases.entries) {
+        final project = await _createProject();
+        final outside = await Directory.systemTemp.createTemp(
+          'odroe_init_out_',
+        );
+        addTearDown(() => project.delete(recursive: true));
+        addTearDown(() => outside.delete(recursive: true));
+        final sentinel = File(p.join(outside.path, 'sentinel'))
+          ..writeAsStringSync('outside');
+        entry.value(project, outside);
+        final before = _snapshot(project);
+        final errors = StringBuffer();
+
+        final code = await runOdroe(
+          <String>['init', '--full-stack', '--project', project.path],
+          output: StringBuffer(),
+          errors: errors,
+        );
+
+        expect(code, 1, reason: entry.key);
+        expect(_snapshot(project), before, reason: entry.key);
+        expect(sentinel.readAsStringSync(), 'outside', reason: entry.key);
+      }
+    },
+  );
+
+  test(
+    'full-stack init restores every file and directory on output failure',
+    () async {
+      for (final existingDirectories in <bool>[true, false]) {
+        final project = await _createProject();
+        addTearDown(() => project.delete(recursive: true));
+        if (existingDirectories) {
+          Directory(p.join(project.path, 'lib', 'routes')).createSync();
+          Directory(p.join(project.path, 'migrations')).createSync();
+          Directory(
+            p.join(project.path, '.dart_tool', 'odroe'),
+          ).createSync(recursive: true);
+        } else {
+          Directory(p.join(project.path, 'lib')).deleteSync(recursive: true);
+        }
+        final before = _snapshot(project);
+
+        await expectLater(
+          runOdroe(
+            <String>['init', '--full-stack', '--project', project.path],
+            output: const _ThrowingSink(),
+            errors: StringBuffer(),
+          ),
+          throwsA(isA<StateError>()),
+          reason: 'existingDirectories=$existingDirectories',
+        );
+
+        expect(
+          _snapshot(project),
+          before,
+          reason: 'existingDirectories=$existingDirectories',
+        );
+      }
+    },
+  );
 
   test(
     'init rejects every custom Dart source without partial writes',
@@ -299,6 +555,10 @@ project_type: package
     expect(await runOdroe(<String>['--help'], output: help), 0);
     expect(help.toString(), contains('init      Initialize'));
 
+    final initHelp = StringBuffer();
+    expect(await runOdroe(<String>['init', '--help'], output: initHelp), 0);
+    expect(initHelp.toString(), contains('--full-stack'));
+
     final errors = StringBuffer();
     expect(
       await runOdroe(
@@ -311,6 +571,22 @@ project_type: package
     expect(errors.toString(), contains('does not accept positional'));
   });
 }
+
+const _fullStackFiles = <String>[
+  'lib/main.dart',
+  'lib/posts_database.dart',
+  'lib/rpc_origin.dart',
+  'lib/server.dart',
+  'lib/server_native.dart',
+  'lib/server_cloudflare.dart',
+  'lib/routes/route.dart',
+  'lib/routes/page.dart',
+  'lib/routes/server.dart',
+  'migrations/0001_posts.sql',
+  'package.json',
+  'package-lock.json',
+  'wrangler.jsonc',
+];
 
 Future<Directory> _createProject() async {
   final project = await Directory.systemTemp.createTemp('odroe_init_test_');

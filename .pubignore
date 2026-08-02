@@ -1,6 +1,8 @@
 .dart_tool/
+.wrangler/
 .pub/
 build/
+node_modules/
 pubspec.lock
 sites/
 test/

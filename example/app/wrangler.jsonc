@@ -1,4 +1,5 @@
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "odroe-example",
   "main": "./build/odroe/cloudflare/worker.mjs",
   "compatibility_date": "2026-08-01",

@@ -7,6 +7,7 @@ HTTP → Server → `DatabaseModule` → typed SQL。页面离开或显式取消
 同一信号会终止 HTTP 请求，并为失败状态提供显式重试。
 
 ```sh
+flutter pub get
 dart run odroe generate
 dart run odroe dev -- -d chrome
 dart run odroe dev --server-only
@@ -21,12 +22,18 @@ dart run odroe build web
 这是零配置、确定性的可运行示例，不是持久化或 migration 方案。
 
 Cloudflare target 则为每次 Fetch invocation 包装 `DB` binding；表结构和种子数据
-来自可审查的 `migrations/0001_posts.sql`。本地验证 D1 路径：
+来自可审查的 `migrations/0001_posts.sql`。示例在本目录的 `package.json` 与
+lockfile 中固定 Wrangler 4.118.0；`engines` 与 `devEngines` 会在 npm 安装、
+运行脚本前要求 Node 22+ 与 npm 10.9+。Wrangler 不需要全局安装，也不会进入
+Odroe 的 Dart 依赖图或应用产物。
+本地验证 D1 路径：
 
 ```sh
+flutter pub get
+npm ci
 dart run odroe build --server-target cloudflare web
-wrangler d1 migrations apply DB --local
-wrangler dev --local
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
 ```
 
 访问 `/posts/42?preview=true&tags=one&tags=two`。Native 返回

@@ -60,23 +60,39 @@ dependencies:
 
 ```sh
 flutter pub get
-dart run odroe init
+dart run odroe init --full-stack
 dart run odroe dev -- -d chrome
 ```
 
 ```text
-lib/
-├── main.dart             # Document + Router composition root
-├── routes/
-│   ├── route.dart
-│   └── page.dart
-├── routes.dart          # generated client tree
-└── routes.server.dart   # generated server tree
+my_app/
+├── lib/
+│   ├── main.dart              # Query + RPC + Document + Router
+│   ├── posts_database.dart    # shared typed schema and query
+│   ├── rpc_origin.dart
+│   ├── server.dart            # native / Cloudflare conditional export
+│   ├── server_native.dart     # in-memory SQLite
+│   ├── server_cloudflare.dart # invocation-scoped D1
+│   ├── routes/
+│   │   ├── route.dart
+│   │   ├── page.dart
+│   │   └── server.dart
+│   ├── routes.dart            # generated client tree
+│   └── routes.server.dart     # generated server tree
+├── migrations/0001_posts.sql
+├── package.json
+├── package-lock.json
+└── wrangler.jsonc
 ```
 
-`init` 只接受 Flutter `--empty` 应用，验证目标项目确实解析到正在运行的 Odroe，
-然后写入上面的最小产品并生成 route targets。二次执行零改动；发现自定义 Dart
-源码会整体拒绝，不提供 `--force`，也不会修改 pubspec 或平台宿主。
+`init --full-stack` 只接受 Flutter `--empty` 应用，验证目标项目确实解析到正在
+运行的 Odroe，然后原子写入一条真实纵向产品：Flutter → Query → typed RPC →
+Server → typed SQL → SQLite。它同时准备 D1 migration 与锁定的本地 Cloudflare
+工具链，但默认开发路径不需要 Node。二次执行零改动；发现自定义源码、配置、
+目录冲突或符号链接会整体拒绝，不提供 `--force`，也不会修改 pubspec 或平台宿主。
+
+只需要 Document 与 Router 时，改用 `dart run odroe init`；未修改的基础 starter
+可以随后原子升级为 `--full-stack`。
 
 每个包含 `page.dart`、`shell.dart` 或 `server.dart` 的目录必须包含自己的中立 `route.dart`。没有 flat-route 语法、annotation、`part`、build_runner、registry 或 hash 清单。
 
@@ -563,9 +579,10 @@ mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口：
 接受 `SqlDialect.mysql`；显式错配会在该 statement 到达数据库前抛出
 `SqlException(SqlErrorCode.unsupported)`。
 
-仓库中的 [`example/app`](https://github.com/odroe/odroe/tree/main/example/app)
-把 `/posts/42` 跑成一条真实纵向链路：Flutter page → Query → 生成的 typed RPC →
-HTTP → Server → `DatabaseModule` → typed SQL。共享 route 只读公开数据库边界：
+`odroe init --full-stack` 把根页面跑成一条真实纵向链路：Flutter page → Query →
+生成的 typed RPC → HTTP → Server → `DatabaseModule` → typed SQL。它与仓库中的
+[`example/app`](https://github.com/odroe/odroe/tree/main/example/app) 沿用同一组已验证
+API、runtime contract 与锁定工具链；route 只读公开数据库边界：
 
 ```dart
 final titles = await postQueries
@@ -584,6 +601,21 @@ in-memory SQLite，request 只借用，并由 `Server.close()` 关闭；它是�
 零配置示例，不代表持久化。Cloudflare 入口则在 `invocationModules` 中包装 D1
 binding，schema 与 seed 来自 `migrations/0001_posts.sql`。因此 Flutter Web、
 Wasm 与 Worker 产物都不需要触达 SQLite FFI。
+
+生成的应用在自己的 `package.json` 与 lockfile 中固定 Wrangler 4.118.0；Node 22+
+与 npm 10.9+ 只用于本地 Cloudflare 工具链，不进入 Dart 依赖图或部署产物。
+无需全局安装 Wrangler：
+
+```sh
+npm ci
+dart run odroe build --server-target cloudflare web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+最后一条命令在当前应用目录启动本地 Workerd；访问 `/` 会得到语义 HTML，
+`posts.read-title` RPC 从 D1 返回 `D1 post 42`。移除 `--local` 或运行 deploy
+会修改远端状态，不属于这条本地路径。
 
 ```dart
 final statement = BoundSql.parts(

@@ -18,7 +18,12 @@ Future<int> runOdroe(
 }) async {
   final out = output ?? stdout;
   final err = errors ?? stderr;
-  final init = _projectParser();
+  final init = _projectParser()
+    ..addFlag(
+      'full-stack',
+      negatable: false,
+      help: 'Create a Query, RPC, typed SQL, SQLite, and Cloudflare starter.',
+    );
   final generate = _generationParser()
     ..addFlag(
       'watch',
@@ -124,7 +129,15 @@ Future<int> runOdroe(
         ? CliProject.fromRoot(command.option('project')!)
         : CliProject.from(command);
     return switch (command.name) {
-      'init' => initializeProject(project, out, err) ? 0 : 1,
+      'init' =>
+        initializeProject(
+              project,
+              out,
+              err,
+              fullStack: command.flag('full-stack'),
+            )
+            ? 0
+            : 1,
       'generate' =>
         command.flag('watch')
             ? await _watchRoutes(project, out, err)
