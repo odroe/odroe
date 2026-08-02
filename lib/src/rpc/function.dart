@@ -13,6 +13,9 @@ final class NoServerInput {
 /// Converts one decoded wire value to [T].
 typedef ValueDecoder<T> = T Function(Object? value);
 
+/// Converts one typed value to a serializer-supported wire value.
+typedef ValueEncoder<T> = Object? Function(T value);
+
 /// Request data available to a server-function handler.
 final class ServerFunctionContext<I> {
   /// Creates a context for one invocation.
@@ -102,16 +105,23 @@ final class ServerFunction<I, O> {
   }
 }
 
-/// Generated manifest entry joining an implementation to its wire decoder.
+/// Generated manifest entry joining an implementation to its wire codecs.
 final class ServerFunctionBinding {
   /// Creates a manifest binding for [function].
-  const ServerFunctionBinding(this.function, {this.decodeInput});
+  const ServerFunctionBinding(
+    this.function, {
+    this.decodeInput,
+    this.encodeOutput,
+  });
 
   /// Bound server implementation.
   final ServerFunction<dynamic, dynamic> function;
 
   /// Decoder generated from the shared input type.
   final ValueDecoder<Object?>? decodeInput;
+
+  /// Encoder generated for one output value or stream item.
+  final ValueEncoder<Object?>? encodeOutput;
 
   /// HTTP method accepted by the bound function.
   HttpMethod get method => function.method;

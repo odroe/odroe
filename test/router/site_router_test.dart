@@ -13,11 +13,11 @@ void main() {
     expect(output.staticRoutes, contains('/404.html'));
     expect(
       output.serverSource,
-      isNot(contains("import 'routes/docs/route.dart'")),
+      isNot(contains('import "routes/docs/route.dart"')),
     );
     expect(
       output.serverSource,
-      contains("import 'routes/docs/[...slug]/route.dart'"),
+      contains('import "routes/docs/[...slug]/route.dart"'),
     );
   });
 }

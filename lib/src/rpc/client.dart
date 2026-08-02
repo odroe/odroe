@@ -15,6 +15,7 @@ final class ServerFunctionRef<I, O> {
   const ServerFunctionRef({
     required this.id,
     this.method = HttpMethod.post,
+    this.encodeInput,
     this.decodeOutput,
   });
 
@@ -23,6 +24,9 @@ final class ServerFunctionRef<I, O> {
 
   /// HTTP method used to invoke the function.
   final HttpMethod method;
+
+  /// Optional encoder applied before the input reaches [Serializer].
+  final ValueEncoder<I>? encodeInput;
 
   /// Optional decoder for the serialized result.
   final ValueDecoder<O>? decodeOutput;
@@ -40,6 +44,7 @@ final class ServerStreamFunctionRef<I, T> {
   const ServerStreamFunctionRef({
     required this.id,
     this.method = HttpMethod.post,
+    this.encodeInput,
     this.decodeOutput,
   });
 
@@ -48,6 +53,9 @@ final class ServerStreamFunctionRef<I, T> {
 
   /// HTTP method used to invoke the function.
   final HttpMethod method;
+
+  /// Optional encoder applied before the input reaches [Serializer].
+  final ValueEncoder<I>? encodeInput;
 
   /// Optional decoder for each serialized stream item.
   final ValueDecoder<T>? decodeOutput;
@@ -131,6 +139,7 @@ final class RpcClient {
       function.id,
       function.method,
       data,
+      encodeInput: function.encodeInput,
       cancelled: cancelled,
     );
     if (O == ServerResponse) return response as O;
@@ -167,6 +176,7 @@ final class RpcClient {
       function.id,
       function.method,
       data,
+      encodeInput: function.encodeInput,
       cancelled: cancelled,
     );
     final contentType = response.headers.value('content-type') ?? '';
@@ -197,17 +207,20 @@ final class RpcClient {
     String id,
     HttpMethod method,
     I data, {
+    ValueEncoder<I>? encodeInput,
     Future<void>? cancelled,
   }) async {
-    final setup = await runUntilRpcCancelled(
-      () async => (
-        payload: serializer.encodeJson(<String, Object?>{
-          'data': data is NoServerInput ? null : data,
-        }),
+    final setup = await runUntilRpcCancelled(() async {
+      final input = data is NoServerInput
+          ? null
+          : encodeInput == null
+          ? data
+          : encodeInput(data);
+      return (
+        payload: serializer.encodeJson(<String, Object?>{'data': input}),
         headers: await headersProvider?.call(),
-      ),
-      cancelled,
-    );
+      );
+    }, cancelled);
     final payload = setup.payload;
     final path = '$functionPath/${Uri.encodeComponent(id)}';
     final headers = _rpcHeaders(baseUri, setup.headers);
@@ -310,9 +323,7 @@ final class RpcClient {
       final frame = _parseFrame(text, status);
       switch (frame['type']) {
         case 'data':
-          final value = serializer.decode(frame['data']);
-          final decoder = decode;
-          output.add(decoder == null ? value as T : decoder(value));
+          output.add(_decodeData(frame['data'], status, decode));
         case 'error':
           _throwRemoteError(frame, status, 'Server stream failed.');
         default:
@@ -445,8 +456,7 @@ final class RpcClient {
             'The server returned data for a failed RPC request.',
           );
         }
-        final value = serializer.decode(frame['data']);
-        return decode?.call(value) ?? value as O;
+        return _decodeData(frame['data'], status, decode);
       case 'redirect':
         final location = frame['location'];
         final redirectStatus = frame['status'];
@@ -471,6 +481,24 @@ final class RpcClient {
         _throwRemoteError(frame, status, 'Server function failed.');
       default:
         _invalidResponse(status, 'The server returned an unknown RPC frame.');
+    }
+  }
+
+  T _decodeData<T>(Object? data, int status, ValueDecoder<T>? decode) {
+    try {
+      final value = serializer.decode(data);
+      return decode == null ? value as T : decode(value);
+    } on Object catch (error) {
+      if (error is! FormatException &&
+          error is! TypeError &&
+          error is! RangeError &&
+          error is! ArgumentError) {
+        rethrow;
+      }
+      _invalidResponse(
+        status,
+        'The server returned data that does not match the function output.',
+      );
     }
   }
 

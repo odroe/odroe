@@ -83,6 +83,105 @@ void main() {
     );
   });
 
+  test('encodes value and stream outputs before serialization', () async {
+    var encodes = 0;
+    Object? encodePost(Object? value) {
+      encodes++;
+      final post = value as _Post;
+      return <String, Object?>{'id': post.id, 'title': post.title};
+    }
+
+    final server = Server(
+      routes: const [],
+      functions: <String, ServerFunctionBinding>{
+        'read': ServerFunctionBinding(
+          ServerFunction<NoServerInput, _Post>(
+            handler: (_) => (id: 42, title: 'Odroe'),
+          ),
+          encodeOutput: encodePost,
+        ),
+        'watch': ServerFunctionBinding(
+          ServerFunction<NoServerInput, Stream<_Post>>(
+            handler: (_) => Stream<_Post>.fromIterable(const <_Post>[
+              (id: 43, title: 'Native'),
+              (id: 44, title: 'Edge'),
+            ]),
+          ),
+          encodeOutput: encodePost,
+        ),
+        'empty': ServerFunctionBinding(
+          ServerFunction<NoServerInput, _Post>(
+            handler: (_) => (id: 45, title: 'Hidden'),
+          ),
+          encodeOutput: (_) => null,
+        ),
+      },
+      allowRpcWithoutOrigin: true,
+    );
+
+    final value = await server.handle(_request('/__odroe/functions/read'));
+    expect(jsonDecode(await value.readText()), <String, Object?>{
+      'version': 1,
+      'type': 'data',
+      'data': <String, Object?>{'id': 42, 'title': 'Odroe'},
+    });
+
+    final streamed = await server.handle(_request('/__odroe/functions/watch'));
+    final lines = const LineSplitter().convert(await streamed.readText());
+    expect(lines.map(jsonDecode), <Object?>[
+      <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <String, Object?>{'id': 43, 'title': 'Native'},
+      },
+      <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <String, Object?>{'id': 44, 'title': 'Edge'},
+      },
+    ]);
+
+    final empty = await server.handle(_request('/__odroe/functions/empty'));
+    expect(jsonDecode(await empty.readText()), containsPair('data', null));
+    expect(encodes, 3);
+  });
+
+  test('keeps output encoder failures on the server error path', () async {
+    final failure = StateError('Cannot encode output.');
+    final reported = <Object>[];
+    final server = Server(
+      routes: const [],
+      functions: <String, ServerFunctionBinding>{
+        'read': ServerFunctionBinding(
+          ServerFunction<NoServerInput, String>(handler: (_) => 'value'),
+          encodeOutput: (_) => throw failure,
+        ),
+        'watch': ServerFunctionBinding(
+          ServerFunction<NoServerInput, Stream<String>>(
+            handler: (_) => Stream<String>.value('value'),
+          ),
+          encodeOutput: (_) => throw failure,
+        ),
+      },
+      allowRpcWithoutOrigin: true,
+      onError: (_, error, _) => reported.add(error),
+    );
+
+    final value = await server.handle(_request('/__odroe/functions/read'));
+    expect(value.status, 500);
+    expect(jsonDecode(await value.readText()), containsPair('type', 'error'));
+
+    final streamed = await server.handle(_request('/__odroe/functions/watch'));
+    expect(streamed.status, 200);
+    expect(
+      jsonDecode(
+        (const LineSplitter().convert(await streamed.readText())).single,
+      ),
+      containsPair('type', 'error'),
+    );
+    expect(reported, <Object>[failure, failure]);
+  });
+
   test('counts the complete value frame in UTF-8 bytes', () async {
     const value = '雪🙂';
     final expected = JsonUtf8Encoder().convert(<String, Object?>{
@@ -254,14 +353,20 @@ void main() {
   test(
     'leaves explicit server responses outside the typed frame budget',
     () async {
+      var encodes = 0;
       final server = _server<ServerResponse>(
         maxResponseBytes: Server.minimumFunctionResponseFrameBytes,
         handler: (_) => ServerResponse.bytes(List<int>.filled(64, 1)),
+        encodeOutput: (_) {
+          encodes++;
+          return null;
+        },
       );
 
       final response = await server.handle(_request());
       expect(response.status, 200);
       expect(await response.readBytes(), hasLength(64));
+      expect(encodes, 0);
     },
   );
 }
@@ -270,12 +375,14 @@ Server _server<O>({
   required int maxResponseBytes,
   required ServerFunctionHandler<NoServerInput, O> handler,
   Serializer? serializer,
+  ValueEncoder<Object?>? encodeOutput,
   bool exposeErrors = false,
 }) => Server(
   routes: const [],
   functions: <String, ServerFunctionBinding>{
     'test': ServerFunctionBinding(
       ServerFunction<NoServerInput, O>(handler: handler),
+      encodeOutput: encodeOutput,
     ),
   },
   serializer: serializer,
@@ -284,6 +391,8 @@ Server _server<O>({
   allowRpcWithoutOrigin: true,
   onError: (_, _, _) {},
 );
+
+typedef _Post = ({int id, String title});
 
 ServerRequest _request([String path = '/__odroe/functions/test']) =>
     ServerRequest.bytes(

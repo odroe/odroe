@@ -473,12 +473,20 @@ final class Server {
       final value = await binding.execute(data, context, id);
       if (value is ServerResponse) return value;
       if (value is Stream) {
-        return _streamFunction(value, context.request, context.invocation);
+        return _streamFunction(
+          value,
+          context.request,
+          context.invocation,
+          binding.encodeOutput,
+        );
       }
+      final encodeOutput = binding.encodeOutput;
       return _functionResponse(<String, Object?>{
         'version': 1,
         'type': 'data',
-        'data': serializer.encode(value),
+        'data': serializer.encode(
+          encodeOutput == null ? value : encodeOutput(value),
+        ),
       });
     });
   }
@@ -509,6 +517,7 @@ final class Server {
     Stream<dynamic> stream,
     ServerRequest request,
     ServerInvocation invocation,
+    ValueEncoder<Object?>? encodeOutput,
   ) {
     Stream<List<int>> body() async* {
       try {
@@ -516,7 +525,9 @@ final class Server {
           yield _encodeFunctionFrame(<String, Object?>{
             'version': 1,
             'type': 'data',
-            'data': serializer.encode(value),
+            'data': serializer.encode(
+              encodeOutput == null ? value : encodeOutput(value),
+            ),
           }, terminateLine: true);
         }
       } on _FunctionResponseFrameTooLarge {

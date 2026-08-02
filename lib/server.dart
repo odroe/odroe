@@ -13,7 +13,8 @@ export 'src/rpc/function.dart'
         ServerFunctionBinding,
         ServerFunctionContext,
         ServerFunctionHandler,
-        ValueDecoder;
+        ValueDecoder,
+        ValueEncoder;
 export 'src/rpc/serializer.dart' show SerializationAdapter, Serializer;
 export 'src/server/render.dart';
 export 'src/server/error_reporter.dart' show ServerErrorHandler;

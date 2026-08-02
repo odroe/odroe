@@ -141,6 +141,77 @@ void main() {
     expect(transport.requests, isEmpty);
   });
 
+  test('encodes value and stream inputs before serialization', () async {
+    final transport = _RecordingTransport(<ServerResponse>[
+      _dataResponse('saved'),
+      _streamResponse('watching'),
+    ]);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: transport,
+    );
+    var encodes = 0;
+    Object? encodePost(_Post post) {
+      encodes++;
+      return <String, Object?>{'id': post.id, 'title': post.title};
+    }
+
+    final saved = await ServerFunctionRef<_Post, String>(
+      id: 'save',
+      encodeInput: encodePost,
+    )(client, (id: 42, title: 'Odroe'));
+    final stream = await ServerStreamFunctionRef<_Post, String>(
+      id: 'watch',
+      encodeInput: encodePost,
+    )(client, (id: 43, title: 'Edge'));
+
+    expect(saved, 'saved');
+    expect(await stream.toList(), <String>['watching']);
+    expect(encodes, 2);
+    expect(jsonDecode(transport.requests[0].body), <String, Object?>{
+      'data': <String, Object?>{'id': 42, 'title': 'Odroe'},
+    });
+    expect(jsonDecode(transport.requests[1].body), <String, Object?>{
+      'data': <String, Object?>{'id': 43, 'title': 'Edge'},
+    });
+  });
+
+  test(
+    'honors null input encodings and does not send encoder failures',
+    () async {
+      final failure = ArgumentError('Invalid post.');
+      final transport = _RecordingTransport(<ServerResponse>[
+        _dataResponse(null),
+      ]);
+      var headerCalls = 0;
+      final client = RpcClient(
+        baseUri: Uri.parse('https://api.example.com'),
+        transport: transport,
+        headersProvider: () {
+          headerCalls++;
+          return Headers();
+        },
+      );
+
+      await ServerFunctionRef<_Post, Object?>(
+        id: 'clear',
+        encodeInput: (_) => null,
+      )(client, (id: 42, title: 'Odroe'));
+      await expectLater(
+        ServerFunctionRef<_Post, Object?>(
+          id: 'save',
+          encodeInput: (_) => throw failure,
+        )(client, (id: 43, title: 'Invalid')),
+        throwsA(same(failure)),
+      );
+
+      expect(jsonDecode(transport.requests.single.body), <String, Object?>{
+        'data': null,
+      });
+      expect(headerCalls, 1);
+    },
+  );
+
   test('forwards cancellation to value and stream requests', () async {
     final getCancelled = Completer<void>();
     final postCancelled = Completer<void>();
@@ -435,6 +506,34 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('classifies invalid typed output as a protocol error', () async {
+    final transport = _RecordingTransport(<ServerResponse>[
+      _dataResponse('not an integer'),
+      ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <String, Object?>{r'$type': 'Unknown', r'$value': 1},
+      }),
+      _streamResponse('not an integer'),
+    ]);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://api.example.com'),
+      transport: transport,
+    );
+    const value = ServerFunctionRef<NoServerInput, int>(id: 'read');
+
+    for (var index = 0; index < 2; index++) {
+      await expectLater(
+        value(client, const NoServerInput()),
+        throwsA(isA<RpcProtocolException>()),
+      );
+    }
+    final stream = await const ServerStreamFunctionRef<NoServerInput, int>(
+      id: 'watch',
+    )(client, const NoServerInput());
+    await expectLater(stream.toList(), throwsA(isA<RpcProtocolException>()));
   });
 
   test('rejects empty successful typed responses', () async {
@@ -1203,6 +1302,8 @@ ServerResponse _streamResponse(
     ),
   ),
 );
+
+typedef _Post = ({int id, String title});
 
 final class _RecordedRequest {
   const _RecordedRequest({

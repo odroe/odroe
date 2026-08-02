@@ -548,6 +548,44 @@ final class RouteScanner {
         '${_relative(samePattern.directory.path)}.',
       );
     }
+    _validateFunctionMembers(nodes, diagnostics);
+  }
+
+  void _validateFunctionMembers(
+    List<RouteNode> nodes,
+    List<FileRouteDiagnostic> diagnostics,
+  ) {
+    const objectMembers = <String>{
+      'hashCode',
+      'noSuchMethod',
+      'runtimeType',
+      'toString',
+    };
+    for (final node in nodes) {
+      final childMembers = <String, RouteNode>{
+        for (final child in node.children) child.memberName: child,
+      };
+      for (final function in node.functions) {
+        final name = function.name;
+        String? owner;
+        if (node.pageFile != null && name == 'to') {
+          owner = 'the generated navigation method';
+        } else if (childMembers[name] case final child?) {
+          owner = 'child route ${_relative(child.directory.path)}';
+        } else if (objectMembers.contains(name)) {
+          owner = 'Object.$name';
+        } else if (name == node.className) {
+          owner = 'the generated ${node.className} constructor';
+        }
+        if (owner == null) continue;
+        _error(
+          diagnostics,
+          node.serverFile!.path,
+          'ServerFunction "$name" conflicts with $owner in the generated '
+          '${node.className} facade. Rename the function.',
+        );
+      }
+    }
   }
 
   void _validateFunctionIds(

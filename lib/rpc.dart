@@ -13,7 +13,7 @@ export 'src/rpc/client.dart'
         RpcProtocolException,
         RemoteServerException;
 export 'src/rpc/cancellation.dart' show RpcCancelledException;
-export 'src/rpc/function.dart' show NoServerInput, ValueDecoder;
+export 'src/rpc/function.dart' show NoServerInput, ValueDecoder, ValueEncoder;
 export 'src/rpc/http.dart';
 export 'src/rpc/module.dart';
 export 'src/rpc/serializer.dart';
