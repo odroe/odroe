@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add typed conflict-target `insertOnConflictDoNothing` for SQLite, Cloudflare
+  D1, and PostgreSQL, with exact pre-I/O rejection on MySQL. Make the full-stack
+  starter decode a complete `Post` record and seed native SQLite through the
+  same public typed query API.
 - Add exact-cardinality `SqlRead.one` and `oneOrNull` terminals. Typed selects
   probe at most two rows while preserving offsets and explicit limits up to
   two; mutation `RETURNING` keeps its original statement and validates the

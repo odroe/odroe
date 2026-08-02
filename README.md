@@ -523,7 +523,9 @@ final class Authors extends SqlTable<String> {
   late final projection = SqlProjection.column(displayName);
 }
 
-final class Posts extends SqlTable<String> {
+typedef Post = ({int id, int? authorId, String title});
+
+final class Posts extends SqlTable<Post> {
   Posts() : super('posts');
 
   late final id = column<int>('id', sqlInt);
@@ -531,16 +533,23 @@ final class Posts extends SqlTable<String> {
   late final title = column<String>('title', sqlText);
 
   @override
-  late final projection = SqlProjection.column(title);
+  late final projection = SqlProjection<Post>(
+    <SqlSelection<Object?>>[id, authorId, title],
+    (row) => (
+      id: id.read(row, 0),
+      authorId: authorId.read(row, 1),
+      title: title.read(row, 2),
+    ),
+  );
 }
 
 final posts = Posts();
 final authors = Authors();
 const sql = SqlQueries(SqlDialect.sqlite);
 
-final titles = await sql
+final post = await sql
     .selectTable(posts, where: posts.id.equals(42))
-    .all(database);
+    .oneOrNull(database);
 
 final authorName = authors.displayName.optional.as('author_name');
 final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
@@ -561,10 +570,16 @@ final rows = await sql.select(
   projection: postsWithAuthors,
 ).all(database);
 
-await sql.insert(
-  posts,
-  <SqlAssignment>[posts.title.set('Hello')],
-).execute(database);
+await sql
+    .insertOnConflictDoNothing(
+      posts,
+      <SqlAssignment>[
+        posts.id.set(42),
+        posts.title.set('Hello'),
+      ],
+      target: [posts.id],
+    )
+    .execute(database);
 
 await sql.updateAll(
   posts,
@@ -576,7 +591,14 @@ await sql.updateAll(
 `posts.title.set(42)` 会在分析期失败。`updateAll`/`deleteAll` 同时要求方法名
 与 `allRows` 两次确认。联表查询会自动限定列名；`LEFT JOIN` 右侧的非空
 schema column 通过结果专用的 `.optional` 解码，不能用于写入。
-mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口：
+mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口。
+
+`insertOnConflictDoNothing` 要求非空 values 与显式 conflict target；列清单必须
+匹配所选数据库接受的 conflict arbiter，其他索引形态继续使用 `BoundSql`。
+SQLite、D1 与 PostgreSQL 编译为同一条 target-aware
+`ON CONFLICT DO NOTHING`。MySQL 没有等价的 target 语义，因此该方法会在读取
+输入或访问数据库前返回 `SqlErrorCode.unsupported`，不会暗中退化为
+`INSERT IGNORE` 或任意唯一键冲突处理。
 
 `SqlQueries` 会把所选方言保留到每个 `BoundSql`。SQLite 与 D1 接受
 `SqlDialect.sqlite`，PostgreSQL 接受 `SqlDialect.postgres`，MySQL/MariaDB
@@ -589,14 +611,14 @@ mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口：
 API、runtime contract 与锁定工具链；route 只读公开数据库边界：
 
 ```dart
-final title = await postQueries
+final post = await postQueries
     .selectTable(
       posts,
       where: posts.id.equals(context.data),
     )
     .oneOrNull(context.request.read(databaseKey));
-if (title == null) throw const NotFound('Post not found.');
-return title;
+if (post == null) throw const NotFound('Post not found.');
+return post.title;
 ```
 
 `oneOrNull` 明确要求结果为零行或一行：零行返回 `null`，多行直接拒绝，避免
@@ -605,9 +627,9 @@ return title;
 `lib/server.dart` 通过条件导出隔离平台 driver。Native 入口使用进程拥有的文件
 SQLite，默认路径为 `.odroe/app.sqlite3`，request 只借用，并由
 `Server.close()` 关闭。`CREATE TABLE IF NOT EXISTS` 与
-`ON CONFLICT(id) DO NOTHING` 让 starter 可重复启动且不覆盖已有数据；这是
-固定初始 schema 的示例 bootstrap，不会迁移已有表。Native schema 演进由应用
-自己的 migration 流程负责。Cloudflare 入口则在
+typed `insertOnConflictDoNothing(..., target: [posts.id])` 让 starter 可重复启动
+且不覆盖已有数据；这是固定初始 schema 的示例 bootstrap，不会迁移已有表。
+Native schema 演进由应用自己的 migration 流程负责。Cloudflare 入口则在
 `invocationModules` 中包装 D1 binding，schema 与 seed 来自
 `migrations/0001_posts.sql`。两套初始化路径保持显式分离，因此 Flutter Web、
 Wasm 与 Worker 产物都不需要触达 SQLite FFI。

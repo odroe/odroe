@@ -40,13 +40,36 @@ insert, update, and delete statements for an explicit dialect:
 final posts = Posts();
 const queries = SqlQueries(SqlDialect.sqlite);
 
-final title = await queries
+final post = await queries
     .selectTable(posts, where: posts.id.equals(42))
     .oneOrNull(database);
 ```
 
 Use `all` for collections. `oneOrNull` returns `null` for no row and rejects
-multiple rows, preserving an exact zero-or-one cardinality contract.
+multiple rows, preserving an exact zero-or-one cardinality contract. The table
+projection can decode a complete application record; the caller does not need
+to rebuild an entity from unrelated scalar queries.
+
+Idempotent inserts keep the conflict key visible:
+
+```dart
+await queries
+    .insertOnConflictDoNothing(
+      posts,
+      <SqlAssignment>[
+        posts.id.set(42),
+        posts.title.set('First post'),
+      ],
+      target: [posts.id],
+    )
+    .execute(database);
+```
+
+The column list must match a conflict arbiter accepted by the selected
+database. Other index shapes remain explicit `BoundSql`. SQLite, D1, and
+PostgreSQL support this exact target-aware operation. MySQL is rejected before
+Odroe reads the inputs or performs database I/O because its conflict operations
+do not preserve this contract.
 
 Column assignment and predicate types are checked by Dart. Joined reads qualify
 columns; left joins require an explicitly optional result selection. Updating

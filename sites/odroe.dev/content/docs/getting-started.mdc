@@ -68,7 +68,9 @@ my_app/
 
 The root page asks for post `42`. Native execution seeds `SQLite post 42`;
 local D1 seeds `D1 post 42`. The route, function input, function result, SQL
-column, and decoded value remain typed throughout the path.
+columns, and complete `Post` projection remain typed throughout the path. The
+native seed uses `insertOnConflictDoNothing` with `posts.id` as its explicit
+conflict target; it does not hide a raw application write inside the starter.
 
 Native SQLite persists at `.odroe/app.sqlite3` by default, and the initializer
 adds `.odroe/` to `.gitignore`. Set `ODROE_SQLITE_PATH` to override it; use an

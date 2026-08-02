@@ -807,7 +807,10 @@ void main() {
     expect(native, contains('onClose: database.close'));
     expect(native, isNot(contains('database_d1.dart')));
     expect(nativeDatabase, contains('CREATE TABLE IF NOT EXISTS posts'));
-    expect(nativeDatabase, contains('ON CONFLICT(id) DO NOTHING'));
+    expect(nativeDatabase, contains('SqlTable<Post>'));
+    expect(nativeDatabase, contains('.insertOnConflictDoNothing('));
+    expect(nativeDatabase, contains('target: [posts.id]'));
+    expect(nativeDatabase, isNot(contains('INSERT INTO posts')));
     expect(cloudflare, contains("package:odroe/database_d1.dart"));
     expect(cloudflare, contains('FutureOr<Server> createServer()'));
     expect(cloudflare, contains('invocationModules: (invocation)'));
@@ -818,6 +821,7 @@ void main() {
     expect(route, isNot(contains("package:odroe/rpc.dart")));
     expect(route, contains('context.request.read(databaseKey)'));
     expect(route, contains("const NotFound('Post not found.')"));
+    expect(route, contains('return post.title;'));
     expect(route, isNot(contains('database_sqlite.dart')));
     expect(route, isNot(contains('database_d1.dart')));
     expect(route, isNot(contains(r'Post ${context.data}')));

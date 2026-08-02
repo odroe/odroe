@@ -103,6 +103,72 @@ void main() {
         _throwsSql(SqlErrorCode.unsupported),
       );
     });
+
+    for (final dialect in <SqlDialect>[
+      SqlDialect.sqlite,
+      SqlDialect.postgres,
+    ]) {
+      test('${dialect.name} compiles targeted conflict inserts', () {
+        final users = _Users();
+        final queries = SqlQueries(dialect);
+        final insert = queries.insertOnConflictDoNothing(
+          users,
+          <SqlAssignment>[
+            users.email.set('ada@example.com'),
+            users.active.set(true),
+          ],
+          target: <SqlTableColumn<Object?>>[users.email],
+        );
+
+        expect(insert.statement.fragments, <String>[
+          'INSERT INTO "users" ("email", "active") VALUES (',
+          ', ',
+          ') ON CONFLICT ("email") DO NOTHING',
+        ]);
+        expect(_values(insert.statement), <Object?>['ada@example.com', true]);
+        expect(insert.statement.kind, SqlStatementKind.write);
+        expect(insert.statement.dialect, dialect);
+
+        final returning = insert.returning(users.projection);
+        expect(returning.statement.fragments, <String>[
+          'INSERT INTO "users" ("email", "active") VALUES (',
+          ', ',
+          ') ON CONFLICT ("email") DO NOTHING '
+              'RETURNING "id", "email", "nickname", "active"',
+        ]);
+        expect(_values(returning.statement), <Object?>[
+          'ada@example.com',
+          true,
+        ]);
+        expect(returning.statement.kind, SqlStatementKind.rowReturning);
+        expect(returning.statement.dialect, dialect);
+      });
+    }
+
+    test('rejects MySQL conflict inserts without reading inputs', () {
+      final users = _Users();
+      var valuesRead = false;
+      var targetRead = false;
+
+      Iterable<SqlAssignment> values() sync* {
+        valuesRead = true;
+        yield users.email.set('ada@example.com');
+      }
+
+      Iterable<SqlTableColumn<Object?>> target() sync* {
+        targetRead = true;
+        yield users.email;
+      }
+
+      expect(
+        () => const SqlQueries(
+          SqlDialect.mysql,
+        ).insertOnConflictDoNothing(users, values(), target: target()),
+        _throwsSql(SqlErrorCode.unsupported),
+      );
+      expect(valuesRead, isFalse);
+      expect(targetRead, isFalse);
+    });
   });
 
   group('single-row terminals', () {
@@ -443,6 +509,43 @@ void main() {
       expect(
         () =>
             queries.updateAll(users, const <SqlAssignment>[], confirm: allRows),
+        throwsArgumentError,
+      );
+    });
+
+    test('validates targeted conflict inserts', () {
+      final users = _Users();
+      final other = _Users();
+      const queries = SqlQueries(SqlDialect.sqlite);
+
+      expect(
+        () => queries.insertOnConflictDoNothing(
+          users,
+          const <SqlAssignment>[],
+          target: <SqlTableColumn<Object?>>[users.email],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.insertOnConflictDoNothing(users, <SqlAssignment>[
+          users.email.set('ada@example.com'),
+        ], target: const <SqlTableColumn<Object?>>[]),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.insertOnConflictDoNothing(
+          users,
+          <SqlAssignment>[users.email.set('ada@example.com')],
+          target: <SqlTableColumn<Object?>>[users.email, users.email],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.insertOnConflictDoNothing(
+          users,
+          <SqlAssignment>[users.email.set('ada@example.com')],
+          target: <SqlTableColumn<Object?>>[other.email],
+        ),
         throwsArgumentError,
       );
     });

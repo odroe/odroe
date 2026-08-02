@@ -23,9 +23,11 @@ dart run odroe build web
 生产环境应指向持久卷上的绝对可写路径。默认相对路径以 server 进程的当前目录
 为基准。
 
-Native 的 `CREATE TABLE IF NOT EXISTS` 与 `ON CONFLICT(id) DO NOTHING`
-只是固定初始 schema 的 starter bootstrap，不会修改已有表结构。Native schema
-演进需要应用自己的 migration 流程。构建预渲染时，Odroe CLI 会把
+Native 的 `CREATE TABLE IF NOT EXISTS` 与公共 typed SQL
+`insertOnConflictDoNothing(..., target: [posts.id])` 只是固定初始 schema 的
+starter bootstrap，不会修改已有表结构。`Posts` projection 解码完整的
+`({int id, String title})` 记录，route 再明确选择 RPC 所需的 `title`。Native
+schema 演进需要应用自己的 migration 流程。构建预渲染时，Odroe CLI 会把
 `ODROE_SQLITE_PATH` 覆盖为一次性临时文件，并在结束后删除，因而不会读取或改写
 开发数据库。
 

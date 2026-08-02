@@ -49,6 +49,59 @@ Future<void> _run(_Environment environment) async {
         ) STRICT
       '''),
     );
+    await database.execute(
+      BoundSql.raw('''
+        CREATE TABLE conflict_records (
+          id INTEGER PRIMARY KEY,
+          value TEXT NOT NULL
+        ) STRICT
+      '''),
+    );
+
+    final conflictRecords = _ConflictRecords();
+    const queries = SqlQueries(SqlDialect.sqlite);
+    final conflictInsert = await queries
+        .insertOnConflictDoNothing(
+          conflictRecords,
+          <SqlAssignment>[
+            conflictRecords.id.set(1),
+            conflictRecords.value.set('Original'),
+          ],
+          target: <SqlTableColumn<Object?>>[conflictRecords.id],
+        )
+        .execute(database);
+    _expect(conflictInsert.affectedRows == 1, 'conflict insert changes');
+
+    final ignoredConflict = await queries
+        .insertOnConflictDoNothing(
+          conflictRecords,
+          <SqlAssignment>[
+            conflictRecords.id.set(1),
+            conflictRecords.value.set('Replacement'),
+          ],
+          target: <SqlTableColumn<Object?>>[conflictRecords.id],
+        )
+        .execute(database);
+    _expect(ignoredConflict.affectedRows == 0, 'ignored conflict changes');
+
+    final returnedConflict = await queries
+        .insertOnConflictDoNothing(
+          conflictRecords,
+          <SqlAssignment>[
+            conflictRecords.id.set(1),
+            conflictRecords.value.set('Returned replacement'),
+          ],
+          target: <SqlTableColumn<Object?>>[conflictRecords.id],
+        )
+        .returning(conflictRecords.projection)
+        .all(database);
+    _expect(returnedConflict.isEmpty, 'ignored conflict returning rows');
+
+    final preservedConflict = await queries
+        .selectTable(conflictRecords, where: conflictRecords.id.equals(1))
+        .one(database);
+    _expect(preservedConflict.id == 1, 'preserved conflict id');
+    _expect(preservedConflict.value == 'Original', 'preserved conflict value');
 
     const name = "Odroe ?'); DROP TABLE records; --";
     final createdAt = DateTime.parse('2026-07-30T12:34:56.789+08:00');
@@ -234,6 +287,22 @@ Future<void> _run(_Environment environment) async {
   } finally {
     await database.close();
   }
+}
+
+typedef _ConflictRecord = ({int id, String value});
+
+final class _ConflictRecords extends SqlTable<_ConflictRecord> {
+  _ConflictRecords() : super('conflict_records');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<String> value = column<String>('value', sqlText);
+
+  @override
+  late final SqlProjection<_ConflictRecord> projection =
+      SqlProjection<_ConflictRecord>(<SqlSelection<Object?>>[
+        id,
+        value,
+      ], (row) => (id: id.read(row, 0), value: value.read(row, 1)));
 }
 
 BoundSql _insertTag(String slug) {

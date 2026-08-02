@@ -1,14 +1,17 @@
 import 'package:odroe/database.dart';
 
-final class Posts extends SqlTable<String> {
+typedef Post = ({int id, String title});
+
+final class Posts extends SqlTable<Post> {
   Posts() : super('posts');
 
   late final SqlTableColumn<int> id = column<int>('id', sqlInt);
   late final SqlTableColumn<String> title = column<String>('title', sqlText);
 
   @override
-  late final SqlProjection<String> projection = SqlProjection<String>.column(
-    title,
+  late final SqlProjection<Post> projection = SqlProjection<Post>(
+    <SqlSelection<Object?>>[id, title],
+    (row) => (id: id.read(row, 0), title: title.read(row, 1)),
   );
 }
 
@@ -24,10 +27,11 @@ CREATE TABLE IF NOT EXISTS posts (
 ) STRICT
 ''', dialect: SqlDialect.sqlite),
   );
-  await database.execute(
-    BoundSql.raw('''
-INSERT INTO posts (id, title) VALUES (42, 'SQLite post 42')
-ON CONFLICT(id) DO NOTHING
-''', dialect: SqlDialect.sqlite),
-  );
+  await postQueries
+      .insertOnConflictDoNothing(
+        posts,
+        <SqlAssignment>[posts.id.set(42), posts.title.set('SQLite post 42')],
+        target: [posts.id],
+      )
+      .execute(database);
 }

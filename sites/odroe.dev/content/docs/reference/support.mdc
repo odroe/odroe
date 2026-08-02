@@ -29,7 +29,7 @@ but the deployment or provider boundary is still deliberately narrow.
   FFI, and JavaScript interop out of the wrong reachable program;
 - Odroe's database layer is typed SQL, not a full ORM or migration framework;
 - MySQL/MariaDB does not currently expose a pool and has no portable
-  `RETURNING` contract;
+  `RETURNING` or conflict-target insert contract;
 - D1 exposes atomic batches, not an interactive transaction callback;
 - there is no streaming database query surface yet; drivers materialize result
   sets, while typed single-row selects cap the SQL result at two rows;

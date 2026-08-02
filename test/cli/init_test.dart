@@ -166,8 +166,13 @@ void main() {
       expect(nativeServer, contains('databasePath.isEmpty'));
       expect(nativeServer, contains('SqliteDatabase.open(databaseFile.path)'));
       expect(database, contains('CREATE TABLE IF NOT EXISTS posts'));
-      expect(database, contains('ON CONFLICT(id) DO NOTHING'));
+      expect(database, contains('typedef Post = ({int id, String title});'));
+      expect(database, contains('SqlTable<Post>'));
+      expect(database, contains('.insertOnConflictDoNothing('));
+      expect(database, contains('target: [posts.id]'));
+      expect(database, isNot(contains('INSERT INTO posts')));
       expect(routeServer, contains('.oneOrNull('));
+      expect(routeServer, contains('return post.title;'));
       expect(routeServer, isNot(contains('limit: 1')));
       expect(routeServer, isNot(contains('.all(')));
       final gitIgnore = File(p.join(project.path, '.gitignore'));

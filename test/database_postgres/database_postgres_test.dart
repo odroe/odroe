@@ -155,6 +155,60 @@ void main() {
       expect(storedNulls, <String?>[null]);
     });
 
+    test(
+      'runs targeted conflict inserts and preserves the stored row',
+      () async {
+        await database.execute(
+          BoundSql.raw('''
+            CREATE TEMP TABLE typed_conflict_posts (
+              id BIGINT PRIMARY KEY,
+              title TEXT NOT NULL
+            )
+          '''),
+        );
+        final posts = _ConflictPosts();
+        const queries = SqlQueries(SqlDialect.postgres);
+
+        final first = await queries
+            .insertOnConflictDoNothing(
+              posts,
+              <SqlAssignment>[posts.id.set(42), posts.title.set('Original')],
+              target: <SqlTableColumn<Object?>>[posts.id],
+            )
+            .execute(database);
+        expect(first.affectedRows, 1);
+
+        final duplicate = await queries
+            .insertOnConflictDoNothing(
+              posts,
+              <SqlAssignment>[posts.id.set(42), posts.title.set('Replacement')],
+              target: <SqlTableColumn<Object?>>[posts.id],
+            )
+            .execute(database);
+        expect(duplicate.affectedRows, 0);
+
+        final returned = await queries
+            .insertOnConflictDoNothing(
+              posts,
+              <SqlAssignment>[
+                posts.id.set(42),
+                posts.title.set('Returned replacement'),
+              ],
+              target: <SqlTableColumn<Object?>>[posts.id],
+            )
+            .returning(posts.projection)
+            .all(database);
+        expect(returned, isEmpty);
+
+        expect(
+          await queries
+              .selectTable(posts, where: posts.id.equals(42))
+              .one(database),
+          (id: 42, title: 'Original'),
+        );
+      },
+    );
+
     test('binds input without scanning or rewriting SQL fragments', () async {
       await database.execute(
         BoundSql.raw(
@@ -642,6 +696,21 @@ void main() {
       );
     });
   }, skip: unavailableReason ?? false);
+}
+
+typedef _ConflictPost = ({int id, String title});
+
+final class _ConflictPosts extends SqlTable<_ConflictPost> {
+  _ConflictPosts() : super('typed_conflict_posts');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<String> title = column<String>('title', sqlText);
+
+  @override
+  late final SqlProjection<_ConflictPost> projection =
+      SqlProjection<_ConflictPost>(<SqlSelection<Object?>>[id, title], (row) {
+        return (id: id.read(row, 0), title: title.read(row, 1));
+      });
 }
 
 BoundSql _insertTag(String slug) {

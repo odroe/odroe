@@ -41,7 +41,16 @@ void requireSqlDialect(
 }
 
 /// Whether [dialect] supports SQL `RETURNING` in the typed query layer.
-bool supportsSqlReturning(SqlDialect dialect) => dialect != SqlDialect.mysql;
+bool supportsSqlReturning(SqlDialect dialect) => switch (dialect) {
+  SqlDialect.sqlite || SqlDialect.postgres => true,
+  SqlDialect.mysql => false,
+};
+
+/// Whether [dialect] supports conflict-target `ON CONFLICT DO NOTHING`.
+bool supportsSqlOnConflictDoNothing(SqlDialect dialect) => switch (dialect) {
+  SqlDialect.sqlite || SqlDialect.postgres => true,
+  SqlDialect.mysql => false,
+};
 
 void _validateIdentifier(String identifier, String kind) {
   if (identifier.isEmpty || identifier.contains('\u0000')) {

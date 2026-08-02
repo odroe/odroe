@@ -103,7 +103,60 @@ final class SqlQueries {
   ///
   /// Empty [values] use the selected dialect's default-row syntax.
   SqlWrite insert(SqlTable<Object?> table, Iterable<SqlAssignment> values) {
-    final assignments = _validateAssignments(table, values, allowEmpty: true);
+    final assignments = _validateAssignments(table, values);
+    return _insert(table, assignments);
+  }
+
+  /// Creates a single-row INSERT that does nothing on a matching conflict.
+  ///
+  /// [values] and [target] must both be non-empty. Every target column must
+  /// belong to [table]. The column list must match a conflict arbiter accepted
+  /// by the selected database; use [BoundSql] for other index shapes.
+  ///
+  /// SQLite, Cloudflare D1, and PostgreSQL use conflict-target
+  /// `ON CONFLICT DO NOTHING`. MySQL is rejected before database I/O because it
+  /// has no equivalent conflict-target operation.
+  SqlWrite insertOnConflictDoNothing(
+    SqlTable<Object?> table,
+    Iterable<SqlAssignment> values, {
+    required Iterable<SqlTableColumn<Object?>> target,
+  }) {
+    if (!supportsSqlOnConflictDoNothing(dialect)) {
+      throw const SqlException(
+        SqlErrorCode.unsupported,
+        'MySQL does not support conflict-target ON CONFLICT DO NOTHING.',
+      );
+    }
+    final assignments = _validateAssignments(table, values);
+    if (assignments.isEmpty) {
+      throw ArgumentError(
+        'A conflict-target SQL INSERT requires at least one assignment.',
+      );
+    }
+    final columns = List<SqlTableColumn<Object?>>.unmodifiable(target);
+    if (columns.isEmpty) {
+      throw ArgumentError(
+        'A SQL conflict target requires at least one column.',
+      );
+    }
+    final names = <String>{};
+    for (final column in columns) {
+      _requireColumn(table, column);
+      if (!names.add(column.name)) {
+        throw ArgumentError(
+          'Conflict target column "${column.name}" is used more than once.',
+        );
+      }
+    }
+    return _insert(table, assignments, conflictTarget: columns);
+  }
+
+  SqlWrite _insert(
+    SqlTable<Object?> table,
+    List<SqlAssignment> assignments, {
+    List<SqlTableColumn<Object?>> conflictTarget =
+        const <SqlTableColumn<Object?>>[],
+  }) {
     final builder = _BoundSqlBuilder(dialect)
       ..write('INSERT INTO ')
       ..write(_quoteTable(table));
@@ -123,6 +176,14 @@ final class SqlQueries {
         builder.bind(assignment._value);
       }
       builder.write(')');
+    }
+    if (conflictTarget.isNotEmpty) {
+      builder.write(' ON CONFLICT (');
+      for (final (index, column) in conflictTarget.indexed) {
+        if (index != 0) builder.write(', ');
+        builder.write(dialect.quoteIdentifier(column.name));
+      }
+      builder.write(') DO NOTHING');
     }
     return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
   }
@@ -173,7 +234,10 @@ final class SqlQueries {
     Iterable<SqlAssignment> values, {
     SqlPredicate? where,
   }) {
-    final assignments = _validateAssignments(table, values, allowEmpty: false);
+    final assignments = _validateAssignments(table, values);
+    if (assignments.isEmpty) {
+      throw ArgumentError('A SQL UPDATE requires at least one assignment.');
+    }
     final builder = _BoundSqlBuilder(dialect)
       ..write('UPDATE ')
       ..write(_quoteTable(table))
@@ -200,13 +264,9 @@ final class SqlQueries {
 
   List<SqlAssignment> _validateAssignments(
     SqlTable<Object?> table,
-    Iterable<SqlAssignment> values, {
-    required bool allowEmpty,
-  }) {
+    Iterable<SqlAssignment> values,
+  ) {
     final assignments = List<SqlAssignment>.unmodifiable(values);
-    if (!allowEmpty && assignments.isEmpty) {
-      throw ArgumentError('A SQL UPDATE requires at least one assignment.');
-    }
     final names = <String>{};
     for (final assignment in assignments) {
       _requireColumn(table, assignment._column);

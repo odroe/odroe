@@ -84,6 +84,55 @@ void main() {
     ]);
   });
 
+  test('inserts once for a targeted conflict and preserves the row', () async {
+    final first = await queries
+        .insertOnConflictDoNothing(
+          users,
+          <SqlAssignment>[
+            users.email.set('stable@example.com'),
+            users.nickname.set('Original'),
+            users.active.set(true),
+          ],
+          target: <SqlTableColumn<Object?>>[users.email],
+        )
+        .execute(database);
+    expect(first.affectedRows, 1);
+
+    final duplicate = await queries
+        .insertOnConflictDoNothing(
+          users,
+          <SqlAssignment>[
+            users.email.set('stable@example.com'),
+            users.nickname.set('Replacement'),
+            users.active.set(false),
+          ],
+          target: <SqlTableColumn<Object?>>[users.email],
+        )
+        .execute(database);
+    expect(duplicate.affectedRows, 0);
+
+    final returned = await queries
+        .insertOnConflictDoNothing(
+          users,
+          <SqlAssignment>[
+            users.email.set('stable@example.com'),
+            users.nickname.set('Returned replacement'),
+            users.active.set(false),
+          ],
+          target: <SqlTableColumn<Object?>>[users.email],
+        )
+        .returning(users.projection)
+        .all(database);
+    expect(returned, isEmpty);
+
+    expect(
+      await queries
+          .selectTable(users, where: users.email.equals('stable@example.com'))
+          .one(database),
+      (id: 1, email: 'stable@example.com', nickname: 'Original', active: true),
+    );
+  });
+
   test('uses the callback executor and rolls back typed writes', () async {
     await expectLater(
       database.transaction<void>((transaction) async {

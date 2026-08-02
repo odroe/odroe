@@ -35,10 +35,10 @@ void main() {
     );
     await initializePostsDatabase(database);
 
-    final title = await postQueries
+    final post = await postQueries
         .selectTable(posts, where: posts.id.equals(42))
         .one(database);
-    expect(title, 'Persisted post 42');
+    expect(post, (id: 42, title: 'Persisted post 42'));
   });
 
   testWidgets('generated RPC completes inside the Flutter event loop', (

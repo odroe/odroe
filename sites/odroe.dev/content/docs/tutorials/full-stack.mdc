@@ -24,14 +24,14 @@ final readTitle = ServerFunction<int, String>(
   id: 'posts.read-title',
   method: HttpMethod.get,
   handler: (context) async {
-    final title = await postQueries
+    final post = await postQueries
         .selectTable(
           posts,
           where: posts.id.equals(context.data),
         )
         .oneOrNull(context.request.read(databaseKey));
-    if (title == null) throw const NotFound('Post not found.');
-    return title;
+    if (post == null) throw const NotFound('Post not found.');
+    return post.title;
   },
 );
 ```
@@ -49,15 +49,19 @@ explicit without a manual limit or list unpacking.
 the table, codecs, projection, and SQLite-compatible query dialect:
 
 ```dart
-final class Posts extends SqlTable<String> {
+typedef Post = ({int id, String title});
+
+final class Posts extends SqlTable<Post> {
   Posts() : super('posts');
 
   late final SqlTableColumn<int> id = column<int>('id', sqlInt);
   late final SqlTableColumn<String> title = column<String>('title', sqlText);
 
   @override
-  late final SqlProjection<String> projection =
-      SqlProjection<String>.column(title);
+  late final SqlProjection<Post> projection = SqlProjection<Post>(
+    <SqlSelection<Object?>>[id, title],
+    (row) => (id: id.read(row, 0), title: title.read(row, 1)),
+  );
 }
 
 final posts = Posts();
@@ -66,7 +70,8 @@ const postQueries = SqlQueries(SqlDialect.sqlite);
 
 `posts.title.set(42)` does not analyze. A query generated with another explicit
 dialect is rejected before it reaches SQLite or D1. The layer is typed SQL, not
-an identity-map ORM: schema, resource ownership, and migrations remain visible.
+an identity-map ORM: the projection decodes one complete product record while
+schema, resource ownership, and migrations remain visible.
 
 ## Choose database ownership at the runtime edge
 
@@ -131,8 +136,27 @@ return generated.createServer(
 `lib/server.dart` conditionally exports one of these implementations. SQLite
 FFI therefore cannot become reachable from the Worker artifact.
 
-The native starter uses `CREATE TABLE IF NOT EXISTS` and
-`ON CONFLICT(id) DO NOTHING`, so restarting cannot overwrite an existing row.
+The native starter uses `CREATE TABLE IF NOT EXISTS` and the public typed write
+API, so restarting cannot overwrite an existing row:
+
+```dart
+await postQueries
+    .insertOnConflictDoNothing(
+      posts,
+      <SqlAssignment>[
+        posts.id.set(42),
+        posts.title.set('SQLite post 42'),
+      ],
+      target: [posts.id],
+    )
+    .execute(database);
+```
+
+The column list must match a conflict arbiter accepted by the selected
+database; other index shapes remain explicit `BoundSql`. SQLite, D1, and
+PostgreSQL support this exact target-aware operation; MySQL rejects it instead
+of silently choosing different conflict semantics.
+
 Its bootstrap and the D1 schema in `migrations/0001_posts.sql` remain
 deliberately separate. Odroe does not call this a migration system or run DDL
 during Fetch startup. The bootstrap creates only the fixed initial schema; it

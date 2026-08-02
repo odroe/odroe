@@ -44,7 +44,9 @@ final class Authors extends SqlTable<String> {
   late final projection = SqlProjection.column(displayName);
 }
 
-final class Posts extends SqlTable<String> {
+typedef Post = ({int id, int? authorId, String title});
+
+final class Posts extends SqlTable<Post> {
   Posts() : super('posts');
 
   late final id = column<int>('id', sqlInt);
@@ -52,16 +54,23 @@ final class Posts extends SqlTable<String> {
   late final title = column<String>('title', sqlText);
 
   @override
-  late final projection = SqlProjection.column(title);
+  late final projection = SqlProjection<Post>(
+    <SqlSelection<Object?>>[id, authorId, title],
+    (row) => (
+      id: id.read(row, 0),
+      authorId: authorId.read(row, 1),
+      title: title.read(row, 2),
+    ),
+  );
 }
 
 final posts = Posts();
 final authors = Authors();
 const sql = SqlQueries(SqlDialect.postgres);
 
-final titles = await sql
+final post = await sql
     .selectTable(posts, where: posts.id.equals(42))
-    .all(database);
+    .oneOrNull(database);
 
 final authorName = authors.displayName.optional.as('author_name');
 final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
@@ -82,10 +91,16 @@ final rows = await sql.select(
   projection: postsWithAuthors,
 ).all(database);
 
-await sql.insert(
-  posts,
-  <SqlAssignment>[posts.title.set('Hello')],
-).execute(database);
+await sql
+    .insertOnConflictDoNothing(
+      posts,
+      <SqlAssignment>[
+        posts.id.set(42),
+        posts.title.set('Hello'),
+      ],
+      target: [posts.id],
+    )
+    .execute(database);
 
 await sql.updateAll(
   posts,
@@ -99,6 +114,14 @@ The dialect is explicit. `posts.title.set(42)` is an analyzer error.
 Joined reads qualify every column automatically. For a `LEFT JOIN`, use the
 result-only `.optional` selection to decode a non-null schema column as
 nullable; it cannot be used for INSERT or UPDATE. Mutations remain single-table.
+
+`insertOnConflictDoNothing` requires non-empty values and an explicit conflict
+target. Every target column must belong to the table, and the column list must
+match a conflict arbiter accepted by the selected database. Other index shapes
+remain explicit `BoundSql`. SQLite, D1, and PostgreSQL compile the exact
+target-aware operation. MySQL rejects it before reading either iterable or
+touching the database; Odroe does not substitute `INSERT IGNORE` or a different
+conflict contract.
 
 `SqlQueries` preserves its selected dialect on every generated `BoundSql`.
 SQLite and D1 accept `SqlDialect.sqlite`, PostgreSQL accepts
@@ -247,14 +270,14 @@ Flutter page → Query → generated typed RPC → HTTP → Server → `Database
 → typed SQL. Its shared handler imports only `package:odroe/database.dart`:
 
 ```dart
-final title = await postQueries
+final post = await postQueries
     .selectTable(
       posts,
       where: posts.id.equals(context.data),
     )
     .oneOrNull(context.request.read(databaseKey));
-if (title == null) throw const NotFound('Post not found.');
-return title;
+if (post == null) throw const NotFound('Post not found.');
+return post.title;
 ```
 
 `oneOrNull` accepts exactly zero or one decoded row. It returns `null` for no
@@ -273,7 +296,9 @@ The native entry opens one process-owned file SQLite database, defaulting to
 requests borrow it, and `Server.close()` closes it. `ODROE_SQLITE_PATH` may
 override the file; production should use an absolute path on writable persistent
 storage. Idempotent starter DDL and seed preserve existing data across restarts.
-The default relative path resolves from the server process's working directory.
+The seed uses the same public typed conflict-target insert API as application
+code. The default relative path resolves from the server process's working
+directory.
 During native prerender the CLI overrides `ODROE_SQLITE_PATH` with a temporary
 database and deletes it afterward, keeping builds independent of local state.
 

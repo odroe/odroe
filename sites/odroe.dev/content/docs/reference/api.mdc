@@ -77,6 +77,24 @@ When the projection type itself is nullable, `oneOrNull` cannot distinguish no
 row from one row that decodes to `null`. Use `one` or `all` when presence must
 remain observable.
 
+### Typed SQL writes
+
+| Builder | Contract |
+| --- | --- |
+| `SqlQueries.insert(table, values)` | Inserts one row; empty values use the dialect's default-row syntax |
+| `SqlQueries.insertOnConflictDoNothing(table, values, target: columns)` | Inserts one row or ignores the named unique/primary-key conflict |
+| `SqlQueries.updateWhere` / `deleteWhere` | Requires an explicit predicate |
+| `SqlQueries.updateAll` / `deleteAll` | Requires the visible `allRows` confirmation token |
+
+Conflict-target inserts require non-empty values and target columns owned by
+the same table. The database, not `SqlTable`, remains the authority for whether
+that column list is an accepted conflict arbiter; use `BoundSql` for other index
+shapes. SQLite, D1, and PostgreSQL support the operation. `SqlDialect.mysql`
+returns `SqlErrorCode.unsupported` before reading the input iterables because
+MySQL has no equivalent target-specific contract.
+`SqlWrite.returning(projection)` remains available where the dialect supports
+`RETURNING`; an ignored conflict returns no row.
+
 ## Documents and content
 
 | Entrypoint | Owns |
