@@ -1,6 +1,6 @@
 import 'package:odroe/database.dart';
 
-typedef Post = ({int id, String title});
+import 'posts.dart';
 
 final class Posts extends SqlTable<Post> {
   Posts() : super('posts');

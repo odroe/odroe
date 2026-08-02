@@ -180,7 +180,7 @@ void main() {
     expect(bootstrap, contains('await appServer.close();'));
     expect('app.createServer()'.allMatches(bootstrap), hasLength(1));
 
-    final id = Uri.encodeComponent('posts.read-title');
+    final id = Uri.encodeComponent('posts.read');
     final rpc = await client.getUrl(
       Uri.parse(
         'http://127.0.0.1:$port/__odroe/functions/$id'
@@ -195,7 +195,7 @@ void main() {
     expect(jsonDecode(rpcBody), <String, Object?>{
       'version': 1,
       'type': 'data',
-      'data': 'SQLite post 42',
+      'data': <String, Object?>{'id': 42, 'title': 'SQLite post 42'},
     });
 
     final missing = await client.getUrl(

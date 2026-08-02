@@ -11,8 +11,8 @@ final class MutationObserver<TData, TVariables, TOptimistic> {
   /// The client used to execute mutations.
   final QueryClient client;
 
-  /// The mutation definition observed by this object.
-  final MutationOptions<TData, TVariables, TOptimistic> options;
+  /// The mutation definition used for the next execution.
+  MutationOptions<TData, TVariables, TOptimistic> options;
   MutationState<TData, TVariables, TOptimistic> _state;
   final Set<void Function(MutationState<TData, TVariables, TOptimistic>)>
   _listeners = <void Function(MutationState<TData, TVariables, TOptimistic>)>{};
@@ -20,6 +20,11 @@ final class MutationObserver<TData, TVariables, TOptimistic> {
 
   /// The latest mutation state.
   MutationState<TData, TVariables, TOptimistic> get current => _state;
+
+  /// Uses [options] for future executions without detaching the active one.
+  void setOptions(MutationOptions<TData, TVariables, TOptimistic> options) {
+    this.options = options;
+  }
 
   /// Subscribes to mutation state changes and emits the current state.
   QueryDispose subscribe(

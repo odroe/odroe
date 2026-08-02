@@ -10,6 +10,7 @@ import 'package:odroe/query_flutter.dart';
 import 'package:odroe/router_flutter.dart';
 import 'package:odroe/rpc.dart';
 import 'package:odroe/server_io.dart';
+import 'package:odroe_example/posts.dart';
 import 'package:odroe_example/posts_database.dart';
 import 'package:odroe_example/routes.dart';
 import 'package:odroe_example/server_native.dart' as native_server;
@@ -22,23 +23,30 @@ void main() {
     );
   });
 
-  test('native database bootstrap is idempotent and preserves data', () async {
-    final database = SqliteDatabase.openInMemory();
-    addTearDown(database.close);
+  test('native database preserves created posts across restart', () async {
+    final state = await Directory.systemTemp.createTemp('odroe-posts-test-');
+    final path = '${state.path}/app.sqlite3';
+    SqliteDatabase? database;
+    try {
+      database = SqliteDatabase.open(path);
+      await initializePostsDatabase(database);
+      final created = await postQueries
+          .insert(posts, <SqlAssignment>[posts.title.set('Persisted post')])
+          .returning(posts.projection)
+          .one(database);
+      await database.close();
+      database = null;
 
-    await initializePostsDatabase(database);
-    await database.execute(
-      BoundSql.raw(
-        "UPDATE posts SET title = 'Persisted post 42' WHERE id = 42",
-        dialect: SqlDialect.sqlite,
-      ),
-    );
-    await initializePostsDatabase(database);
-
-    final post = await postQueries
-        .selectTable(posts, where: posts.id.equals(42))
-        .one(database);
-    expect(post, (id: 42, title: 'Persisted post 42'));
+      database = SqliteDatabase.open(path);
+      await initializePostsDatabase(database);
+      final post = await postQueries
+          .selectTable(posts, where: posts.id.equals(created.id))
+          .one(database);
+      expect(post, created);
+    } finally {
+      await database?.close();
+      if (state.existsSync()) await state.delete(recursive: true);
+    }
   });
 
   testWidgets('generated RPC completes inside the Flutter event loop', (
@@ -49,15 +57,48 @@ void main() {
     final client = RpcClient(baseUri: application.origin, transport: transport);
     try {
       final cancelled = Completer<void>();
-      final value = await tester.runAsync(
-        () => routes.posts.postId.readTitle(
+      final post = await tester.runAsync(
+        () => routes.posts.postId.readPost(
           client,
           42,
           cancelled: cancelled.future,
         ),
       );
 
-      expect(value, 'SQLite post 42');
+      expect(post, (id: 42, title: 'SQLite post 42'));
+    } finally {
+      transport.close();
+      await tester.runAsync(application.close);
+    }
+  });
+
+  testWidgets('generated RPC lists, creates, and reads typed posts', (
+    tester,
+  ) async {
+    final application = (await tester.runAsync(_startNativeApplication))!;
+    final transport = _realHttpTransport();
+    final client = RpcClient(baseUri: application.origin, transport: transport);
+    try {
+      final initial = (await tester.runAsync(
+        () => routes.posts.listPosts(client, 'newest'),
+      ))!;
+      expect(initial, <Post>[(id: 42, title: 'SQLite post 42')]);
+
+      final created = (await tester.runAsync(
+        () => routes.posts.createPost(client, (title: '  Created post  ')),
+      ))!;
+      expect(created.title, 'Created post');
+      expect(created.id, isNot(42));
+
+      final post = (await tester.runAsync(
+        () => routes.posts.postId.readPost(client, created.id),
+      ))!;
+      expect(post, created);
+
+      final ordered = (await tester.runAsync(
+        () => routes.posts.listPosts(client, 'newest'),
+      ))!;
+      expect(ordered.first, created);
     } finally {
       transport.close();
       await tester.runAsync(application.close);
@@ -72,7 +113,7 @@ void main() {
     try {
       final error = await tester.runAsync<Object?>(() async {
         try {
-          await routes.posts.postId.readTitle(client, 404);
+          await routes.posts.postId.readPost(client, 404);
           return null;
         } on Object catch (error) {
           return error;
@@ -160,33 +201,287 @@ void main() {
     }
   });
 
+  testWidgets('posts page creates a post and refreshes the list', (
+    tester,
+  ) async {
+    final application = (await tester.runAsync(_startNativeApplication))!;
+    final transport = _realHttpTransport();
+    final query = QueryClient(
+      options: const QueryClientOptions(
+        queries: QueryPolicy(
+          gcTime: Duration(minutes: 1),
+          retry: QueryRetry.never(),
+        ),
+      ),
+    );
+    try {
+      await tester.pumpWidget(
+        App(
+          modules: <Module>[
+            QueryModule(client: query),
+            RpcModule(
+              RpcClient(baseUri: application.origin, transport: transport),
+            ),
+            RouterModule(
+              routes: routeTree,
+              initialLocation: Uri.parse('/posts'),
+            ),
+          ],
+          builder: (app) =>
+              MaterialApp.router(routerConfig: app.read(routerKey)),
+        ),
+      );
+      await tester.pump();
+      await _pumpUntilReal(tester, find.text('SQLite post 42'));
+
+      await tester.enterText(find.byType(TextField), '  Created from UI  ');
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Create'))
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.text('Create'));
+      await tester.pump();
+      await _pumpUntilReal(
+        tester,
+        find.text('Created from UI'),
+        reason: () {
+          final state = query.getQueryState<List<Post>>(
+            QueryKey('posts.list', <Object?>['newest']),
+          );
+          return 'status=${state?.status}; fetch=${state?.fetchStatus}; '
+              'data=${state?.data}; error=${state?.error}';
+        },
+      );
+
+      expect(find.text('Created from UI'), findsOneWidget);
+      expect(find.text('SQLite post 42'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      query.clear();
+      transport.close();
+      await tester.runAsync(application.close);
+    }
+  });
+
+  testWidgets('posts page keeps requests stable across ancestor rebuilds', (
+    tester,
+  ) async {
+    final transport = _ControlledPostsTransport();
+    final query = QueryClient(
+      options: const QueryClientOptions(
+        queries: QueryPolicy(
+          gcTime: Duration(minutes: 1),
+          retry: QueryRetry.never(),
+        ),
+      ),
+    );
+    try {
+      await tester.pumpWidget(
+        App(
+          modules: <Module>[
+            QueryModule(client: query),
+            RpcModule(
+              RpcClient(
+                baseUri: Uri.parse('https://api.example.com'),
+                transport: transport,
+              ),
+            ),
+            RouterModule(
+              routes: routeTree,
+              initialLocation: Uri.parse('/posts'),
+            ),
+          ],
+          builder: (app) => _RebuildHost(routerConfig: app.read(routerKey)),
+        ),
+      );
+      await tester.pump();
+      await _pumpUntil(tester, find.text('Existing post'));
+      expect(transport.listRequests, 1);
+
+      tester.state<_RebuildHostState>(find.byType(_RebuildHost)).rebuild();
+      await tester.pump();
+      expect(transport.listRequests, 1);
+
+      await tester.enterText(find.byType(TextField), 'Stable created');
+      await tester.pump();
+      await tester.tap(find.text('Create'));
+      await tester.pump();
+      expect(transport.createRequests, 1);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+
+      tester.state<_RebuildHostState>(find.byType(_RebuildHost)).rebuild();
+      await tester.pump();
+      expect(transport.createRequests, 1);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+
+      transport.completeCreate();
+      for (var frame = 0; frame < 100 && transport.listRequests < 2; frame++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(transport.createRequests, 1);
+      expect(transport.listRequests, 2);
+      expect(find.text('Stable created'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      query.clear();
+    }
+  });
+
+  testWidgets('posts page reports and retries a failed refresh', (
+    tester,
+  ) async {
+    final application = (await tester.runAsync(_startNativeApplication))!;
+    final http = _realHttpTransport();
+    final transport = _FailingRefreshTransport(http);
+    final query = QueryClient(
+      options: const QueryClientOptions(
+        queries: QueryPolicy(
+          gcTime: Duration(minutes: 1),
+          retry: QueryRetry.never(),
+        ),
+      ),
+    );
+    try {
+      await tester.pumpWidget(
+        App(
+          modules: <Module>[
+            QueryModule(client: query),
+            RpcModule(
+              RpcClient(baseUri: application.origin, transport: transport),
+            ),
+            RouterModule(
+              routes: routeTree,
+              initialLocation: Uri.parse('/posts'),
+            ),
+          ],
+          builder: (app) =>
+              MaterialApp.router(routerConfig: app.read(routerKey)),
+        ),
+      );
+      await tester.pump();
+      await _pumpUntilReal(tester, find.text('SQLite post 42'));
+
+      await tester.enterText(find.byType(TextField), 'Created after retry');
+      await tester.pump();
+      await tester.tap(find.text('Create'));
+      await tester.pump();
+      await _pumpUntilReal(tester, find.text('Posts may be out of date.'));
+
+      expect(transport.failedRefresh, isTrue);
+      expect(find.text('SQLite post 42'), findsOneWidget);
+      expect(find.text('Created after retry'), findsNothing);
+
+      await tester.tap(find.text('Retry refresh'));
+      await tester.pump();
+      await _pumpUntilReal(tester, find.text('Created after retry'));
+
+      expect(find.text('Posts may be out of date.'), findsNothing);
+      expect(find.text('Created after retry'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      query.clear();
+      http.close();
+      await tester.runAsync(application.close);
+    }
+  });
+
   testWidgets('post page retries a failed RPC query', (tester) async {
-    final transport = await _pumpPostPage(tester, failures: 1);
+    final transport = await _pumpPostPage(tester, failing: true);
 
     expect(find.text('Unable to load post.'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
-    expect(transport.requests, hasLength(1));
+    final failedRequests = transport.requests.length;
+    expect(failedRequests, greaterThan(0));
 
+    transport.allowSuccess();
     await tester.tap(find.text('Retry'));
     await tester.pump();
     await _pumpUntil(tester, find.text('Post 42; preview=true; tags=one,two'));
 
     expect(find.text('Post 42; preview=true; tags=one,two'), findsOneWidget);
-    expect(transport.requests, hasLength(2));
+    expect(transport.requests.length, greaterThan(failedRequests));
+  });
+
+  testWidgets('post page reports and retries a failed background refresh', (
+    tester,
+  ) async {
+    final transport = _FailingDetailRefreshTransport(_ExampleTransport());
+    final query = QueryClient(
+      options: const QueryClientOptions(
+        queries: QueryPolicy(
+          gcTime: Duration(minutes: 1),
+          retry: QueryRetry.never(),
+        ),
+      ),
+    );
+    final key = QueryKey('posts.detail', <Object?>[42]);
+    await _pumpPostPageWithModule(
+      tester,
+      RpcModule(
+        RpcClient(
+          baseUri: Uri.parse('https://api.example.com'),
+          transport: transport,
+        ),
+      ),
+      query: query,
+      expectedText: 'Post 42; preview=true; tags=one,two',
+    );
+
+    transport.failRefresh();
+    await query.invalidateQueries(QueryFilter(key: key, exact: true));
+    await tester.pump();
+    await _pumpUntil(tester, find.text('Post may be out of date.'));
+
+    expect(find.text('Post 42; preview=true; tags=one,two'), findsOneWidget);
+    final failedRequests = transport.requests;
+    expect(failedRequests, greaterThan(1));
+
+    transport.allowSuccess();
+    await tester.tap(find.text('Retry refresh'));
+    await tester.pump();
+    for (
+      var frame = 0;
+      frame < 100 &&
+          find.text('Post may be out of date.').evaluate().isNotEmpty;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+
+    expect(find.text('Post may be out of date.'), findsNothing);
+    expect(find.text('Post 42; preview=true; tags=one,two'), findsOneWidget);
+    expect(transport.requests, greaterThan(failedRequests));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    query.clear();
   });
 }
 
 final class _ExampleTransport implements RpcTransport {
-  _ExampleTransport({int failures = 0}) : _failures = failures;
+  _ExampleTransport({bool failing = false}) : _failing = failing;
 
   final List<ServerRequest> requests = <ServerRequest>[];
-  int _failures;
+  bool _failing;
+
+  void allowSuccess() => _failing = false;
 
   @override
   Future<ServerResponse> send(ServerRequest request) async {
     requests.add(request);
-    if (_failures > 0) {
-      _failures--;
+    if (_failing) {
       throw StateError('Example RPC failure.');
     }
     final payload =
@@ -195,7 +490,10 @@ final class _ExampleTransport implements RpcTransport {
     return ServerResponse.json(<String, Object?>{
       'version': 1,
       'type': 'data',
-      'data': 'Post ${payload['data']}',
+      'data': <String, Object?>{
+        'id': payload['data'],
+        'title': 'Post ${payload['data']}',
+      },
     });
   }
 }
@@ -207,6 +505,111 @@ final class _StaticResponseTransport implements RpcTransport {
 
   @override
   Future<ServerResponse> send(ServerRequest request) async => response;
+}
+
+final class _FailingRefreshTransport implements RpcTransport {
+  _FailingRefreshTransport(this.inner);
+
+  final RpcTransport inner;
+  bool _created = false;
+  bool failedRefresh = false;
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async {
+    final path = request.uri.path;
+    if (_created &&
+        !failedRefresh &&
+        request.method == HttpMethod.get &&
+        path.endsWith('/posts.list')) {
+      failedRefresh = true;
+      throw StateError('Post list refresh failed.');
+    }
+    final response = await inner.send(request);
+    if (request.method == HttpMethod.post && path.endsWith('/posts.create')) {
+      _created = true;
+    }
+    return response;
+  }
+}
+
+final class _FailingDetailRefreshTransport implements RpcTransport {
+  _FailingDetailRefreshTransport(this.inner);
+
+  final RpcTransport inner;
+  var requests = 0;
+  var _failing = false;
+
+  void failRefresh() => _failing = true;
+  void allowSuccess() => _failing = false;
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async {
+    if (request.uri.path.endsWith('/posts.read')) {
+      requests++;
+      if (_failing) {
+        throw StateError('Post detail refresh failed.');
+      }
+    }
+    return inner.send(request);
+  }
+}
+
+final class _ControlledPostsTransport implements RpcTransport {
+  final _create = Completer<void>();
+  var listRequests = 0;
+  var createRequests = 0;
+  var _created = false;
+
+  void completeCreate() => _create.complete();
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async {
+    if (request.uri.path.endsWith('/posts.list')) {
+      listRequests++;
+      return ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <Object?>[
+          <String, Object?>{'id': 1, 'title': 'Existing post'},
+          if (_created) <String, Object?>{'id': 2, 'title': 'Stable created'},
+        ],
+      });
+    }
+    if (request.uri.path.endsWith('/posts.create')) {
+      createRequests++;
+      await _create.future;
+      _created = true;
+      return ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <String, Object?>{'id': 2, 'title': 'Stable created'},
+      });
+    }
+    throw StateError('Unexpected request: ${request.uri}');
+  }
+}
+
+final class _RebuildHost extends StatefulWidget {
+  const _RebuildHost({required this.routerConfig});
+
+  final RouterConfig<Object> routerConfig;
+
+  @override
+  State<_RebuildHost> createState() => _RebuildHostState();
+}
+
+final class _RebuildHostState extends State<_RebuildHost> {
+  var _dark = false;
+
+  void rebuild() => setState(() => _dark = !_dark);
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    routerConfig: widget.routerConfig,
+    theme: ThemeData.light(),
+    darkTheme: ThemeData.dark(),
+    themeMode: _dark ? ThemeMode.dark : ThemeMode.light,
+  );
 }
 
 Future<Object?> _streamFailure(
@@ -241,9 +644,9 @@ Future<Object?> _streamFailure(
 
 Future<_ExampleTransport> _pumpPostPage(
   WidgetTester tester, {
-  int failures = 0,
+  bool failing = false,
 }) async {
-  final transport = _ExampleTransport(failures: failures);
+  final transport = _ExampleTransport(failing: failing);
   await _pumpPostPageWithModule(
     tester,
     RpcModule(
@@ -252,9 +655,9 @@ Future<_ExampleTransport> _pumpPostPage(
         transport: transport,
       ),
     ),
-    expectedText: failures == 0
-        ? 'Post 42; preview=true; tags=one,two'
-        : 'Unable to load post.',
+    expectedText: failing
+        ? 'Unable to load post.'
+        : 'Post 42; preview=true; tags=one,two',
     diagnostics: () => 'requests=${transport.requests.length}',
   );
   return transport;
@@ -298,8 +701,8 @@ Future<void> _pumpPostPageWithModule(
   await tester.pump();
   if (waitForRealAsync) {
     for (var attempt = 0; attempt < 100; attempt++) {
-      final state = resolvedQuery.getQueryState<String>(
-        QueryKey('post-title', <Object?>[42]),
+      final state = resolvedQuery.getQueryState<Post>(
+        QueryKey('posts.detail', <Object?>[42]),
       );
       if (state != null &&
           state.status != QueryStatus.pending &&
@@ -317,9 +720,9 @@ Future<void> _pumpPostPageWithModule(
     find.text(expectedText),
     reason: () =>
         '${diagnostics?.call() ?? ''}; '
-        'state=${resolvedQuery.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.status}; '
-        'fetch=${resolvedQuery.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.fetchStatus}; '
-        'error=${resolvedQuery.getQueryState<String>(QueryKey('post-title', <Object?>[42]))?.error}',
+        'state=${resolvedQuery.getQueryState<Post>(QueryKey('posts.detail', <Object?>[42]))?.status}; '
+        'fetch=${resolvedQuery.getQueryState<Post>(QueryKey('posts.detail', <Object?>[42]))?.fetchStatus}; '
+        'error=${resolvedQuery.getQueryState<Post>(QueryKey('posts.detail', <Object?>[42]))?.error}',
   );
 }
 
@@ -379,6 +782,20 @@ Future<void> _pumpUntil(
 }) async {
   for (var frame = 0; frame < 100 && finder.evaluate().isEmpty; frame++) {
     await tester.pump(const Duration(milliseconds: 10));
+  }
+  expect(finder, findsOneWidget, reason: reason?.call());
+}
+
+Future<void> _pumpUntilReal(
+  WidgetTester tester,
+  Finder finder, {
+  String Function()? reason,
+}) async {
+  for (var attempt = 0; attempt < 100 && finder.evaluate().isEmpty; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
   }
   expect(finder, findsOneWidget, reason: reason?.call());
 }

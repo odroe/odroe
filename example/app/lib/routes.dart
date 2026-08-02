@@ -2,17 +2,18 @@
 
 import 'package:odroe/router.dart';
 import 'package:odroe/rpc.dart';
-import 'routes/page.dart' as root_page;
-import 'routes/shell.dart' as root_shell;
-import 'routes/(account)/settings/page.dart' as account_settings_page;
-import 'routes/(marketing)/pricing/page.dart' as marketing_pricing_page;
-import 'routes/about/route.dart' as about_definition;
-import 'routes/docs/[...slug]/route.dart' as docs_rest_slug_definition;
-import 'routes/docs/[...slug]/page.dart' as docs_rest_slug_page;
-import 'routes/posts/route.dart' as posts_definition;
-import 'routes/posts/page.dart' as posts_page;
-import 'routes/posts/[postId]/route.dart' as posts_post_id_definition;
-import 'routes/posts/[postId]/page.dart' as posts_post_id_page;
+import "posts.dart" as posts_models_type;
+import "routes/page.dart" as root_page;
+import "routes/shell.dart" as root_shell;
+import "routes/(account)/settings/page.dart" as account_settings_page;
+import "routes/(marketing)/pricing/page.dart" as marketing_pricing_page;
+import "routes/about/route.dart" as about_definition;
+import "routes/docs/[...slug]/route.dart" as docs_rest_slug_definition;
+import "routes/docs/[...slug]/page.dart" as docs_rest_slug_page;
+import "routes/posts/route.dart" as posts_definition;
+import "routes/posts/page.dart" as posts_page;
+import "routes/posts/[postId]/route.dart" as posts_post_id_definition;
+import "routes/posts/[postId]/page.dart" as posts_post_id_page;
 
 final _routePostsPostId = posts_post_id_page.route.compiled(
   path: ":postId",
@@ -222,6 +223,57 @@ final class AppPostsRoutes {
   /// Routes below filesystem route "/posts/[postId]".
   final AppPostsPostIdRoutes postId = const AppPostsPostIdRoutes();
 
+  static List<posts_models_type.Post> _decodelistPosts(Object? value) =>
+      (value as List)
+          .map(
+            (item) => ((Map<String, Object?> record) {
+              if (record.length != 2 ||
+                  !record.containsKey("id") ||
+                  !record.containsKey("title")) {
+                throw FormatException("Expected models.Post fields: id, title");
+              }
+              return (
+                id: record["id"] as int,
+                title: record["title"] as String,
+              );
+            })(item as Map<String, Object?>),
+          )
+          .toList(growable: false);
+
+  /// Calls `listPosts` on the application server.
+  ServerFunctionRef<String, List<posts_models_type.Post>> get listPosts =>
+      const ServerFunctionRef<String, List<posts_models_type.Post>>(
+        id: "posts.list",
+        method: HttpMethod.get,
+        decodeOutput: _decodelistPosts,
+      );
+
+  static Object? _encodecreatePost(posts_models_type.CreatePost value) =>
+      <String, Object?>{"title": value.title};
+
+  static posts_models_type.Post _decodecreatePost(Object? value) =>
+      ((Map<String, Object?> record) {
+        if (record.length != 2 ||
+            !record.containsKey("id") ||
+            !record.containsKey("title")) {
+          throw FormatException("Expected models.Post fields: id, title");
+        }
+        return (id: record["id"] as int, title: record["title"] as String);
+      })(value as Map<String, Object?>);
+
+  /// Calls `createPost` on the application server.
+  ServerFunctionRef<posts_models_type.CreatePost, posts_models_type.Post>
+  get createPost =>
+      const ServerFunctionRef<
+        posts_models_type.CreatePost,
+        posts_models_type.Post
+      >(
+        id: "posts.create",
+        method: HttpMethod.post,
+        encodeInput: _encodecreatePost,
+        decodeOutput: _decodecreatePost,
+      );
+
   /// Builds a destination for this route.
   Destination to({posts_definition.Search? search}) {
     return _routeRoot.ref().then(_routePosts.ref(search: search)).destination;
@@ -233,11 +285,22 @@ final class AppPostsPostIdRoutes {
   /// Creates a stateless route reference group.
   const AppPostsPostIdRoutes();
 
-  /// Calls `readTitle` on the application server.
-  ServerFunctionRef<int, String> get readTitle =>
-      const ServerFunctionRef<int, String>(
-        id: "posts.read-title",
+  static posts_models_type.Post _decodereadPost(Object? value) =>
+      ((Map<String, Object?> record) {
+        if (record.length != 2 ||
+            !record.containsKey("id") ||
+            !record.containsKey("title")) {
+          throw FormatException("Expected models.Post fields: id, title");
+        }
+        return (id: record["id"] as int, title: record["title"] as String);
+      })(value as Map<String, Object?>);
+
+  /// Calls `readPost` on the application server.
+  ServerFunctionRef<int, posts_models_type.Post> get readPost =>
+      const ServerFunctionRef<int, posts_models_type.Post>(
+        id: "posts.read",
         method: HttpMethod.get,
+        decodeOutput: _decodereadPost,
       );
 
   /// Builds a destination for this route.

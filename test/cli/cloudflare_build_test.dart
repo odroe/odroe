@@ -580,27 +580,148 @@ Server createServer() {
         reason: logs.toString(),
       );
 
-      final function = Uri.encodeComponent('posts.read-title');
-      final title = await _waitForResponse(
+      final rpcHeaders = <String, String>{
+        'origin': origin,
+        'x-odroe-server-function': 'true',
+      };
+      final listFunction = Uri.encodeComponent('posts.list');
+      final list = await _waitForResponse(
         client,
-        Uri.parse('$origin/__odroe/functions/$function').replace(
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
           queryParameters: <String, String>{
-            'payload': jsonEncode(<String, Object?>{'data': 42}),
+            'payload': jsonEncode(<String, Object?>{'data': 'newest'}),
           },
         ),
-        headers: <String, String>{
-          'origin': origin,
-          'x-odroe-server-function': 'true',
-        },
+        headers: rpcHeaders,
         processExitCode: () => processExitCode,
         logs: logs,
       );
-      expect(title.statusCode, 200, reason: '${title.body}\n$logs');
-      expect(jsonDecode(title.body), <String, Object?>{
+      expect(list.statusCode, 200, reason: '${list.body}\n$logs');
+      expect(jsonDecode(list.body), <String, Object?>{
         'version': 1,
         'type': 'data',
-        'data': 'D1 post 42',
+        'data': <Object?>[
+          <String, Object?>{'id': 42, 'title': 'D1 post 42'},
+        ],
       });
+
+      final createFunction = Uri.encodeComponent('posts.create');
+      final created = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$createFunction'),
+        method: 'POST',
+        headers: <String, String>{
+          ...rpcHeaders,
+          'content-type': 'application/json; charset=utf-8',
+        },
+        requestBody: jsonEncode(<String, Object?>{
+          'data': <String, Object?>{'title': '  Created on D1  '},
+        }),
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(created.statusCode, 200, reason: '${created.body}\n$logs');
+      final createdFrame = jsonDecode(created.body) as Map<String, Object?>;
+      expect(createdFrame['version'], 1);
+      expect(createdFrame['type'], 'data');
+      final createdPost = createdFrame['data']! as Map<String, Object?>;
+      expect(createdPost['id'], isA<int>());
+      expect(createdPost['id'], isNot(42));
+      expect(createdPost['title'], 'Created on D1');
+
+      final function = Uri.encodeComponent('posts.read');
+      final post = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$function').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{'data': createdPost['id']}),
+          },
+        ),
+        headers: rpcHeaders,
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(post.statusCode, 200, reason: '${post.body}\n$logs');
+      expect(jsonDecode(post.body), <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': createdPost,
+      });
+
+      final refreshed = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{'data': 'newest'}),
+          },
+        ),
+        headers: rpcHeaders,
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(refreshed.statusCode, 200, reason: '${refreshed.body}\n$logs');
+      final refreshedFrame = jsonDecode(refreshed.body) as Map<String, Object?>;
+      final refreshedPosts = refreshedFrame['data']! as List<Object?>;
+      expect(refreshedPosts, contains(equals(createdPost)));
+
+      final rejected = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$createFunction'),
+        method: 'POST',
+        headers: <String, String>{
+          ...rpcHeaders,
+          'content-type': 'application/json; charset=utf-8',
+        },
+        requestBody: jsonEncode(<String, Object?>{
+          'data': <String, Object?>{'title': '   '},
+        }),
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(rejected.statusCode, 400, reason: '${rejected.body}\n$logs');
+      expect(jsonDecode(rejected.body), containsPair('type', 'error'));
+      expect(
+        jsonDecode(rejected.body),
+        containsPair('message', 'Post title is required.'),
+      );
+
+      final malformed = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$createFunction'),
+        method: 'POST',
+        headers: <String, String>{
+          ...rpcHeaders,
+          'content-type': 'application/json; charset=utf-8',
+        },
+        requestBody: jsonEncode(<String, Object?>{'data': <String, Object?>{}}),
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(malformed.statusCode, 400, reason: '${malformed.body}\n$logs');
+      final malformedFrame = jsonDecode(malformed.body);
+      expect(malformedFrame, containsPair('version', 1));
+      expect(malformedFrame, containsPair('type', 'error'));
+      expect(
+        malformedFrame,
+        containsPair('message', 'Invalid server function payload.'),
+      );
+
+      final afterRejected = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{'data': 'newest'}),
+          },
+        ),
+        headers: rpcHeaders,
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(afterRejected.statusCode, 200);
+      expect(
+        (jsonDecode(afterRejected.body) as Map<String, Object?>)['data'],
+        refreshedPosts,
+      );
 
       final extraSegment = await _waitForResponse(
         client,
@@ -609,10 +730,7 @@ Server createServer() {
             'payload': jsonEncode(<String, Object?>{'data': 42}),
           },
         ),
-        headers: <String, String>{
-          'origin': origin,
-          'x-odroe-server-function': 'true',
-        },
+        headers: rpcHeaders,
         processExitCode: () => processExitCode,
         logs: logs,
       );
@@ -630,10 +748,7 @@ Server createServer() {
             'payload': jsonEncode(<String, Object?>{'data': 404}),
           },
         ),
-        headers: <String, String>{
-          'origin': origin,
-          'x-odroe-server-function': 'true',
-        },
+        headers: rpcHeaders,
         processExitCode: () => processExitCode,
         logs: logs,
       );
@@ -755,7 +870,9 @@ Future<int> _unusedPort() async {
 Future<({int statusCode, String body})> _waitForResponse(
   HttpClient client,
   Uri uri, {
+  String method = 'GET',
   Map<String, String> headers = const <String, String>{},
+  String? requestBody,
   required int? Function() processExitCode,
   required StringBuffer logs,
 }) async {
@@ -767,13 +884,16 @@ Future<({int statusCode, String body})> _waitForResponse(
       throw StateError('Wrangler exited with code $code.\n$logs');
     }
     try {
-      final request = await client
-          .getUrl(uri)
-          .timeout(const Duration(seconds: 2));
+      final request = await (switch (method) {
+        'GET' => client.getUrl(uri),
+        'POST' => client.postUrl(uri),
+        _ => throw ArgumentError.value(method, 'method'),
+      }).timeout(const Duration(seconds: 2));
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       for (final entry in headers.entries) {
         request.headers.set(entry.key, entry.value);
       }
+      if (requestBody != null) request.add(utf8.encode(requestBody));
       final response = await request.close().timeout(
         const Duration(seconds: 2),
       );
@@ -784,6 +904,7 @@ Future<({int statusCode, String body})> _waitForResponse(
       return (statusCode: response.statusCode, body: body);
     } on Object catch (error) {
       lastError = error;
+      if (method != 'GET') rethrow;
     }
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }

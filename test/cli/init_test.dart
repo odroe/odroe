@@ -115,8 +115,10 @@ void main() {
       expect(generated.routeCount, 1);
       expect(generated.staticRoutes, <String>['/']);
       expect(generated.hasFlutter, isTrue);
-      expect(generated.source, contains('readTitle'));
-      expect(generated.serverSource, contains('posts.read-title'));
+      expect(generated.source, contains('listPosts'));
+      expect(generated.source, contains('createPost'));
+      expect(generated.serverSource, contains('posts.list'));
+      expect(generated.serverSource, contains('posts.create'));
       expect(compiler.outputFile.readAsStringSync(), generated.source);
       expect(
         compiler.serverOutputFile.readAsStringSync(),
@@ -158,23 +160,43 @@ void main() {
       final database = File(
         p.join(project.path, 'lib', 'posts_database.dart'),
       ).readAsStringSync();
+      final models = File(
+        p.join(project.path, 'lib', 'posts.dart'),
+      ).readAsStringSync();
       final routeServer = File(
         p.join(project.path, 'lib', 'routes', 'server.dart'),
+      ).readAsStringSync();
+      final routePage = File(
+        p.join(project.path, 'lib', 'routes', 'page.dart'),
       ).readAsStringSync();
       expect(nativeServer, contains('ODROE_SQLITE_PATH'));
       expect(nativeServer, contains("'.odroe/app.sqlite3'"));
       expect(nativeServer, contains('databasePath.isEmpty'));
       expect(nativeServer, contains('SqliteDatabase.open(databaseFile.path)'));
       expect(database, contains('CREATE TABLE IF NOT EXISTS posts'));
-      expect(database, contains('typedef Post = ({int id, String title});'));
+      expect(database, contains("import 'posts.dart';"));
       expect(database, contains('SqlTable<Post>'));
       expect(database, contains('.insertOnConflictDoNothing('));
       expect(database, contains('target: [posts.id]'));
       expect(database, isNot(contains('INSERT INTO posts')));
-      expect(routeServer, contains('.oneOrNull('));
-      expect(routeServer, contains('return post.title;'));
-      expect(routeServer, isNot(contains('limit: 1')));
-      expect(routeServer, isNot(contains('.all(')));
+      expect(models, contains('typedef Post = ({int id, String title});'));
+      expect(models, contains('typedef CreatePost = ({String title});'));
+      expect(routeServer, contains('ServerFunction<NoServerInput'));
+      expect(routeServer, contains("id: 'posts.list'"));
+      expect(routeServer, contains("id: 'posts.create'"));
+      expect(routeServer, contains('.all('));
+      expect(routeServer, contains('.returning(posts.projection)'));
+      expect(routePage, contains('MutationBuilder<Post, CreatePost, void>'));
+      expect(routePage, contains('QueryBuilder<List<Post>>'));
+      expect(routePage, contains('late MutationOptions'));
+      expect(routePage, isNot(contains('late final MutationOptions')));
+      expect(routePage, contains('void _configureCreate()'));
+      expect(routePage, contains('_configureCreate();'));
+      expect(routePage, contains('late QueryOptions<List<Post>> _listOptions'));
+      expect(routePage, contains('options: _createOptions'));
+      expect(routePage, contains('options: _listOptions'));
+      expect(routePage, isNot(contains('options: MutationOptions')));
+      expect(routePage, isNot(contains('options: QueryOptions')));
       final gitIgnore = File(p.join(project.path, '.gitignore'));
       expect(
         const LineSplitter().convert(gitIgnore.readAsStringSync()),
@@ -243,7 +265,7 @@ void main() {
     expect(output.toString(), contains('Odroe full-stack starter'));
     expect(
       FileRouteCompiler(projectRoot: project).compile().serverSource,
-      contains('posts.read-title'),
+      allOf(contains('posts.list'), contains('posts.create')),
     );
   });
 
@@ -597,6 +619,7 @@ project_type: package
 
 const _fullStackFiles = <String>[
   'lib/main.dart',
+  'lib/posts.dart',
   'lib/posts_database.dart',
   'lib/rpc_origin.dart',
   'lib/server.dart',

@@ -259,6 +259,7 @@ Map<String, String> _readFullStackSources(Uri odroeLibrary) {
   final packageRoot = File.fromUri(odroeLibrary).parent.parent;
   const manifest = <String, String>{
     'lib/main.dart': 'example/app/lib/main.dart',
+    'lib/posts.dart': 'example/app/lib/posts.dart',
     'lib/posts_database.dart': 'example/app/lib/posts_database.dart',
     'lib/rpc_origin.dart': 'example/app/lib/rpc_origin.dart',
     'lib/server.dart': 'example/app/lib/server.dart',

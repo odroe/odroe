@@ -40,11 +40,19 @@ void main() {
     );
     expect(
       output.serverSource,
-      contains("import 'routes/posts/[postId]/server.dart'"),
+      contains('import "routes/posts/[postId]/server.dart"'),
     );
     expect(output.source, contains("import 'package:odroe/router.dart';"));
     expect(output.source, isNot(contains("package:odroe/route.dart")));
     expect(output.source, contains("import 'package:odroe/rpc.dart';"));
+    expect(
+      RegExp('import "posts.dart"').allMatches(output.source),
+      hasLength(1),
+    );
+    expect(
+      RegExp('import "posts.dart"').allMatches(output.serverSource),
+      hasLength(1),
+    );
     expect(
       output.serverSource,
       isNot(contains("import 'package:odroe/rpc.dart';")),
@@ -52,8 +60,8 @@ void main() {
     expect(output.serverSource, contains('Server createServer('));
     expect(
       RegExp(r': ServerFunctionBinding\(').allMatches(output.serverSource),
-      hasLength(1),
-      reason: 'The reference app should expose only its exercised RPC.',
+      hasLength(3),
+      reason: 'The reference app exposes list, create, and detail RPCs.',
     );
     expect(
       output.serverSource,
@@ -149,7 +157,10 @@ final class _FixtureTransport implements RpcTransport {
     return ServerResponse.json(<String, Object?>{
       'version': 1,
       'type': 'data',
-      'data': 'Post ${payload['data']}',
+      'data': <String, Object?>{
+        'id': payload['data'],
+        'title': 'Post ${payload['data']}',
+      },
     });
   }
 }

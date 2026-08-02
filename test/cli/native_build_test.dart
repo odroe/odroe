@@ -95,8 +95,8 @@ void main() {
       expect(json.vary, 'Accept');
 
       final origin = 'http://127.0.0.1:$port';
-      final function = Uri.encodeComponent('posts.read-title');
-      final title = await _get(
+      final function = Uri.encodeComponent('posts.read');
+      final post = await _get(
         client,
         Uri.parse(
           '$origin/__odroe/functions/$function'
@@ -109,11 +109,11 @@ void main() {
         },
         logs: logs,
       );
-      expect(title.status, HttpStatus.ok, reason: '${title.body}\n$logs');
-      expect(jsonDecode(title.body), <String, Object?>{
+      expect(post.status, HttpStatus.ok, reason: '${post.body}\n$logs');
+      expect(jsonDecode(post.body), <String, Object?>{
         'version': 1,
         'type': 'data',
-        'data': 'SQLite post 42',
+        'data': <String, Object?>{'id': 42, 'title': 'SQLite post 42'},
       });
 
       final missing = await _get(
@@ -188,7 +188,7 @@ void main() {
       expect(jsonDecode(persisted.body), <String, Object?>{
         'version': 1,
         'type': 'data',
-        'data': 'Persisted post 42',
+        'data': <String, Object?>{'id': 42, 'title': 'Persisted post 42'},
       }, reason: secondServer.logs.toString());
     },
     timeout: const Timeout(Duration(minutes: 3)),

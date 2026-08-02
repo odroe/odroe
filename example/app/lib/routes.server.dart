@@ -4,14 +4,16 @@ import 'package:odroe/odroe.dart';
 import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:odroe/document.dart';
-import 'routes/route.dart' as root_definition;
-import 'routes/(account)/settings/route.dart' as account_settings_definition;
-import 'routes/(marketing)/pricing/route.dart' as marketing_pricing_definition;
-import 'routes/about/route.dart' as about_definition;
-import 'routes/docs/[...slug]/route.dart' as docs_rest_slug_definition;
-import 'routes/posts/route.dart' as posts_definition;
-import 'routes/posts/[postId]/route.dart' as posts_post_id_definition;
-import 'routes/posts/[postId]/server.dart' as posts_post_id_server;
+import "posts.dart" as posts_models_type;
+import "routes/route.dart" as root_definition;
+import "routes/(account)/settings/route.dart" as account_settings_definition;
+import "routes/(marketing)/pricing/route.dart" as marketing_pricing_definition;
+import "routes/about/route.dart" as about_definition;
+import "routes/docs/[...slug]/route.dart" as docs_rest_slug_definition;
+import "routes/posts/route.dart" as posts_definition;
+import "routes/posts/server.dart" as posts_server;
+import "routes/posts/[postId]/route.dart" as posts_post_id_definition;
+import "routes/posts/[postId]/server.dart" as posts_post_id_server;
 
 final _serverRoutePostsPostId = posts_post_id_server.route.compiled(
   path: ":postId",
@@ -50,7 +52,7 @@ final _serverRoutePostsPostId = posts_post_id_server.route.compiled(
   ),
 );
 
-final _serverRoutePosts = posts_definition.route.compiled(
+final _serverRoutePosts = posts_server.route.compiled(
   path: "posts",
   terminal: true,
   search: SearchParams<posts_definition.Search>.codec(
@@ -113,7 +115,34 @@ final List<RouteNode> serverRouteTree = <RouteNode>[_serverRouteRoot];
 
 /// Server functions addressable by generated clients.
 final serverFunctions = <String, ServerFunctionBinding>{
-  "posts.read-title": ServerFunctionBinding(posts_post_id_server.readTitle),
+  "posts.list": ServerFunctionBinding(
+    posts_server.listPosts,
+    encodeOutput: (value) => ((List<posts_models_type.Post> typed) => typed
+        .map((item) => <String, Object?>{"id": item.id, "title": item.title})
+        .toList(growable: false))(value as List<posts_models_type.Post>),
+  ),
+  "posts.create": ServerFunctionBinding(
+    posts_server.createPost,
+    decodeInput: (value) => ((Map<String, Object?> record) {
+      if (record.length != 1 || !record.containsKey("title")) {
+        throw FormatException("Expected models.CreatePost fields: title");
+      }
+      return (title: record["title"] as String);
+    })(value as Map<String, Object?>),
+    encodeOutput: (value) =>
+        ((posts_models_type.Post typed) => <String, Object?>{
+          "id": typed.id,
+          "title": typed.title,
+        })(value as posts_models_type.Post),
+  ),
+  "posts.read": ServerFunctionBinding(
+    posts_post_id_server.readPost,
+    encodeOutput: (value) =>
+        ((posts_models_type.Post typed) => <String, Object?>{
+          "id": typed.id,
+          "title": typed.title,
+        })(value as posts_models_type.Post),
+  ),
 };
 
 /// Creates the application server from generated routes.
