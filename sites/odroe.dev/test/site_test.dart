@@ -99,7 +99,7 @@ void main() {
   test(
     'documentation navigation exposes the five-part information architecture',
     () async {
-      expect(await docs.locations(), hasLength(16));
+      expect(await docs.locations(), hasLength(17));
       final server = Server(
         routes: generated.serverRouteTree,
         functions: generated.serverFunctions,
@@ -129,6 +129,7 @@ void main() {
         ),
       );
       expect(body, contains('href="/docs/tutorials/full-stack"'));
+      expect(body, contains('href="/docs/guides/typed-rpc-records"'));
       expect(body, contains('href="/docs/reference/api"'));
     },
   );
@@ -264,6 +265,7 @@ void main() {
     }
 
     for (final marker in <String>[
+      'posts.dart',
       'posts_database.dart',
       'rpc_origin.dart',
       'server_native.dart',
@@ -317,11 +319,15 @@ void main() {
       ]);
     }
 
-    expect(tutorial, contains('Flutter → Query → typed RPC'));
-    expect(tutorial, contains('ServerFunction<int, String>'));
+    expect(tutorial, contains('Post and CreatePost records'));
+    expect(
+      tutorial,
+      contains('ServerFunction<models.CreatePost, models.Post>'),
+    );
+    expect(tutorial, contains('ServerFunction<String, List<models.Post>>'));
     expect(tutorial, contains('DatabaseModule.borrowed(database)'));
-    expect(tutorial, contains('D1SqlDatabase.fromBinding'));
-    expect(tutorial, contains('generated.routes.readTitle'));
+    expect(tutorial, contains('D1SqlDatabase'));
+    expect(tutorial, contains('generated.routes.posts.createPost'));
   });
 
   test('support matrix reports evidence and limits honestly', () async {
@@ -821,7 +827,7 @@ void main() {
     expect(route, isNot(contains("package:odroe/rpc.dart")));
     expect(route, contains('context.request.read(databaseKey)'));
     expect(route, contains("const NotFound('Post not found.')"));
-    expect(route, contains('return post.title;'));
+    expect(route, contains('return post;'));
     expect(route, isNot(contains('database_sqlite.dart')));
     expect(route, isNot(contains('database_d1.dart')));
     expect(route, isNot(contains(r'Post ${context.data}')));
@@ -833,7 +839,7 @@ void main() {
     expect(config['compatibility_flags'], contains('enable_request_signal'));
     expect(database['binding'], 'DB');
     expect(database['migrations_dir'], 'migrations');
-    expect(exampleReadme, contains('Flutter page → Query'));
+    expect(exampleReadme, contains('Flutter\nQuery / Mutation'));
     expect(exampleReadme, contains('SQLite post 42'));
     expect(exampleReadme, contains('D1 post 42'));
     expect(package['private'], isTrue);

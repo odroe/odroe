@@ -4,11 +4,11 @@ import 'package:odroe/odroe.dart';
 import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:odroe/document.dart';
-import 'routes/route.dart' as root_definition;
-import 'routes/404.html/route.dart' as route404_html_definition;
-import 'routes/docs/server.dart' as docs_server;
-import 'routes/docs/[...slug]/route.dart' as docs_rest_slug_definition;
-import 'routes/docs/[...slug]/server.dart' as docs_rest_slug_server;
+import "routes/route.dart" as root_definition;
+import "routes/404.html/route.dart" as route404_html_definition;
+import "routes/docs/server.dart" as docs_server;
+import "routes/docs/[...slug]/route.dart" as docs_rest_slug_definition;
+import "routes/docs/[...slug]/server.dart" as docs_rest_slug_server;
 
 final _serverRouteDocsRestSlug = docs_rest_slug_server.route.compiled(
   path: "**:slug",

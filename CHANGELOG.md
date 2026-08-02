@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Generate symmetric typed RPC codecs for project-local named-record typedefs,
+  including record inputs, outputs, collections, nullable values, and stream
+  items. Upgrade the full-stack starter from a scalar read to typed post list
+  and create flows across Flutter Query, ServerFunction, SQLite, and D1; the
+  reference app additionally exercises typed post detail reads.
+- Fail record RPC generation for ambiguous aliases, private or unsupported
+  shapes, conditional or missing model imports, platform-specific shared
+  libraries, and protocol-only values in collections or streams. Emit const
+  generated function references backed by hot-reload-safe static codecs,
+  deduplicate forwarded model imports, and avoid duplicate collection copies
+  before serialization.
+- Keep an active `MutationBuilder` execution and result attached when its
+  options change; the new definition applies to the next execution. Reuse
+  Query and Mutation options in the starter so unrelated widget rebuilds do
+  not refetch stale lists or re-enable an in-flight create action.
 - Add typed conflict-target `insertOnConflictDoNothing` for SQLite, Cloudflare
   D1, and PostgreSQL, with exact pre-I/O rejection on MySQL. Make the full-stack
   starter decode a complete `Post` record and seed native SQLite through the

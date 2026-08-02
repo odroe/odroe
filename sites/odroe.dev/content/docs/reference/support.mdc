@@ -17,6 +17,7 @@ but the deployment or provider boundary is still deliberately narrow.
 | Flutter Web | Verified locally | Build, semantic handoff, Query/RPC application |
 | Flutter Android and iOS | Available, not yet verified | Generated targets exist; no repository build, device, or store-release gate |
 | Native server | Verified locally | Real socket, static files, streaming, shutdown |
+| Typed RPC named records | Verified | Generated four-way codecs, collections, nullable values, streams, malformed payloads |
 | SQLite | Verified | CRUD, returning rows, batches, transactions |
 | PostgreSQL | Verified | Real single connection, pool concurrency, transactions |
 | MySQL/MariaDB | Preview | Real provider suites; one serialized connection |
@@ -35,6 +36,9 @@ but the deployment or provider boundary is still deliberately narrow.
   sets, while typed single-row selects cap the SQL result at two rows;
 - browser RPC is same-origin; native apps must provide an explicit HTTP(S)
   origin;
+- generated record codecs currently require a project-local, prefixed,
+  non-generic typedef with named fields; nominal classes use an explicit
+  `SerializationAdapter`;
 - local tests do not imply a remote deployment, signed mobile release, DNS
   change, certificate result, or production database migration.
 

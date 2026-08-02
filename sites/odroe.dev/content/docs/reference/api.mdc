@@ -25,11 +25,16 @@ their neutral contract where useful.
 | --- | --- |
 | `query.dart` | Cache, keys, query/mutation/infinite lifecycles, hydration, persistence contracts |
 | `query_flutter.dart` | `QueryBuilder`, infinite/mutation builders, Flutter module/provider |
-| `rpc.dart` | Generated refs, client, transport, serializer, cancellation, `RpcModule` |
+| `rpc.dart` | Generated refs, input encoders, output decoders, client, transport, serializer, cancellation, `RpcModule` |
 
 `rpc.dart` exports the `http` package's `Client` interface needed by
 `HttpTransport`; implement `BaseClient` in application tests or adapters when a
 custom client is required.
+
+`ValueEncoder<T>` and `ValueDecoder<T>` are the small runtime hooks used by
+generated record codecs. Application code normally consumes the typed
+`ServerFunctionRef` and does not construct these callbacks itself. A bad typed
+output frame is reported as `RpcProtocolException`.
 
 ## Server hosts
 

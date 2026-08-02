@@ -23,20 +23,34 @@ final route = definition.route.server(
 );
 ```
 
-A `ServerFunction<Input, Output>` adds a generated typed client call:
+A `ServerFunction<Input, Output>` adds a generated typed client call. Domain
+records live in a client-safe shared library and are imported with a prefix:
 
 ```dart
-final readTitle = ServerFunction<int, String>(
-  id: 'posts.read-title',
+import '../../posts.dart' as models;
+
+final readPost = ServerFunction<int, models.Post>(
+  id: 'posts.read',
   method: HttpMethod.get,
-  handler: (context) => readPostTitle(context.data),
+  handler: (context) => findPost(context.data),
 );
 ```
 
 The compiler scans `server.dart`, rejects duplicate explicit IDs, and emits a
-server manifest plus client-safe references. `package:odroe/server.dart` is the
-complete server product entrypoint; route server files do not need to import
-`rpc.dart` as well.
+server manifest plus client-safe references. For a project-local, non-generic
+named-record typedef it also emits symmetric input and output codecs. A
+`({int id, String title})` value crosses the wire as an object with `id` and
+`title` fields, then returns to the same Dart record type. Collections,
+nullable values, and stream items recurse through the same shape.
+
+This code is generated with the route tree. It does not require annotations,
+`build_runner`, reflection, or a handwritten JSON adapter. Nominal application
+classes remain explicit `SerializationAdapter` values. See
+[Typed RPC records](/docs/guides/typed-rpc-records) for the complete supported
+shape and evolution rules.
+
+`package:odroe/server.dart` is the complete server product entrypoint; route
+server files do not need to import `rpc.dart` as well.
 
 ## The wire identifier is a public contract
 
@@ -62,7 +76,9 @@ canonicalize a custom `functionPath` with the same rules.
 
 Every typed response frame carries protocol `version: 1`. The client rejects
 unknown frame shapes, mismatched redirect status, and responses beyond its own
-configured byte limit.
+configured byte limit. It also classifies a successful frame that cannot decode
+to the generated output type as `RpcProtocolException`; incidental type-cast
+errors do not escape as the public network failure.
 
 ## Cancellation is cooperative
 

@@ -53,6 +53,11 @@ Use equivalent adapter sets on both runtime boundaries; no mutable global
 serializer is required. `MoneyAdapter` below represents an application-owned
 `SerializationAdapter` implementation.
 
+Project-local named-record typedefs are different: the route compiler generates
+their field codecs, so `Post` and `CreatePost` do not need adapters. Keep an
+adapter for nominal classes and values with application-owned construction
+rules. See [Typed RPC records](/docs/guides/typed-rpc-records).
+
 ```dart
 Serializer createSerializer() => Serializer(
   adapters: <SerializationAdapter<dynamic>>[MoneyAdapter()],
@@ -87,27 +92,56 @@ silently changing the value type.
 
 Install `QueryModule` from `query_flutter.dart`, then use focused builders for
 query, infinite-query, or mutation state. The query function can call a
-generated RPC ref without coupling either subsystem:
+generated RPC ref without coupling either subsystem. Keep the options object in
+the owning `State`; ordinary widget rebuilds should reuse its identity:
 
 ```dart
-QueryBuilder<String>(
-  options: QueryOptions<String>(
-    key: QueryKey('post', <Object?>[postId]),
-    query: (context) => generated.routes.readTitle(
-      routeContext.read(rpcClientKey),
+late QueryOptions<Post> _postOptions;
+
+@override
+void initState() {
+  super.initState();
+  _postOptions = _createPostOptions();
+}
+
+@override
+void didUpdateWidget(PostPage oldWidget) {
+  super.didUpdateWidget(oldWidget);
+  if (oldWidget.postId != widget.postId ||
+      !identical(oldWidget.rpc, widget.rpc)) {
+    _postOptions = _createPostOptions();
+  }
+}
+
+QueryOptions<Post> _createPostOptions() {
+  final postId = widget.postId;
+  final rpc = widget.rpc;
+  return QueryOptions<Post>(
+    key: QueryKey('posts.detail', <Object?>[postId]),
+    query: (context) => generated.routes.posts.postId.readPost(
+      rpc,
       postId,
       cancelled: context.cancelToken.whenCancelled.then<void>((_) {}),
     ),
-  ),
+  );
+}
+
+@override
+Widget build(BuildContext context) => QueryBuilder<Post>(
+  options: _postOptions,
   builder: (_, result) {
     if (result.isError && !result.hasData) {
       return const Text('Unable to load post');
     }
     if (!result.hasData) return const CircularProgressIndicator();
-    return Text(result.requireData);
+    return Text(result.requireData.title);
   },
-)
+);
 ```
+
+Options identity is part of the observer lifecycle, not temporary build output.
+Replace it when a real query input or captured client changes, as above; keep
+the same instance for theme, layout, parent, and unrelated state rebuilds.
 
 Reading `context.cancelToken` marks the operation as cancellation-aware. An
 explicit `cancelQueries` call, or removal of the last observer while the fetch

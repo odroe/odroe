@@ -1,0 +1,168 @@
+---
+title: Typed RPC records
+description: Move domain records between Flutter and ServerFunction without codegen annotations or handwritten JSON adapters.
+order: 30
+language: en
+---
+# Typed RPC records
+
+Odroe can generate the wire codec for a project-local named-record typedef. A
+record stays a Dart record in application code and becomes a JSON object only
+at the RPC boundary. No annotation, `build_runner`, `toJson`, or global adapter
+registry is involved.
+
+This is the smallest useful domain model for the generated full-stack product:
+
+```dart
+// lib/posts.dart
+typedef Post = ({int id, String title});
+typedef CreatePost = ({String title});
+```
+
+Keep that file client-safe. It must not import SQLite, D1, `dart:io`, a server
+host, or application secrets. Flutter and the server import the same types.
+
+## Import the shared model with a prefix
+
+A route server file imports the model with an explicit prefix. The prefix tells
+the route compiler which library owns the client-visible type and prevents a
+server-only declaration from leaking into generated client code.
+
+The typedef must be declared directly in that imported source file. The current
+compiler does not follow `part` directives or re-exports to discover it. If
+`posts.dart` only exports `post_models.dart`, import `post_models.dart` itself
+with the prefix instead.
+
+```dart
+import 'package:odroe/database.dart';
+import 'package:odroe/server.dart';
+
+import '../../posts.dart' as models;
+import '../../posts_database.dart';
+import 'route.dart' as definition;
+
+final route = definition.route.server();
+
+final listPosts = ServerFunction<String, List<models.Post>>(
+  id: 'posts.list',
+  method: HttpMethod.get,
+  handler: (context) {
+    final order = switch (context.data) {
+      'newest' => posts.id.descending,
+      'oldest' => posts.id.ascending,
+      _ => throw const HttpError(400, 'Invalid post sort.'),
+    };
+    return postQueries
+        .selectTable(posts, orderBy: <SqlOrder>[order])
+        .all(context.request.read(databaseKey));
+  },
+);
+
+final createPost = ServerFunction<models.CreatePost, models.Post>(
+  id: 'posts.create',
+  method: HttpMethod.post,
+  handler: (context) {
+    final title = context.data.title.trim();
+    if (title.isEmpty) {
+      throw const HttpError(400, 'Post title is required.');
+    }
+    return postQueries
+        .insert(posts, <SqlAssignment>[posts.title.set(title)])
+        .returning(posts.projection)
+        .one(context.request.read(databaseKey));
+  },
+);
+```
+
+`odroe generate` resolves `models.Post` and `models.CreatePost`, reads their
+named fields, and emits the four transformations required by one typed call:
+
+```text
+Flutter record
+  → generated input encoder
+  → JSON object
+  → generated server input decoder
+  → handler record
+
+handler record
+  → generated server output encoder
+  → JSON object
+  → generated client output decoder
+  → Flutter record
+```
+
+The same output codec is applied to each stream item. Collection codecs recurse,
+so `List<Post>` remains `List<Post>` on both sides instead of becoming
+`List<dynamic>` or failing as an unregistered `Record` at runtime.
+
+## Call records directly from Flutter
+
+Generated references expose the original Dart types:
+
+```dart
+final created = await generated.routes.posts.createPost(
+  rpc,
+  (title: 'Typed from Flutter'),
+);
+
+final posts = await generated.routes.posts.listPosts(rpc, 'newest');
+
+print(created.id);
+print(posts.first.title);
+```
+
+There is no application-owned map or cast in this path. A malformed object is
+rejected before the server handler starts. A successful response whose shape
+does not match the generated output contract becomes `RpcProtocolException` on
+the client instead of exposing an incidental cast error.
+
+## Know the supported boundary
+
+Generated record codecs intentionally cover a narrow, inspectable shape:
+
+- a project-local typedef declared directly in the same source file that the
+  route server imports with a prefix; `part` and re-export discovery are not
+  supported;
+- named fields only;
+- non-generic record aliases;
+- use-site and field nullability, plus `List`, `Set`, `Iterable`, and
+  `Map<String, T>` around supported values;
+- scalar values already supported by `Serializer`, including `DateTime`,
+  `Duration`, `Uri`, `BigInt`, and `Uint8List`.
+
+Positional records, generic record aliases, recursive aliases, function values,
+and maps with non-string keys are rejected during route generation. This
+same-file record rule does not add generated support for a nominal class,
+including one declared beside the typedef. Nominal classes remain
+application-owned and use `SerializationAdapter` when they must cross the wire;
+Odroe does not infer constructors or generate `fromJson` for classes.
+
+Put `?` on the function use site or a record field, such as `models.Post?`.
+A typedef whose record target is itself nullable is rejected because that alias
+cannot name the promoted non-null record needed by generated field access.
+
+## Treat the fields as a protocol
+
+The function ID and record field names are wire contracts. Renaming a field,
+changing its type, or changing nullability can break an older client even when
+the Dart typedef still looks small. Use a new function ID or a coordinated
+client/server release for a breaking shape change.
+
+The generated wire value is an object keyed by field name. Its key set must
+match the record exactly: missing fields and unknown fields are rejected, even
+when a missing field would otherwise be nullable. That fail-closed rule prevents
+two deployed shapes from drifting silently. Do not depend on field order and do
+not place secrets in a record merely because the type is shared. Payload and
+response-frame byte limits still apply after encoding; use pagination or
+streaming for large collections.
+
+Run the compiler explicitly after changing a shared record:
+
+```sh
+dart run odroe generate
+dart analyze --fatal-infos
+```
+
+Continue with [Query workflows](/docs/guides/query-workflows) to invalidate a
+typed post list after `createPost`, and [Server operations](/docs/guides/server-operations)
+for authentication, cancellation, and payload budgets.

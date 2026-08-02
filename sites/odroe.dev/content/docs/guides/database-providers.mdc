@@ -1,7 +1,7 @@
 ---
 title: Database providers
 description: Connect typed SQL to SQLite, PostgreSQL, MySQL, MariaDB, and D1.
-order: 32
+order: 33
 language: en
 ---
 # Database providers

@@ -32,15 +32,17 @@ Every command accepts `--project`, defaulting to the current directory.
 `dart run odroe init` writes the minimal Document + Router starter.
 
 `dart run odroe init --full-stack` writes the Flutter + Query + typed RPC +
-typed SQL + SQLite + D1/Cloudflare vertical product. Both modes preflight all
+typed SQL + SQLite + D1/Cloudflare vertical product. The generated page lists
+and creates typed `Post` records instead of stopping at a scalar read. Both modes preflight all
 owned paths, reject application source, and write transactionally. There is no
 destructive force mode.
 
 The small starter owns `lib/main.dart`, `lib/routes/route.dart`, and
-`lib/routes/page.dart`. Full-stack mode owns these 13 application files:
+`lib/routes/page.dart`. Full-stack mode owns these 14 application files:
 
 ```text
 lib/main.dart
+lib/posts.dart
 lib/posts_database.dart
 lib/rpc_origin.dart
 lib/server.dart
@@ -82,7 +84,10 @@ search schemas generate codecs for `String`, `int`, `double`, `bool`, and
 
 Public top-level `ServerFunction<Input, Output>` declarations in `server.dart`
 become generated client references. Give released functions an explicit,
-stable `id`.
+stable `id`. A project-local named-record typedef imported with a prefix also
+receives symmetric client-input, server-input, server-output, and client-output
+codecs. Unsupported positional, generic, or recursive records fail generation
+instead of failing on the first request.
 
 Cloudflare builds also own `.dart_tool/odroe/server_fetch.dart`. Applications
 may provide `lib/server.dart` with `createServer()` and `lib/prerender.dart`

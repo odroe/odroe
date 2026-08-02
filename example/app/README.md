@@ -2,9 +2,10 @@
 
 这是由 Flutter CLI 创建的标准 Odroe 应用，展示显式 modules、文件路由、强类型
 params/search、Server Function、typed SQL、语义 HTML、SSG 与 Flutter 首屏交接。
-`/posts/42` 是一条真实的纵向路径：Flutter page → Query → 生成的 typed RPC →
-HTTP → Server → `DatabaseModule` → typed SQL。页面离开或显式取消 Query 时，
-同一信号会终止 HTTP 请求，并为失败状态提供显式重试。
+`/posts` 的列表和创建、以及 `/posts/42` 的详情组成一条真实纵向产品：Flutter
+Query / Mutation → 生成的 named-record typed RPC → HTTP → Server →
+`DatabaseModule` → typed SQL。页面离开或显式取消 Query 时，同一信号会终止
+读取请求；创建完成后只失效帖子列表并从服务端真值刷新。
 
 ```sh
 flutter pub get
@@ -26,8 +27,10 @@ dart run odroe build web
 Native 的 `CREATE TABLE IF NOT EXISTS` 与公共 typed SQL
 `insertOnConflictDoNothing(..., target: [posts.id])` 只是固定初始 schema 的
 starter bootstrap，不会修改已有表结构。`Posts` projection 解码完整的
-`({int id, String title})` 记录，route 再明确选择 RPC 所需的 `title`。Native
-schema 演进需要应用自己的 migration 流程。构建预渲染时，Odroe CLI 会把
+`Post` 记录。`Post` 与 `CreatePost` 放在客户端安全的 `lib/posts.dart`，route
+compiler 为输入、输出、列表和 stream item 生成对称 codec，不需要手写 JSON
+adapter。创建使用单条 typed `INSERT ... RETURNING`，由数据库生成 ID 并返回
+完整 `Post`。Native schema 演进需要应用自己的 migration 流程。构建预渲染时，Odroe CLI 会把
 `ODROE_SQLITE_PATH` 覆盖为一次性临时文件，并在结束后删除，因而不会读取或改写
 开发数据库。
 
@@ -46,9 +49,10 @@ npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
 
-访问 `/posts/42?preview=true&tags=one&tags=two`。Native 返回
-`SQLite post 42`，本地 D1 返回 `D1 post 42`；未知 ID 返回 typed RPC 404。
-远端 migration 与 deploy 会修改平台状态，不属于上述本地命令。
+访问 `/posts?sort=newest`，创建一条记录，再进入返回 ID 对应的详情页。Native
+初始包含 `SQLite post 42`，本地 D1 初始包含 `D1 post 42`；两者都必须完成
+list → create → list → read，未知 ID 返回 typed RPC 404，空标题返回受控 400
+且不能新增记录。远端 migration 与 deploy 会修改平台状态，不属于上述本地命令。
 
 显式选择 Web device 后，开发代理会让页面和 RPC 使用同一 origin。当前
 checkout 只提交 Web runner；运行原生目标前，先添加所需 Flutter runner，

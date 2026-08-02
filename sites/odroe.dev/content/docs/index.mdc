@@ -23,8 +23,10 @@ Flutter page
   → SQLite, PostgreSQL, MySQL/MariaDB, or D1
 ```
 
-The generated full-stack starter proves that path with native SQLite and local
-Cloudflare D1. It also renders a semantic Document at `/`, so the first route
+The generated full-stack starter proves that path with a typed `Post` list and
+`CreatePost → Post` mutation on native SQLite and local Cloudflare D1. Generated
+record codecs keep the domain types intact across Flutter, JSON, the server,
+and typed SQL. It also renders a semantic Document at `/`, so the first route
 has useful HTML before Flutter takes over.
 
 The Flutter composition root is ordinary application code:
@@ -84,6 +86,8 @@ Those limits are part of the product contract, not footnotes.
 - [First product](/docs/getting-started): create and run the complete starter.
 - [Full-stack vertical slice](/docs/tutorials/full-stack): trace one feature
   through every generated and runtime boundary.
+- [Typed RPC records](/docs/guides/typed-rpc-records): share domain records
+  without annotations or handwritten JSON adapters.
 - [Concepts](/docs/concepts/application): understand ownership before extending
   the framework.
 - [Support and limits](/docs/reference/support): distinguish verified,

@@ -68,6 +68,7 @@ dart run odroe dev -- -d chrome
 my_app/
 ├── lib/
 │   ├── main.dart              # Query + RPC + Document + Router
+│   ├── posts.dart             # 客户端安全的 Post / CreatePost records
 │   ├── posts_database.dart    # shared typed schema and query
 │   ├── rpc_origin.dart
 │   ├── server.dart            # native / Cloudflare conditional export
@@ -75,8 +76,8 @@ my_app/
 │   ├── server_cloudflare.dart # invocation-scoped D1
 │   ├── routes/
 │   │   ├── route.dart
-│   │   ├── page.dart
-│   │   └── server.dart
+│   │   ├── page.dart          # typed list query + create mutation
+│   │   └── server.dart        # typed list/create RPC + SQL
 │   ├── routes.dart            # generated client tree
 │   └── routes.server.dart     # generated server tree
 ├── migrations/0001_posts.sql
@@ -86,10 +87,11 @@ my_app/
 ```
 
 `init --full-stack` 只接受 Flutter `--empty` 应用，验证目标项目确实解析到正在
-运行的 Odroe，然后原子写入一条真实纵向产品：Flutter → Query → typed RPC →
-Server → typed SQL → SQLite。它同时准备 D1 migration 与锁定的本地 Cloudflare
-工具链，但默认开发路径不需要 Node。二次执行零改动；发现自定义源码、配置、
-目录冲突或符号链接会整体拒绝，不提供 `--force`，也不会修改 pubspec 或平台宿主。
+运行的 Odroe，然后原子写入一条真实纵向产品：Flutter 的帖子列表与创建 → Query / Mutation →
+named-record typed RPC → Server → typed SQL → SQLite。它同时准备 D1 migration 与
+锁定的本地 Cloudflare 工具链，但默认开发路径不需要 Node。二次执行零改动；发现
+自定义源码、配置、目录冲突或符号链接会整体拒绝，不提供 `--force`，也不会修改
+pubspec 或平台宿主。
 
 Native 默认把 SQLite 数据保存在项目的 `.odroe/app.sqlite3`，初始化器会将
 `.odroe/` 加入 `.gitignore`。`ODROE_SQLITE_PATH` 可覆盖路径；生产环境应使用
@@ -300,7 +302,7 @@ RPC value 与 stream 都接收应用拥有的取消信号。Query 不依赖 RPC�
 observer 离开时终止默认 HTTP 请求：
 
 ```dart
-final title = await routes.posts.postId.readTitle(
+final post = await routes.posts.postId.readPost(
   app.read(rpcClientKey),
   postId,
   cancelled: context.cancelToken.whenCancelled.then<void>((_) {}),
@@ -468,6 +470,33 @@ client 和 server 共用的协议类型。
 `id` 时仍使用原有的 `server.dart` 路径加变量名，便于现有代码渐进迁移，但
 重命名文件或变量会改变该 fallback。
 
+项目内的 named-record typedef 可以直接成为函数输入或输出。把 record 放在
+客户端安全的共享文件，并在 `server.dart` 用前缀导入：
+
+```dart
+// lib/posts.dart
+typedef Post = ({int id, String title});
+typedef CreatePost = ({String title});
+
+// lib/routes/posts/server.dart
+import '../../posts.dart' as models;
+
+final createPost = ServerFunction<models.CreatePost, models.Post>(
+  id: 'posts.create',
+  handler: (context) => create(context.data),
+);
+```
+
+`odroe generate` 会为 client input、server input、server output、client output
+生成对称 codec；`List<Post>`、nullable 与 stream item 会递归使用同一 record
+shape。应用代码仍操作 Dart record，wire 才使用字段名 JSON object，不需要
+annotation、`build_runner`、`toJson` 或手写 adapter。畸形输入在 handler 前返回
+400；成功响应若不符合输出合同，客户端得到 `RpcProtocolException`。
+
+首期只自动解析项目内、带前缀导入、非泛型且只有 named fields 的 record typedef。
+positional、generic、recursive record 与非 `String` key 的 Map 会在生成期拒绝；
+nominal class 继续由应用通过 `SerializationAdapter` 明确编码。
+
 ## 服务端组合
 
 生成的 `routes.server.dart` 暴露 `createServer(modules: ...)`。需要全局 middleware、request-scoped Query 或自定义 renderer 时，创建应用级 `lib/server.dart`；CLI 会自动把它作为 server 入口：
@@ -605,24 +634,29 @@ SQLite、D1 与 PostgreSQL 编译为同一条 target-aware
 接受 `SqlDialect.mysql`；显式错配会在该 statement 到达数据库前抛出
 `SqlException(SqlErrorCode.unsupported)`。
 
-`odroe init --full-stack` 把根页面跑成一条真实纵向链路：Flutter page → Query →
-生成的 typed RPC → HTTP → Server → `DatabaseModule` → typed SQL。它与仓库中的
+`odroe init --full-stack` 把根页面跑成一条真实纵向链路：Flutter list/create UI →
+Query / Mutation → 生成的 named-record typed RPC → HTTP → Server →
+`DatabaseModule` → typed SQL。它与仓库中的
 [`example/app`](https://github.com/odroe/odroe/tree/main/example/app) 沿用同一组已验证
-API、runtime contract 与锁定工具链；route 只读公开数据库边界：
+API、runtime contract 与锁定工具链。共享的产品 records 不依赖数据库：
 
 ```dart
-final post = await postQueries
-    .selectTable(
-      posts,
-      where: posts.id.equals(context.data),
-    )
-    .oneOrNull(context.request.read(databaseKey));
-if (post == null) throw const NotFound('Post not found.');
-return post.title;
+typedef Post = ({int id, String title});
+typedef CreatePost = ({String title});
 ```
 
-`oneOrNull` 明确要求结果为零行或一行：零行返回 `null`，多行直接拒绝，避免
-在调用端重复维护 `limit`、列表判空与 `single` 解包。
+创建操作直接返回数据库生成的完整记录：
+
+```dart
+return postQueries
+    .insert(posts, <SqlAssignment>[posts.title.set(title)])
+    .returning(posts.projection)
+    .one(context.request.read(databaseKey));
+```
+
+这里没有猜测下一个 ID，也没有 insert 后再做一次游离查询。`one` 要求
+`RETURNING` 恰好一行；详情读取则使用 `oneOrNull`，零行返回 `null`、多行直接
+拒绝，避免调用端重复维护 `limit`、列表判空与 `single` 解包。
 
 `lib/server.dart` 通过条件导出隔离平台 driver。Native 入口使用进程拥有的文件
 SQLite，默认路径为 `.odroe/app.sqlite3`，request 只借用，并由
@@ -646,8 +680,9 @@ npm run cloudflare:dev
 ```
 
 最后一条命令在当前应用目录启动本地 Workerd；访问 `/` 会得到语义 HTML，
-`posts.read-title` RPC 从 D1 返回 `D1 post 42`。移除 `--local` 或运行 deploy
-会修改远端状态，不属于这条本地路径。
+`posts.list` 从 D1 读取记录，`posts.create` 通过 D1 `INSERT ... RETURNING`
+创建并返回完整 `Post`，随后同一列表会刷新。移除 `--local` 或运行 deploy 会
+修改远端状态，不属于这条本地路径。
 
 ```dart
 final statement = BoundSql.parts(

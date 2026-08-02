@@ -1,7 +1,7 @@
 ---
 title: Server operations
 description: Authenticate, bound, observe, cancel, and host Odroe server work.
-order: 30
+order: 31
 language: en
 ---
 # Server operations
@@ -32,7 +32,9 @@ final route = definition.route.server(
 ## Typed server function
 
 ```dart
-final updatePost = ServerFunction<UpdatePost, Post>(
+import 'package:my_app/posts.dart' as models;
+
+final updatePost = ServerFunction<models.UpdatePost, models.Post>(
   id: 'posts.update',
   handler: (context) => repository.update(context.data),
 );
@@ -50,6 +52,13 @@ new server deployments. Keep it unchanged after release. The compiler accepts
 only a non-empty string literal and rejects duplicates across the complete route
 tree. Omitting it preserves the path-and-variable fallback for gradual
 migration, but renaming either source location changes that fallback.
+
+Project-local named-record inputs and outputs receive generated symmetric
+codecs only when the typedef is declared directly in the same source file that
+the route server imports with a prefix; the compiler does not discover typedefs
+through `part` or re-export. Nominal classes, even in that source file, continue
+to use an application-owned `SerializationAdapter`. See
+[Typed RPC records](/docs/guides/typed-rpc-records).
 
 ## Client origin
 
@@ -107,6 +116,8 @@ verify a bearer token, attach the authenticated user to the request, and return
 a protocol-shaped `401` by throwing `HttpError`:
 
 ```dart
+import 'package:my_app/posts.dart' as models;
+
 final userKey = RequestKey<User>('authenticated-user');
 
 Future<ServerResponse> requireBearer(
@@ -124,7 +135,7 @@ Future<ServerResponse> requireBearer(
   return next();
 }
 
-final updatePost = ServerFunction<UpdatePost, Post>(
+final updatePost = ServerFunction<models.UpdatePost, models.Post>(
   id: 'posts.update',
   middleware: <Middleware>[requireBearer],
   handler: (context) => repository.update(
@@ -365,7 +376,7 @@ Value and stream references accept one application-owned cancellation signal.
 Completing it stops the call with `RpcCancelledException`:
 
 ```dart
-final title = await routes.posts.postId.readTitle(
+final post = await routes.posts.postId.readPost(
   app.read(rpcClientKey),
   postId,
   cancelled: cancelButton.future,
@@ -384,7 +395,7 @@ ends promptly.
 The same signal can express a total timeout without a second API:
 
 ```dart
-final title = await routes.posts.postId.readTitle(
+final post = await routes.posts.postId.readPost(
   app.read(rpcClientKey),
   postId,
   cancelled: Future<void>.delayed(const Duration(seconds: 10)),

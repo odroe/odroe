@@ -49,6 +49,7 @@ the whole operation back on failure. There is deliberately no `--force`.
 my_app/
 ├── lib/
 │   ├── main.dart              # Flutter composition root
+│   ├── posts.dart             # client-safe Post and CreatePost records
 │   ├── posts_database.dart    # shared schema and typed query builder
 │   ├── rpc_origin.dart        # browser/native origin policy
 │   ├── server.dart            # conditional server export
@@ -56,8 +57,8 @@ my_app/
 │   ├── server_cloudflare.dart # invocation-scoped D1
 │   ├── routes/
 │   │   ├── route.dart         # shared route and semantic document
-│   │   ├── page.dart          # Flutter Query + typed RPC
-│   │   └── server.dart        # typed RPC + typed SQL
+│   │   ├── page.dart          # list query and create mutation
+│   │   └── server.dart        # typed list/create RPC + typed SQL
 │   ├── routes.dart            # generated client references
 │   └── routes.server.dart     # generated server manifest
 ├── migrations/0001_posts.sql
@@ -66,11 +67,17 @@ my_app/
 └── wrangler.jsonc
 ```
 
-The root page asks for post `42`. Native execution seeds `SQLite post 42`;
-local D1 seeds `D1 post 42`. The route, function input, function result, SQL
-columns, and complete `Post` projection remain typed throughout the path. The
-native seed uses `insertOnConflictDoNothing` with `posts.id` as its explicit
+The root page lists posts and creates a new one. Native execution starts with
+`SQLite post 42`; local D1 starts with `D1 post 42`. `Post` and `CreatePost`
+remain Dart named records across Flutter, generated RPC, the server handler,
+and the complete SQL projection. Odroe generates the record wire codecs—there
+is no handwritten map, annotation, or adapter in application code.
+
+The native seed uses `insertOnConflictDoNothing` with `posts.id` as its explicit
 conflict target; it does not hide a raw application write inside the starter.
+Creation omits the ID and uses one typed `INSERT ... RETURNING` statement. The
+database owns the generated ID, and the returned `Post` is the value shown to
+the client.
 
 Native SQLite persists at `.odroe/app.sqlite3` by default, and the initializer
 adds `.odroe/` to `.gitignore`. Set `ODROE_SQLITE_PATH` to override it; use an
@@ -91,10 +98,12 @@ Start both the Odroe development server and Flutter Web:
 dart run odroe dev -- -d chrome
 ```
 
-Open the reported Flutter URL. The page renders `SQLite post 42` after Query
-calls the generated `posts.read-title` reference. Stop the command with
-Ctrl-C; Odroe drains the listener before closing the process-owned database.
-Starting the command again reopens the same `.odroe/app.sqlite3` file.
+Open the reported Flutter URL. Query calls the generated `posts.list`
+reference and renders `SQLite post 42`. Enter a title and choose Create;
+Mutation calls `posts.create`, invalidates the post-list key, and renders the
+database-returned record. Stop the command with Ctrl-C; Odroe drains the
+listener before closing the process-owned database. Starting the command again
+reopens the same `.odroe/app.sqlite3` file, including posts you created.
 
 To inspect only the semantic server response, run:
 
@@ -132,7 +141,8 @@ npm run cloudflare:dev
 
 The migration and Wrangler development scripts include `--local`. The final
 command starts local Workerd; `/` serves the semantic handoff and the same
-typed RPC reads `D1 post 42` through the invocation's `DB` binding. Removing
+typed list/create RPC uses the invocation's `DB` binding. Creating a post
+exercises D1 `INSERT ... RETURNING` and refreshes the same typed list. Removing
 `--local` or deploying changes remote state and is a separate operation.
 
 ## Build only what you need
