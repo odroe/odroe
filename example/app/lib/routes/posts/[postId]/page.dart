@@ -37,7 +37,7 @@ final class _PostPage extends StatefulWidget {
 }
 
 final class _PostPageState extends State<_PostPage> {
-  late QueryKey _queryKey;
+  late QueryKey<Post> _queryKey;
   late QueryOptions<Post> _queryOptions;
 
   @override
@@ -56,7 +56,7 @@ final class _PostPageState extends State<_PostPage> {
   }
 
   void _configureQuery() {
-    _queryKey = QueryKey('posts.detail', <Object?>[widget.postId]);
+    _queryKey = QueryKey<Post>('posts.detail', <Object?>[widget.postId]);
     _queryOptions = QueryOptions<Post>(
       key: _queryKey,
       query: (query) => generated.routes.posts.postId.readPost(

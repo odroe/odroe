@@ -7,7 +7,7 @@ import '../../posts.dart';
 import '../../routes.dart' as generated;
 import 'route.dart' as definition;
 
-final _postListsKey = QueryKey('posts.list');
+final QueryKey<List<Post>> _postListsKey = QueryKey('posts.list');
 
 final route = definition.route.page(
   build: (context) => _PostsPage(
@@ -37,7 +37,7 @@ final class _PostsPage extends StatefulWidget {
 final class _PostsPageState extends State<_PostsPage> {
   final _title = TextEditingController();
   late MutationOptions<Post, CreatePost, void> _createOptions;
-  late QueryKey _listKey;
+  late QueryKey<List<Post>> _listKey;
   late QueryOptions<List<Post>> _listOptions;
 
   @override
@@ -69,7 +69,7 @@ final class _PostsPageState extends State<_PostsPage> {
   }
 
   void _configureList() {
-    _listKey = QueryKey('posts.list', <Object?>[widget.sort]);
+    _listKey = QueryKey<List<Post>>('posts.list', <Object?>[widget.sort]);
     _listOptions = QueryOptions<List<Post>>(
       key: _listKey,
       query: (query) => generated.routes.posts.listPosts(

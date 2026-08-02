@@ -426,7 +426,7 @@ void main() {
         ),
       ),
     );
-    final key = QueryKey('posts.detail', <Object?>[42]);
+    final key = QueryKey<Post>('posts.detail', <Object?>[42]);
     await _pumpPostPageWithModule(
       tester,
       RpcModule(

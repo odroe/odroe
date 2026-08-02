@@ -71,7 +71,7 @@ import '../posts.dart';
 import '../routes.dart' as generated;
 import 'route.dart' as definition;
 
-final _postListsKey = QueryKey('posts.list');
+final QueryKey<List<Post>> _postListsKey = QueryKey('posts.list');
 
 final route = definition.route.page(
   build: (context) => _PostsPage(rpc: context.read(rpcClientKey)),
