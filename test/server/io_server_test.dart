@@ -7,6 +7,8 @@ import 'package:odroe/router.dart';
 import 'package:odroe/server_io.dart';
 import 'package:test/test.dart';
 
+typedef _StrictSearch = ({int page});
+
 void main() {
   test('IO adapter rejects extra RPC path segments', () async {
     var calls = 0;
@@ -39,6 +41,60 @@ void main() {
     expect(jsonDecode(body), containsPair('type', 'notFound'));
     expect(calls, 0);
   });
+
+  test(
+    'IO adapter returns a controlled 400 for strict invalid search',
+    () async {
+      final reports = <Object>[];
+      var calls = 0;
+      final route =
+          AppRoute<NoParams, _StrictSearch, NoData>(
+            path: '/',
+            search: SearchParams<_StrictSearch>.codec(
+              keys: const <String>{'page'},
+              defaults: (page: 1),
+              invalid: InvalidSearchBehavior.error,
+              decode: (input) => (page: input.integer('page') ?? 1),
+              encode: (value, output) => output.integer('page', value.page),
+            ),
+          ).server(
+            handlers: <HttpMethod, ServerRouteHandler<NoParams, _StrictSearch>>{
+              HttpMethod.get: (_) {
+                calls++;
+                return ServerResponse.text('handled');
+              },
+            },
+          );
+      final app = Server(
+        routes: <RouteNode>[route],
+        onError: (_, error, _) => reports.add(error),
+      );
+      final server = await IoServer.bind(
+        app.handle,
+        onError: app.onError,
+        port: 0,
+      );
+      addTearDown(server.close);
+      final client = HttpClient();
+      addTearDown(client.close);
+
+      final request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${server.port}/?page=invalid'),
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+
+      expect(response.statusCode, HttpStatus.badRequest, reason: body);
+      expect(
+        jsonDecode(body),
+        containsPair('message', 'Search parameter "page" must be an integer.'),
+      );
+      expect(response.headers.value(HttpHeaders.varyHeader), 'Accept');
+      expect(calls, 0);
+      expect(reports, isEmpty);
+    },
+  );
 
   test('IO adapter sends only the bounded typed function error', () async {
     const maxFrameBytes = 64;

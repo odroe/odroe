@@ -45,6 +45,11 @@ server-only tree. It does not use annotations, parts, registries, or
 Generated route references encode params and search values through the same
 typed codec used for matching.
 
+Search values use the complete `defaults` record when decoding fails. Set
+`invalid: InvalidSearchBehavior.error` for strict URLs instead: Flutter sends
+the parsing failure to the router error builder, while server dispatch returns
+a controlled HTTP 400 without running the route or reporting a server failure.
+
 ## Browser URLs and handoff
 
 Routed Flutter applications set `webPathUrls: true` on the composition root

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Return a controlled HTTP 400 for strict typed search decoding failures
+  without invoking the route or server error reporter. Keep handler, loader,
+  and codec encoding failures classified as unexpected server errors.
 - Require exactly one encoded function ID segment under the RPC namespace,
   preserving `%2F` inside IDs while rejecting empty or extra path segments
   before a function can run. Validate and canonicalize custom function paths

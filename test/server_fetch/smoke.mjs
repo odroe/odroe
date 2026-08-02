@@ -54,6 +54,27 @@ async function rejection(promise) {
 }
 
 {
+  const valid = await invoke(
+    new Request("https://example.test/typed-search?page=2"),
+  );
+  assert.equal(valid.response.status, 200);
+  assert.deepEqual(await valid.response.json(), { page: 2 });
+
+  globalThis.reportCount = 0;
+  const invalid = await invoke(
+    new Request("https://example.test/typed-search?page=invalid", {
+      headers: { accept: "application/json" },
+    }),
+  );
+  assert.equal(invalid.response.status, 400);
+  const frame = await invalid.response.json();
+  assert.equal(frame.type, "error");
+  assert.equal(frame.message, 'Search parameter "page" must be an integer.');
+  assert.equal(invalid.response.headers.get("vary"), "Accept");
+  assert.equal(globalThis.reportCount, 0);
+}
+
+{
   const chunks = ["streamed ", "request ", "body"];
   let pulls = 0;
   const body = new ReadableStream({

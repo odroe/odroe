@@ -6,6 +6,8 @@ import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
+typedef _StrictSearch = ({int page});
+
 typedef _FailureRunner =
     Future<ServerResponse> Function(ServerErrorHandler onError, Object failure);
 
@@ -130,6 +132,109 @@ void main() {
       expect(response.status, expectation.status);
     }
     expect(reported, isEmpty);
+  });
+
+  test('rejects strict invalid route search without reporting it', () async {
+    final reported = <Object>[];
+    var calls = 0;
+    final route =
+        AppRoute<NoParams, _StrictSearch, NoData>(
+          path: '/',
+          search: SearchParams<_StrictSearch>.codec(
+            keys: const <String>{'page'},
+            defaults: (page: 1),
+            invalid: InvalidSearchBehavior.error,
+            decode: (input) => (page: input.integer('page') ?? 1),
+            encode: (value, output) => output.integer('page', value.page),
+          ),
+        ).server(
+          handlers: <HttpMethod, ServerRouteHandler<NoParams, _StrictSearch>>{
+            HttpMethod.get: (_) {
+              calls++;
+              return ServerResponse.text('handled');
+            },
+          },
+        );
+    final server = Server(
+      routes: <RouteNode>[route],
+      onError: (_, error, _) => reported.add(error),
+    );
+
+    final response = await server.handle(
+      ServerRequest.bytes(
+        method: HttpMethod.get,
+        uri: Uri.parse('http://localhost/?page=invalid'),
+        headers: Headers.single(<String, String>{'accept': 'application/json'}),
+      ),
+    );
+    final body = await response.readText();
+    final frame = jsonDecode(body) as Map<String, Object?>;
+
+    expect(response.status, 400, reason: body);
+    expect(frame, containsPair('type', 'error'));
+    expect(
+      frame,
+      containsPair('message', 'Search parameter "page" must be an integer.'),
+    );
+    expect(response.headers.value('vary'), 'Accept');
+    expect(body, isNot(contains('page=invalid')));
+    expect(calls, 0);
+    expect(reported, isEmpty);
+  });
+
+  test('still reports a route handler parameter format failure', () async {
+    const failure = ParameterFormatException('handler bug');
+    final reported = <Object>[];
+    final route = AppRoute<NoParams, NoSearch, NoData>(path: '/').server(
+      handlers: <HttpMethod, ServerRouteHandler<NoParams, NoSearch>>{
+        HttpMethod.get: (_) => throw failure,
+      },
+    );
+    final server = Server(
+      routes: <RouteNode>[route],
+      onError: (_, error, _) => reported.add(error),
+    );
+
+    final response = await server.handle(_request('/'));
+
+    expect(response.status, 500);
+    await response.readBytes();
+    expect(reported, <Object>[failure]);
+  });
+
+  test('still reports a route search encoder format failure', () async {
+    const failure = ParameterFormatException('encoder bug');
+    final reported = <Object>[];
+    var calls = 0;
+    final route =
+        AppRoute<NoParams, _StrictSearch, NoData>(
+          path: '/',
+          search: SearchParams<_StrictSearch>.codec(
+            keys: const <String>{'page'},
+            defaults: (page: 1),
+            invalid: InvalidSearchBehavior.error,
+            decode: (input) => (page: input.integer('page') ?? 1),
+            encode: (_, _) => throw failure,
+          ),
+        ).server(
+          handlers: <HttpMethod, ServerRouteHandler<NoParams, _StrictSearch>>{
+            HttpMethod.get: (_) {
+              calls++;
+              return ServerResponse.text('handled');
+            },
+          },
+        );
+    final server = Server(
+      routes: <RouteNode>[route],
+      onError: (_, error, _) => reported.add(error),
+    );
+
+    final response = await server.handle(_request('/'));
+
+    expect(response.status, 500);
+    await response.readBytes();
+    expect(calls, 0);
+    expect(reported, <Object>[failure]);
   });
 
   test('reports every unexpected nested loader failure once', () async {

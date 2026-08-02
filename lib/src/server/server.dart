@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../app/context.dart';
 import '../app/module.dart';
+import '../router/codec.dart';
 import '../router/load.dart';
 import '../router/match.dart';
 import '../router/route.dart';
@@ -542,8 +543,12 @@ final class Server {
   }
 
   Future<ServerResponse> _handleRoute(RequestContext context) async {
-    final matches = _matcher.match(context.request.uri);
-    if (matches == null) throw const NotFound();
+    late final RouteMatches matches;
+    try {
+      matches = _matcher.match(context.request.uri) ?? (throw const NotFound());
+    } on SearchParameterFormatException catch (error) {
+      throw HttpError(400, error.message);
+    }
 
     final routeMiddleware = <Middleware>[];
     for (final route in matches.routes) {

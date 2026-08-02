@@ -3,14 +3,36 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:js_interop';
 
+import 'package:odroe/router.dart';
 import 'package:odroe/server_fetch.dart';
+
+typedef _StrictSearch = ({int page});
+
+final _strictSearchRoute =
+    AppRoute<NoParams, _StrictSearch, NoData>(
+      path: '/typed-search',
+      search: SearchParams<_StrictSearch>.codec(
+        keys: const <String>{'page'},
+        defaults: (page: 1),
+        invalid: InvalidSearchBehavior.error,
+        decode: (input) => (page: input.integer('page') ?? 1),
+        encode: (value, output) => output.integer('page', value.page),
+      ),
+    ).server(
+      handlers: <HttpMethod, ServerRouteHandler<NoParams, _StrictSearch>>{
+        HttpMethod.get: (context) =>
+            ServerResponse.json(<String, Object?>{'page': context.search.page}),
+      },
+    );
 
 void main() {
   final server = Server(
-    routes: const [],
+    routes: <RouteNode>[_strictSearchRoute],
     onError: _reportError,
     middleware: <Middleware>[
-      (context, _) => _handle(context.request, context.invocation),
+      (context, next) => context.request.uri.path == '/typed-search'
+          ? next()
+          : _handle(context.request, context.invocation),
     ],
   );
   exportFetchHandler(server.invocationHandler, onError: server.onError);
