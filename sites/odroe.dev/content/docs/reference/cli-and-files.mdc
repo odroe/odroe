@@ -55,9 +55,10 @@ package-lock.json
 wrangler.jsonc
 ```
 
-It also appends `node_modules/` and `.wrangler/` to `.gitignore`, then writes
-the generated route and bootstrap targets. Re-running an unchanged starter is
-idempotent. An untouched small starter can upgrade to full-stack mode.
+It also appends `node_modules/`, `.wrangler/`, and `.odroe/` to `.gitignore`,
+then writes the generated route and bootstrap targets. Re-running an unchanged
+starter is idempotent. An untouched small starter can upgrade to full-stack
+mode.
 
 ## Route generation
 
@@ -114,6 +115,11 @@ dart run odroe dev -- -d chrome
 Native output defaults to `build/odroe/server`. Cloudflare writes
 `build/odroe/cloudflare/server.js` and `worker.mjs`. Static Document and Flutter
 output lives under `build/web` unless changed explicitly.
+
+For native prerender only, `build` overrides the child server's
+`ODROE_SQLITE_PATH` with a temporary database path and removes that directory
+after shutdown. It does not pass this override when users run the deployable
+server artifact.
 
 The application owns `pubspec.yaml`, platform hosts, `public/`, migrations,
 secrets, `wrangler.jsonc`, container files, and provider deployment policy.

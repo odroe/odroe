@@ -4,15 +4,43 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odroe/database_sqlite.dart';
 import 'package:odroe/odroe_flutter.dart';
 import 'package:odroe/query_flutter.dart';
 import 'package:odroe/router_flutter.dart';
 import 'package:odroe/rpc.dart';
 import 'package:odroe/server_io.dart';
+import 'package:odroe_example/posts_database.dart';
 import 'package:odroe_example/routes.dart';
-import 'package:odroe_example/server.dart' as example_server;
+import 'package:odroe_example/server_native.dart' as native_server;
 
 void main() {
+  test('native database rejects an empty path', () async {
+    await expectLater(
+      native_server.createNativeServer(databasePath: ''),
+      throwsArgumentError,
+    );
+  });
+
+  test('native database bootstrap is idempotent and preserves data', () async {
+    final database = SqliteDatabase.openInMemory();
+    addTearDown(database.close);
+
+    await initializePostsDatabase(database);
+    await database.execute(
+      BoundSql.raw(
+        "UPDATE posts SET title = 'Persisted post 42' WHERE id = 42",
+        dialect: SqlDialect.sqlite,
+      ),
+    );
+    await initializePostsDatabase(database);
+
+    final titles = await postQueries
+        .selectTable(posts, where: posts.id.equals(42), limit: 1)
+        .all(database);
+    expect(titles, <String>['Persisted post 42']);
+  });
+
   testWidgets('generated RPC completes inside the Flutter event loop', (
     tester,
   ) async {
@@ -303,10 +331,11 @@ HttpTransport _realHttpTransport() => HttpOverrides.runWithHttpOverrides(
 final class _RealHttpOverrides extends HttpOverrides {}
 
 final class _NativeApplication {
-  const _NativeApplication(this.server, this.httpServer);
+  const _NativeApplication(this.server, this.httpServer, this.state);
 
   final Server server;
   final HttpServer httpServer;
+  final Directory state;
 
   Uri get origin => Uri(
     scheme: 'http',
@@ -315,18 +344,30 @@ final class _NativeApplication {
   );
 
   Future<void> close() async {
-    await IoServer.close(httpServer);
-    await server.close();
+    try {
+      await IoServer.close(httpServer);
+    } finally {
+      try {
+        await server.close();
+      } finally {
+        if (state.existsSync()) await state.delete(recursive: true);
+      }
+    }
   }
 }
 
 Future<_NativeApplication> _startNativeApplication() async {
-  final server = await example_server.createServer();
+  final state = await Directory.systemTemp.createTemp('odroe-example-state-');
+  Server? server;
   try {
+    server = await native_server.createNativeServer(
+      databasePath: '${state.path}/app.sqlite3',
+    );
     final httpServer = await IoServer.bind(server.handler, port: 0);
-    return _NativeApplication(server, httpServer);
+    return _NativeApplication(server, httpServer, state);
   } on Object {
-    await server.close();
+    await server?.close();
+    if (state.existsSync()) await state.delete(recursive: true);
     rethrow;
   }
 }

@@ -533,7 +533,7 @@ Map<Directory, bool> _snapshotDirectories(
   };
 }
 
-const _gitIgnoreEntries = <String>['node_modules/', '.wrangler/'];
+const _gitIgnoreEntries = <String>['node_modules/', '.wrangler/', '.odroe/'];
 
 bool _hasGitIgnoreEntries(File file) {
   if (!file.existsSync()) return false;

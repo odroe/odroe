@@ -69,17 +69,48 @@ an identity-map ORM: schema, resource ownership, and migrations remain visible.
 
 ## Choose database ownership at the runtime edge
 
-The native entry creates one in-memory SQLite database before the listener can
-start. Requests borrow it; server shutdown closes it:
+The native entry resolves a file database before the listener can start. It
+creates the parent directory, runs an idempotent starter bootstrap, lends the
+process-owned database to requests, and closes it on server shutdown:
 
 ```dart
-final database = SqliteDatabase.openInMemory();
-await initializePostsDatabase(database);
-return generated.createServer(
-  modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
-  onClose: database.close,
+FutureOr<Server> createServer() => createNativeServer(
+  databasePath:
+      Platform.environment['ODROE_SQLITE_PATH'] ?? '.odroe/app.sqlite3',
 );
+
+Future<Server> createNativeServer({required String databasePath}) async {
+  if (databasePath.isEmpty) {
+    throw ArgumentError.value(
+      databasePath,
+      'databasePath',
+      'must not be empty',
+    );
+  }
+  final databaseFile = File(databasePath).absolute;
+  await databaseFile.parent.create(recursive: true);
+  return _createServer(SqliteDatabase.open(databaseFile.path));
+}
+
+Future<Server> _createServer(SqliteDatabase database) async {
+  try {
+    await initializePostsDatabase(database);
+    return generated.createServer(
+      modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
+      onClose: database.close,
+    );
+  } on Object {
+    await database.close();
+    rethrow;
+  }
+}
 ```
+
+`.odroe/app.sqlite3` is ignored project state. Set `ODROE_SQLITE_PATH` to an
+absolute writable path for production. Relative paths resolve from the server
+process's working directory. While building static pages, the CLI overrides
+`ODROE_SQLITE_PATH` with a temporary database path and removes that state after
+the prerender child stops, so development data remains untouched.
 
 The Cloudflare entry cannot own a process database. It wraps the invocation's
 `DB` binding instead:
@@ -99,10 +130,12 @@ return generated.createServer(
 `lib/server.dart` conditionally exports one of these implementations. SQLite
 FFI therefore cannot become reachable from the Worker artifact.
 
-The native demo schema and seed live in `initializePostsDatabase`; the D1
-schema and seed live in `migrations/0001_posts.sql`. When changing this sample,
-update both deliberately. Odroe does not hide that migration boundary or run
-DDL during Fetch startup.
+The native starter uses `CREATE TABLE IF NOT EXISTS` and
+`ON CONFLICT(id) DO NOTHING`, so restarting cannot overwrite an existing row.
+Its bootstrap and the D1 schema in `migrations/0001_posts.sql` remain
+deliberately separate. Odroe does not call this a migration system or run DDL
+during Fetch startup. The bootstrap creates only the fixed initial schema; it
+does not alter an existing table.
 
 ## Follow the generated client reference
 
@@ -155,14 +188,18 @@ do not prove a remote deployment.
 
 ## Evolve one feature at a time
 
-For a new field or operation, keep the change vertical:
+For a new operation on the current schema, keep the change vertical:
 
-1. Add the column codec and projection in `posts_database.dart`.
-2. Add a reviewable D1 migration and the equivalent native demo setup.
-3. Add or change one `ServerFunction` with an explicit stable ID.
-4. Regenerate routes and fix analyzer errors at the boundary.
-5. Update one Query key and all UI states that consume the result.
-6. Run both native SQLite and local D1 paths before documenting support.
+1. Add or change one `ServerFunction` with an explicit stable ID.
+2. Regenerate routes and fix analyzer errors at the boundary.
+3. Update one Query key and all UI states that consume the result.
+4. Run both native SQLite and local D1 paths before documenting support.
+
+Adding a field changes the schema contract. Add its codec and projection,
+create a reviewable D1 migration, and apply the equivalent native change with
+the application's own migration process. The generated native bootstrap is not
+a migration runner. For disposable local starter data only, deleting
+`.odroe/app.sqlite3` recreates the initial schema on the next start.
 
 Continue with the [server and RPC concept](/docs/concepts/server-rpc),
 [database concept](/docs/concepts/database), and

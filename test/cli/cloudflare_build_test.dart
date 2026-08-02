@@ -339,6 +339,56 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
     timeout: const Timeout(Duration(minutes: 3)),
   );
 
+  test('prerender isolates and removes application runtime state', () async {
+    final project = await _createDocumentFixture();
+    addTearDown(() => project.delete(recursive: true));
+    await File(p.join(project.path, 'lib', 'server.dart')).writeAsString(r'''
+import 'dart:io';
+
+import 'package:odroe/server.dart';
+
+import 'routes.server.dart' as generated;
+
+Server createServer() {
+  final path = Platform.environment['ODROE_SQLITE_PATH'];
+  if (path == null || path.isEmpty) {
+    throw StateError('ODROE_SQLITE_PATH is required during prerender.');
+  }
+  File(path).writeAsStringSync('prerender state');
+  stderr.writeln('ODROE_TEST_STATE=$path');
+  return generated.createServer();
+}
+''');
+    final inheritedState = File(p.join(project.path, 'inherited-app.sqlite3'));
+
+    final build = await _runDart(
+      <String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--no-server',
+      ],
+      environment: <String, String>{
+        ...Platform.environment,
+        'ODROE_SQLITE_PATH': inheritedState.path,
+      },
+    );
+    final logs = '${build.stdout}\n${build.stderr}';
+
+    expect(build.exitCode, 0, reason: logs);
+    expect(inheritedState.existsSync(), isFalse);
+    final marker = RegExp(
+      r'ODROE_TEST_STATE=([^\r\n]+)',
+    ).firstMatch(build.stderr);
+    expect(marker, isNotNull, reason: logs);
+    final isolatedPath = marker!.group(1)!;
+    expect(p.equals(isolatedPath, inheritedState.path), isFalse);
+    expect(File(isolatedPath).existsSync(), isFalse);
+    expect(Directory(p.dirname(isolatedPath)).existsSync(), isFalse);
+  });
+
   test(
     'failed artifact-free prerender preserves the previous website output',
     () async {
@@ -683,11 +733,15 @@ Future<void> _buildWorker(Directory project, String artifact) async {
   expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
 }
 
-Future<ProcessResult> _runDart(List<String> arguments) => withDartCommandLock(
+Future<ProcessResult> _runDart(
+  List<String> arguments, {
+  Map<String, String>? environment,
+}) => withDartCommandLock(
   () => runTestProcess(
     dartExecutable,
     arguments,
     timeout: const Duration(minutes: 2),
+    environment: environment,
   ),
 );
 

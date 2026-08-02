@@ -71,7 +71,7 @@ my_app/
 │   ├── posts_database.dart    # shared typed schema and query
 │   ├── rpc_origin.dart
 │   ├── server.dart            # native / Cloudflare conditional export
-│   ├── server_native.dart     # in-memory SQLite
+│   ├── server_native.dart     # persistent SQLite
 │   ├── server_cloudflare.dart # invocation-scoped D1
 │   ├── routes/
 │   │   ├── route.dart
@@ -90,6 +90,10 @@ my_app/
 Server → typed SQL → SQLite。它同时准备 D1 migration 与锁定的本地 Cloudflare
 工具链，但默认开发路径不需要 Node。二次执行零改动；发现自定义源码、配置、
 目录冲突或符号链接会整体拒绝，不提供 `--force`，也不会修改 pubspec 或平台宿主。
+
+Native 默认把 SQLite 数据保存在项目的 `.odroe/app.sqlite3`，初始化器会将
+`.odroe/` 加入 `.gitignore`。`ODROE_SQLITE_PATH` 可覆盖路径；生产环境应使用
+持久卷上的绝对可写路径。默认相对路径以 server 进程的当前目录为基准。
 
 只需要 Document 与 Router 时，改用 `dart run odroe init`；未修改的基础 starter
 可以随后原子升级为 `--full-stack`。
@@ -596,10 +600,14 @@ if (titles.isEmpty) throw const NotFound('Post not found.');
 return titles.single;
 ```
 
-`lib/server.dart` 通过条件导出隔离平台 driver。Native 入口使用进程拥有的
-in-memory SQLite，request 只借用，并由 `Server.close()` 关闭；它是确定性的
-零配置示例，不代表持久化。Cloudflare 入口则在 `invocationModules` 中包装 D1
-binding，schema 与 seed 来自 `migrations/0001_posts.sql`。因此 Flutter Web、
+`lib/server.dart` 通过条件导出隔离平台 driver。Native 入口使用进程拥有的文件
+SQLite，默认路径为 `.odroe/app.sqlite3`，request 只借用，并由
+`Server.close()` 关闭。`CREATE TABLE IF NOT EXISTS` 与
+`ON CONFLICT(id) DO NOTHING` 让 starter 可重复启动且不覆盖已有数据；这是
+固定初始 schema 的示例 bootstrap，不会迁移已有表。Native schema 演进由应用
+自己的 migration 流程负责。Cloudflare 入口则在
+`invocationModules` 中包装 D1 binding，schema 与 seed 来自
+`migrations/0001_posts.sql`。两套初始化路径保持显式分离，因此 Flutter Web、
 Wasm 与 Worker 产物都不需要触达 SQLite FFI。
 
 生成的应用在自己的 `package.json` 与 lockfile 中固定 Wrangler 4.118.0；Node 22+
@@ -737,6 +745,8 @@ prerender 静态 route。纯 Document route 输出纯 HTML；
 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
 `--no-server` 不生成可部署 server artifact，但仍运行生成的 Dart
 server 源码完成 prerender，适合只部署 `build/web` 的 assets-only SSG。
+CLI 会覆盖 native prerender 子进程的 `ODROE_SQLITE_PATH`，让它使用独立临时
+数据库，并在子进程结束后删除。因此构建不读取或改写 `.odroe/app.sqlite3`。
 
 prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 HTML 响应
 最多 1 MiB。`--prerender-concurrency`、`--prerender-max-routes` 与

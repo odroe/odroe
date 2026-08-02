@@ -18,16 +18,16 @@ const postQueries = SqlQueries(SqlDialect.sqlite);
 Future<void> initializePostsDatabase(SqlDatabase database) async {
   await database.execute(
     BoundSql.raw('''
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY,
   title TEXT NOT NULL
 ) STRICT
 ''', dialect: SqlDialect.sqlite),
   );
-  await postQueries
-      .insert(posts, <SqlAssignment>[
-        posts.id.set(42),
-        posts.title.set('SQLite post 42'),
-      ])
-      .execute(database);
+  await database.execute(
+    BoundSql.raw('''
+INSERT INTO posts (id, title) VALUES (42, 'SQLite post 42')
+ON CONFLICT(id) DO NOTHING
+''', dialect: SqlDialect.sqlite),
+  );
 }

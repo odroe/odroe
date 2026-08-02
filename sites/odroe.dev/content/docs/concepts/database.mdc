@@ -85,8 +85,9 @@ resolution and native build hooks still have cost; inspect real artifacts when
 binary size matters.
 
 Schema files remain application-owned. D1 uses reviewable Wrangler migrations;
-server databases use their provider's migration path. Odroe does not add code
-generation or a migration DSL.
+server databases use an application-owned provider migration path. The
+generated SQLite bootstrap creates only its fixed initial schema. Odroe does
+not add code generation or a migration DSL.
 
 Continue with [Database providers](/docs/guides/database-providers) for working
 code, pool ownership, D1 bindings, and the complete runtime matrix.

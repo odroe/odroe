@@ -17,9 +17,17 @@ dart run odroe build web
 ## One query, two database runtimes
 
 共享的 route handler 只依赖 `package:odroe/database.dart`。`lib/server.dart` 用
-条件导出选择平台入口：Native server 打开一份进程拥有的 in-memory SQLite，
-监听前完成初始化，每个请求只借用它，并在 `Server.close()` 时关闭。
-这是零配置、确定性的可运行示例，不是持久化或 migration 方案。
+条件导出选择平台入口：Native server 打开一份进程拥有的文件 SQLite，默认保存
+在 `.odroe/app.sqlite3`。监听前完成幂等 bootstrap，每个请求只借用它，并在
+`Server.close()` 时关闭。重启会保留已有数据；`ODROE_SQLITE_PATH` 可覆盖路径，
+生产环境应指向持久卷上的绝对可写路径。默认相对路径以 server 进程的当前目录
+为基准。
+
+Native 的 `CREATE TABLE IF NOT EXISTS` 与 `ON CONFLICT(id) DO NOTHING`
+只是固定初始 schema 的 starter bootstrap，不会修改已有表结构。Native schema
+演进需要应用自己的 migration 流程。构建预渲染时，Odroe CLI 会把
+`ODROE_SQLITE_PATH` 覆盖为一次性临时文件，并在结束后删除，因而不会读取或改写
+开发数据库。
 
 Cloudflare target 则为每次 Fetch invocation 包装 `DB` binding；表结构和种子数据
 来自可审查的 `migrations/0001_posts.sql`。示例在本目录的 `package.json` 与

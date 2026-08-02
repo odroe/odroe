@@ -1,5 +1,6 @@
 .dart_tool/
 .wrangler/
+.odroe/
 .pub/
 build/
 node_modules/

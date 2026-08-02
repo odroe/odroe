@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:odroe/database_sqlite.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -55,36 +56,15 @@ void main() {
       expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
       expect(artifact.existsSync(), isTrue);
 
-      final reservation = await ServerSocket.bind(
-        InternetAddress.loopbackIPv4,
-        0,
+      final databasePath = p.join(deployment.path, '.odroe', 'app.sqlite3');
+      final port = await _unusedPort();
+      final firstServer = await _startNativeServer(
+        artifact,
+        deployment,
+        port: port,
       );
-      final port = reservation.port;
-      await reservation.close();
-      final process = await Process.start(
-        artifact.path,
-        const <String>[],
-        workingDirectory: deployment.path,
-        environment: <String, String>{
-          ...Platform.environment,
-          'ODROE_HOST': '127.0.0.1',
-          'ODROE_PORT': '$port',
-        },
-      );
-      final logs = StringBuffer();
-      final stdout = process.stdout.transform(utf8.decoder).listen(logs.write);
-      final stderr = process.stderr.transform(utf8.decoder).listen(logs.write);
-      addTearDown(() async {
-        process.kill(ProcessSignal.sigterm);
-        try {
-          await process.exitCode.timeout(const Duration(seconds: 10));
-        } on TimeoutException {
-          process.kill(ProcessSignal.sigkill);
-          await process.exitCode;
-        }
-        await stdout.cancel();
-        await stderr.cancel();
-      });
+      addTearDown(firstServer.close);
+      final logs = firstServer.logs;
 
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 2);
@@ -160,9 +140,117 @@ void main() {
         'message': 'Post not found.',
         'errorType': 'NotFound',
       });
+
+      client.close(force: true);
+      await firstServer.close();
+      expect(File(databasePath).existsSync(), isTrue);
+      final database = SqliteDatabase.open(databasePath);
+      try {
+        await database.execute(
+          BoundSql.raw(
+            "UPDATE posts SET title = 'Persisted post 42' WHERE id = 42",
+            dialect: SqlDialect.sqlite,
+          ),
+        );
+      } finally {
+        await database.close();
+      }
+
+      final secondPort = await _unusedPort();
+      final secondServer = await _startNativeServer(
+        artifact,
+        deployment,
+        port: secondPort,
+      );
+      addTearDown(secondServer.close);
+      final secondClient = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 2);
+      addTearDown(() => secondClient.close(force: true));
+      final secondOrigin = 'http://127.0.0.1:$secondPort';
+      final persisted = await _get(
+        secondClient,
+        Uri.parse(
+          '$secondOrigin/__odroe/functions/$function'
+          '?payload=%7B%22data%22%3A42%7D',
+        ),
+        accept: 'application/json',
+        headers: <String, String>{
+          'origin': secondOrigin,
+          'x-odroe-server-function': 'true',
+        },
+        logs: secondServer.logs,
+      );
+      expect(
+        persisted.status,
+        HttpStatus.ok,
+        reason: '${persisted.body}\n${secondServer.logs}',
+      );
+      expect(jsonDecode(persisted.body), <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': 'Persisted post 42',
+      }, reason: secondServer.logs.toString());
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
+}
+
+Future<int> _unusedPort() async {
+  final reservation = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = reservation.port;
+  await reservation.close();
+  return port;
+}
+
+Future<_NativeServerProcess> _startNativeServer(
+  File artifact,
+  Directory workingDirectory, {
+  required int port,
+  String? databasePath,
+}) async {
+  final environment = <String, String>{
+    for (final entry in Platform.environment.entries)
+      if (entry.key != 'ODROE_SQLITE_PATH') entry.key: entry.value,
+    'ODROE_HOST': '127.0.0.1',
+    'ODROE_PORT': '$port',
+    'ODROE_SQLITE_PATH': ?databasePath,
+  };
+  final process = await Process.start(
+    artifact.path,
+    const <String>[],
+    workingDirectory: workingDirectory.path,
+    environment: environment,
+    includeParentEnvironment: false,
+  );
+  return _NativeServerProcess(process);
+}
+
+final class _NativeServerProcess {
+  _NativeServerProcess(this.process) {
+    _stdout = process.stdout.transform(utf8.decoder).listen(logs.write);
+    _stderr = process.stderr.transform(utf8.decoder).listen(logs.write);
+  }
+
+  final Process process;
+  final StringBuffer logs = StringBuffer();
+  late final StreamSubscription<String> _stdout;
+  late final StreamSubscription<String> _stderr;
+  bool _closed = false;
+
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    process.kill(ProcessSignal.sigterm);
+    try {
+      await process.exitCode.timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      await process.exitCode;
+    } finally {
+      await _stdout.cancel();
+      await _stderr.cancel();
+    }
+  }
 }
 
 Future<({int status, String body, String? contentType, String? vary})> _get(

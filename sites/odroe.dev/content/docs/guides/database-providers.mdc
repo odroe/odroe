@@ -266,12 +266,19 @@ export 'server_cloudflare.dart'
     show createServer;
 ```
 
-The native entry opens one process-owned in-memory SQLite database.
-Initialization completes before the listener can bind, requests borrow it,
-and `Server.close()` closes it. This is a deterministic zero-configuration demo,
-not persistence. The Cloudflare entry creates an invocation-owned D1 wrapper;
-`migrations/0001_posts.sql` owns the schema and seed instead of running DDL in
-the Fetch bootstrap.
+The native entry opens one process-owned file SQLite database, defaulting to
+`.odroe/app.sqlite3`. Initialization completes before the listener can bind,
+requests borrow it, and `Server.close()` closes it. `ODROE_SQLITE_PATH` may
+override the file; production should use an absolute path on writable persistent
+storage. Idempotent starter DDL and seed preserve existing data across restarts.
+The default relative path resolves from the server process's working directory.
+During native prerender the CLI overrides `ODROE_SQLITE_PATH` with a temporary
+database and deletes it afterward, keeping builds independent of local state.
+
+The Cloudflare entry creates an invocation-owned D1 wrapper;
+`migrations/0001_posts.sql` owns its schema and seed instead of running DDL in
+the Fetch bootstrap. Native bootstrap and D1 migrations are intentionally
+separate rather than hidden behind an unproven migration abstraction.
 
 The example owns a locked local Wrangler toolchain. With Node 22+ and npm 10.9+,
 its D1 path is:
@@ -359,5 +366,6 @@ artifact when binary size matters.
 ## Schema and migrations
 
 Keep migrations as reviewable `.sql` files. D1 uses Wrangler migrations.
-Server databases use their native migration path. Odroe does not add code
-generation or a migration abstraction.
+Server databases use an application-owned provider migration path. The
+generated SQLite bootstrap creates its fixed initial schema but does not evolve
+existing tables. Odroe does not add code generation or a migration abstraction.

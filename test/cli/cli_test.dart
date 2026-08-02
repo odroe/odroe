@@ -14,6 +14,10 @@ void main() {
     );
     final port = reservation.port;
     await reservation.close();
+    final state = await Directory.systemTemp.createTemp('odroe-cli-state-');
+    addTearDown(() async {
+      if (state.existsSync()) await state.delete(recursive: true);
+    });
 
     final dartCommandLock = await acquireDartCommandLock();
     final publicDirectory = Directory('example/app/public').absolute;
@@ -86,6 +90,7 @@ void main() {
         environment: <String, String>{
           ...Platform.environment,
           'ODROE_FLUTTER_ORIGIN_FILE': '/stale/flutter-origin',
+          'ODROE_SQLITE_PATH': '${state.path}/app.sqlite3',
         },
       );
     } on Object {

@@ -152,10 +152,22 @@ void main() {
         'init-fixture',
       );
       expect(wrangler['name'], 'init-fixture');
+      final nativeServer = File(
+        p.join(project.path, 'lib', 'server_native.dart'),
+      ).readAsStringSync();
+      final database = File(
+        p.join(project.path, 'lib', 'posts_database.dart'),
+      ).readAsStringSync();
+      expect(nativeServer, contains('ODROE_SQLITE_PATH'));
+      expect(nativeServer, contains("'.odroe/app.sqlite3'"));
+      expect(nativeServer, contains('databasePath.isEmpty'));
+      expect(nativeServer, contains('SqliteDatabase.open(databaseFile.path)'));
+      expect(database, contains('CREATE TABLE IF NOT EXISTS posts'));
+      expect(database, contains('ON CONFLICT(id) DO NOTHING'));
       final gitIgnore = File(p.join(project.path, '.gitignore'));
       expect(
         const LineSplitter().convert(gitIgnore.readAsStringSync()),
-        containsAll(<String>['node_modules/', '.wrangler/']),
+        containsAll(<String>['node_modules/', '.wrangler/', '.odroe/']),
       );
 
       final files = <File>[

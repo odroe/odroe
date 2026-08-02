@@ -282,6 +282,9 @@ void main() {
     expect(gettingStarted, contains('reuses stale HTML'));
     expect(gettingStarted, contains('SQLite post 42'));
     expect(gettingStarted, contains('D1 post 42'));
+    expect(gettingStarted, contains('.odroe/app.sqlite3'));
+    expect(gettingStarted, contains('ODROE_SQLITE_PATH'));
+    expect(gettingStarted, contains('temporary database'));
     expect(gettingStarted, contains('serves the semantic handoff'));
     expect(gettingStarted, isNot(contains('cd ../odroe/example/app')));
     expect(gettingStarted, isNot(contains('/posts/42')));
@@ -756,6 +759,9 @@ void main() {
     const example = '../../example/app';
     final entry = await File('$example/lib/server.dart').readAsString();
     final native = await File('$example/lib/server_native.dart').readAsString();
+    final nativeDatabase = await File(
+      '$example/lib/posts_database.dart',
+    ).readAsString();
     final cloudflare = await File(
       '$example/lib/server_cloudflare.dart',
     ).readAsString();
@@ -793,10 +799,15 @@ void main() {
     expect(entry, contains("if (dart.library.io) 'server_native.dart'"));
     expect(native, contains("package:odroe/database_sqlite.dart"));
     expect(native, contains('FutureOr<Server> createServer()'));
+    expect(native, contains("ODROE_SQLITE_PATH']"));
+    expect(native, contains("'.odroe/app.sqlite3'"));
+    expect(native, contains('SqliteDatabase.open(databaseFile.path)'));
     expect(native, contains('await initializePostsDatabase(database)'));
     expect(native, contains('DatabaseModule.borrowed(database)'));
     expect(native, contains('onClose: database.close'));
     expect(native, isNot(contains('database_d1.dart')));
+    expect(nativeDatabase, contains('CREATE TABLE IF NOT EXISTS posts'));
+    expect(nativeDatabase, contains('ON CONFLICT(id) DO NOTHING'));
     expect(cloudflare, contains("package:odroe/database_d1.dart"));
     expect(cloudflare, contains('FutureOr<Server> createServer()'));
     expect(cloudflare, contains('invocationModules: (invocation)'));
@@ -851,6 +862,7 @@ void main() {
     expect(lockedWrangler['version'], '4.118.0');
     expect(pubIgnore, contains('node_modules/'));
     expect(pubIgnore, contains('.wrangler/'));
+    expect(pubIgnore, contains('.odroe/'));
     expect(exampleReadme, contains('npm ci'));
     expect(exampleReadme, contains('`engines`'));
     expect(exampleReadme, contains('`devEngines`'));
@@ -868,6 +880,11 @@ void main() {
     expect(deployment, contains('npm run cloudflare:migrate:local'));
     expect(deployment, contains('npm run cloudflare:dev'));
     expect(deployment, contains('Removing `--local` changes the remote'));
+    expect(
+      deployment,
+      contains('ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3'),
+    );
+    expect(deployment, contains('application-owned migration'));
   });
 
   test('Constructor dependency types stay on product entrypoints', () async {

@@ -368,18 +368,28 @@ Future<int> _prerenderBuild(
     out.writeln('No static routes to prerender.');
     return 0;
   }
-  final process = await Process.start(
-    executable,
-    arguments,
-    workingDirectory: project.root.path,
-    environment: <String, String>{
-      ...Platform.environment,
-      'ODROE_HOST': '127.0.0.1',
-      'ODROE_PORT': '0',
-      'ODROE_WEB_ROOT': '',
-      'ODROE_FLUTTER_ORIGIN_FILE': '',
-    },
+  final stateDirectory = await Directory.systemTemp.createTemp(
+    'odroe-prerender-state-',
   );
+  late final Process process;
+  try {
+    process = await Process.start(
+      executable,
+      arguments,
+      workingDirectory: project.root.path,
+      environment: <String, String>{
+        ...Platform.environment,
+        'ODROE_HOST': '127.0.0.1',
+        'ODROE_PORT': '0',
+        'ODROE_WEB_ROOT': '',
+        'ODROE_FLUTTER_ORIGIN_FILE': '',
+        'ODROE_SQLITE_PATH': p.join(stateDirectory.path, 'app.sqlite3'),
+      },
+    );
+  } on Object {
+    await stateDirectory.delete(recursive: true);
+    rethrow;
+  }
   final ready = Completer<Uri>();
   final stdoutSubscription = process.stdout
       .transform(systemEncoding.decoder)
@@ -435,15 +445,21 @@ Future<int> _prerenderBuild(
     err.writeln(error);
     return 1;
   } finally {
-    await _stopPrerenderServer(
-      process,
-      stdoutDone,
-      stderrDone,
-      () => Future.wait<void>(<Future<void>>[
-        stdoutSubscription.cancel(),
-        stderrSubscription.cancel(),
-      ], eagerError: false),
-    );
+    try {
+      await _stopPrerenderServer(
+        process,
+        stdoutDone,
+        stderrDone,
+        () => Future.wait<void>(<Future<void>>[
+          stdoutSubscription.cancel(),
+          stderrSubscription.cancel(),
+        ], eagerError: false),
+      );
+    } finally {
+      if (stateDirectory.existsSync()) {
+        await stateDirectory.delete(recursive: true);
+      }
+    }
   }
 }
 

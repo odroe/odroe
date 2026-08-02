@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Persist the full-stack starter's native SQLite data at `.odroe/app.sqlite3`,
+  allow an `ODROE_SQLITE_PATH` override, and preserve existing rows with an
+  idempotent bootstrap. Give prerender an isolated temporary database and
+  remove it after the build.
 - Return a controlled HTTP 400 for strict typed search decoding failures
   without invoking the route or server error reporter. Keep handler, loader,
   and codec encoding failures classified as unexpected server errors.

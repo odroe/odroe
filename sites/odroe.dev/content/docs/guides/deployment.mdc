@@ -67,6 +67,21 @@ directory. Set `ODROE_WEB_ROOT` to an explicit directory, or to an empty string
 to disable the static root. A production image must carry the matching static
 directory or disable it deliberately.
 
+The generated full-stack starter defaults SQLite to `.odroe/app.sqlite3`
+relative to the process working directory. That location is local development
+state, not durable production storage. Native production must use one process
+and an explicit absolute path on a writable persistent volume:
+
+```sh
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 ./build/odroe/server
+```
+
+Back up that volume. Do not share the starter's single SQLite connection across
+multiple service replicas; use a server database such as PostgreSQL for
+horizontal scaling. The starter bootstrap creates only its fixed initial
+schema, so production schema changes require an application-owned migration
+process.
+
 Native static files are contained by their resolved public root on every
 request. Every name uses `no-cache` with ETag and Last-Modified revalidation
 instead of guessed immutable caching. Eligible text, JavaScript, JSON, SVG, and

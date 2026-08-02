@@ -6,8 +6,13 @@ Future<ProcessResult> runTestProcess(
   String executable,
   List<String> arguments, {
   required Duration timeout,
+  Map<String, String>? environment,
 }) async {
-  final process = await Process.start(executable, arguments);
+  final process = await Process.start(
+    executable,
+    arguments,
+    environment: environment,
+  );
   final output = StringBuffer();
   final errors = StringBuffer();
   final stdoutSubscription = process.stdout
