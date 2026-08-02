@@ -5,6 +5,10 @@ part of '../query.dart';
 /// This object stores no database or request state. Every terminal operation
 /// receives its [SqlExecutor] explicitly.
 final class SqlQueries {
+  static const _countColumn = SqlColumn<int>('count', sqlInt);
+
+  static int _decodeCount(SqlRow row) => _countColumn.read(row, 0);
+
   /// Creates a compiler for [dialect].
   const SqlQueries(this.dialect);
 
@@ -48,30 +52,8 @@ final class SqlQueries {
 
     final builder = _BoundSqlBuilder(dialect)..write('SELECT ');
     _writeSelections(builder, projection.columns, aliases);
-    builder
-      ..write(' FROM ')
-      ..write(_quoteTable(from));
-    final fromAlias = aliases[from];
-    if (fromAlias != null) {
-      builder
-        ..write(' AS ')
-        ..write(dialect.quoteIdentifier(fromAlias));
-    }
-    for (final join in joins) {
-      final alias = aliases[join.table]!;
-      builder
-        ..write(' ${join._kind.sql} ')
-        ..write(_quoteTable(join.table))
-        ..write(' AS ')
-        ..write(dialect.quoteIdentifier(alias))
-        ..write(' ON ');
-      _writePredicate(builder, tables, aliases, join.on);
-    }
-    final predicate = where;
-    if (predicate != null) {
-      builder.write(' WHERE ');
-      _writePredicate(builder, tables, aliases, predicate);
-    }
+    _writeSource(builder, from, joins, tables, aliases);
+    _writeWhere(builder, tables, aliases, where);
     if (orderBy.isNotEmpty) {
       builder.write(' ORDER BY ');
       for (final (index, order) in orderBy.indexed) {
@@ -96,6 +78,30 @@ final class SqlQueries {
       projection.decode,
       limit: limit,
       offset: offset,
+    );
+  }
+
+  /// Counts rows produced by [from], optional relational [joins], and [where].
+  ///
+  /// This compiles `COUNT(*)`, so joined duplicates count as separate relation
+  /// rows and an empty relation returns zero. Ordering and pagination are
+  /// deliberately not part of this operation, and Odroe never runs it
+  /// implicitly.
+  SqlRead<int> countRows(
+    SqlTable<Object?> from, {
+    List<SqlJoin> joins = const <SqlJoin>[],
+    SqlPredicate? where,
+  }) {
+    final tables = _validateJoins(from, joins);
+    final aliases = _selectAliases(tables, qualified: joins.isNotEmpty);
+    final builder = _BoundSqlBuilder(dialect)
+      ..write('SELECT COUNT(*) AS ')
+      ..write(dialect.quoteIdentifier(_countColumn.name));
+    _writeSource(builder, from, joins, tables, aliases);
+    _writeWhere(builder, tables, aliases, where);
+    return SqlRead<int>._(
+      builder.build(kind: SqlStatementKind.rowReturning),
+      _decodeCount,
     );
   }
 
@@ -451,6 +457,45 @@ final class SqlQueries {
     }
   }
 
+  void _writeSource(
+    _BoundSqlBuilder builder,
+    SqlTable<Object?> from,
+    List<SqlJoin> joins,
+    List<SqlTable<Object?>> tables,
+    Map<SqlTable<Object?>, String> aliases,
+  ) {
+    builder
+      ..write(' FROM ')
+      ..write(_quoteTable(from));
+    final fromAlias = aliases[from];
+    if (fromAlias != null) {
+      builder
+        ..write(' AS ')
+        ..write(dialect.quoteIdentifier(fromAlias));
+    }
+    for (final join in joins) {
+      final alias = aliases[join.table]!;
+      builder
+        ..write(' ${join._kind.sql} ')
+        ..write(_quoteTable(join.table))
+        ..write(' AS ')
+        ..write(dialect.quoteIdentifier(alias))
+        ..write(' ON ');
+      _writePredicate(builder, tables, aliases, join.on);
+    }
+  }
+
+  void _writeWhere(
+    _BoundSqlBuilder builder,
+    List<SqlTable<Object?>> tables,
+    Map<SqlTable<Object?>, String> aliases,
+    SqlPredicate? where,
+  ) {
+    if (where == null) return;
+    builder.write(' WHERE ');
+    _writePredicate(builder, tables, aliases, where);
+  }
+
   void _writePredicate(
     _BoundSqlBuilder builder,
     List<SqlTable<Object?>> tables,
@@ -583,8 +628,8 @@ final class SqlRead<R> {
   /// Returns the only row produced by this operation.
   ///
   /// Throws [StateError] when the operation returns no rows or multiple rows.
-  /// Typed `SELECT` operations fetch at most two rows for this check. An
-  /// explicit query limit of zero, one, or two is preserved.
+  /// Projection reads built by [SqlQueries.select] fetch at most two rows for
+  /// this check. An explicit query limit of zero, one, or two is preserved.
   Future<R> one(SqlExecutor executor) async {
     final rows = await _cardinalityRows(executor);
     if (rows.isEmpty) {
@@ -602,9 +647,9 @@ final class SqlRead<R> {
 
   /// Returns the only row produced by this operation, or `null` for no rows.
   ///
-  /// Throws [StateError] when multiple rows are returned. Typed `SELECT`
-  /// operations fetch at most two rows for this check. An explicit query limit
-  /// of zero, one, or two is preserved.
+  /// Throws [StateError] when multiple rows are returned. Projection reads
+  /// built by [SqlQueries.select] fetch at most two rows for this check. An
+  /// explicit query limit of zero, one, or two is preserved.
   ///
   /// If [R] is nullable, `null` cannot distinguish no row from one row whose
   /// projection decodes to `null`; use [one] or [all] when that distinction

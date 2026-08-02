@@ -29,6 +29,10 @@ List<SqlPredicate> validPredicates(TypeFixtureTable table) => <SqlPredicate>[
 SqlProjection<String?> validOptionalProjection(TypeFixtureTable table) =>
     SqlProjection.column(table.email.optional);
 
+SqlRead<int> validCountFixture(TypeFixtureTable table) => const SqlQueries(
+  SqlDialect.sqlite,
+).countRows(table, where: table.active.equals(true));
+
 SqlRead<({String email, bool active})> validTypeFixture() {
   final table = TypeFixtureTable();
   final assignments = <SqlAssignment>[

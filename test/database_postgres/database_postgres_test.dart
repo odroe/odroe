@@ -218,7 +218,15 @@ void main() {
           )
         '''),
       );
+      await database.execute(
+        BoundSql.raw('''
+          CREATE TEMP TABLE typed_many_post_links (
+            post_id BIGINT NOT NULL
+          )
+        '''),
+      );
       final posts = _ConflictPosts('typed_many_posts');
+      final links = _PostLinks();
       const queries = SqlQueries(SqlDialect.postgres);
 
       final inserted = await queries
@@ -245,6 +253,30 @@ void main() {
             .all(database),
         <_ConflictPost>[(id: secondId, title: 'Second')],
       );
+      expect(await queries.countRows(posts).one(database), 2);
+      expect(
+        await queries
+            .countRows(posts, where: posts.title.equals('Second'))
+            .one(database),
+        1,
+      );
+      await queries
+          .insertMany(links, <List<SqlAssignment>>[
+            <SqlAssignment>[links.postId.set(insertedByTitle['First']!.id)],
+            <SqlAssignment>[links.postId.set(insertedByTitle['First']!.id)],
+          ])
+          .execute(database);
+      expect(
+        await queries
+            .countRows(
+              posts,
+              joins: <SqlJoin>[
+                SqlJoin.left(links, on: posts.id.equalsColumn(links.postId)),
+              ],
+            )
+            .one(database),
+        3,
+      );
 
       await expectLater(
         queries
@@ -255,7 +287,7 @@ void main() {
             .execute(database),
         _throwsSql(SqlErrorCode.constraint),
       );
-      expect(await _count(database, 'typed_many_posts'), 2);
+      expect(await queries.countRows(posts).one(database), 2);
     });
 
     test('binds input without scanning or rewriting SQL fragments', () async {
@@ -760,6 +792,15 @@ final class _ConflictPosts extends SqlTable<_ConflictPost> {
       SqlProjection<_ConflictPost>(<SqlSelection<Object?>>[id, title], (row) {
         return (id: id.read(row, 0), title: title.read(row, 1));
       });
+}
+
+final class _PostLinks extends SqlTable<int> {
+  _PostLinks() : super('typed_many_post_links');
+
+  late final SqlTableColumn<int> postId = column<int>('post_id', sqlInt);
+
+  @override
+  late final SqlProjection<int> projection = SqlProjection.column(postId);
 }
 
 BoundSql _insertTag(String slug) {

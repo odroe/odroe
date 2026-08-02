@@ -152,7 +152,9 @@ void main() {
 
     test('runs one atomic typed multi-row INSERT', () async {
       final table = 'odroe_mysql_many_$suffix';
+      final linksTable = 'odroe_mysql_many_links_$suffix';
       tables.add(table);
+      tables.add(linksTable);
       await database.execute(
         BoundSql.raw('''
           CREATE TABLE `$table` (
@@ -161,7 +163,15 @@ void main() {
           )
         '''),
       );
+      await database.execute(
+        BoundSql.raw('''
+          CREATE TABLE `$linksTable` (
+            record_id BIGINT NOT NULL
+          )
+        '''),
+      );
       final records = _MysqlBatchRecords(table);
+      final links = _MysqlBatchLinks(linksTable);
       const queries = SqlQueries(SqlDialect.mysql);
 
       final inserted = await queries
@@ -181,6 +191,33 @@ void main() {
             .all(database),
         <_MysqlBatchRecord>[(id: 1, label: 'First'), (id: 2, label: 'Second')],
       );
+      expect(await queries.countRows(records).one(database), 2);
+      expect(
+        await queries
+            .countRows(records, where: records.label.equals('Second'))
+            .one(database),
+        1,
+      );
+      await queries
+          .insertMany(links, <List<SqlAssignment>>[
+            <SqlAssignment>[links.recordId.set(1)],
+            <SqlAssignment>[links.recordId.set(1)],
+          ])
+          .execute(database);
+      expect(
+        await queries
+            .countRows(
+              records,
+              joins: <SqlJoin>[
+                SqlJoin.left(
+                  links,
+                  on: records.id.equalsColumn(links.recordId),
+                ),
+              ],
+            )
+            .one(database),
+        3,
+      );
 
       await expectLater(
         queries
@@ -191,7 +228,7 @@ void main() {
             .execute(database),
         _throwsSql(SqlErrorCode.constraint),
       );
-      expect(await _count(database, table), 2);
+      expect(await queries.countRows(records).one(database), 2);
     });
 
     test('rolls back atomic and interactive transaction failures', () async {
@@ -512,6 +549,15 @@ final class _MysqlBatchRecords extends SqlTable<_MysqlBatchRecord> {
         id,
         label,
       ], (row) => (id: id.read(row, 0), label: label.read(row, 1)));
+}
+
+final class _MysqlBatchLinks extends SqlTable<int> {
+  _MysqlBatchLinks(super.name);
+
+  late final SqlTableColumn<int> recordId = column<int>('record_id', sqlInt);
+
+  @override
+  late final SqlProjection<int> projection = SqlProjection.column(recordId);
 }
 
 final class _MysqlTestConfig {

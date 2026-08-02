@@ -596,6 +596,8 @@ final selected = await sql
     )
     .all(database);
 
+final totalPosts = await sql.countRows(posts).one(database);
+
 final authorName = authors.displayName.optional.as('author_name');
 final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
   <SqlSelection<Object?>>[posts.title, authorName],
@@ -654,6 +656,12 @@ await sql.updateAll(
 与 `allRows` 两次确认。联表查询会自动限定列名；`LEFT JOIN` 右侧的非空
 schema column 通过结果专用的 `.optional` 解码，不能用于写入。
 mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口。
+
+`countRows` 通过相同的 table、join 与 predicate 路径生成 typed `COUNT(*)`，并直接
+返回 `SqlRead<int>`。它计算 `FROM` / `JOIN` / `WHERE` 产生的关系行，因此 join
+重复行会分别计数，空关系返回 `0`；API 不接受排序和分页，也不伪装成通用
+aggregate DSL。Odroe 不会替分页隐式执行它；大表热路径应按数据库查询计划与索引
+决定是否计数。
 
 `isIn` / `isNotIn` 在构造 predicate 时立即消费 iterable，并通过 column codec
 绑定每个非空值；Dart `null` 会先归一化，不进入 codec。后续增删或重排输入集合不会

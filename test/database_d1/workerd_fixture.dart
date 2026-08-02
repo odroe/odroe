@@ -57,8 +57,16 @@ Future<void> _run(_Environment environment) async {
         ) STRICT
       '''),
     );
+    await database.execute(
+      BoundSql.raw('''
+        CREATE TABLE conflict_record_links (
+          record_id INTEGER NOT NULL
+        ) STRICT
+      '''),
+    );
 
     final conflictRecords = _ConflictRecords();
+    final conflictRecordLinks = _ConflictRecordLinks();
     const queries = SqlQueries(SqlDialect.sqlite);
     final conflictInsert = await queries
         .insertOnConflictDoNothing(
@@ -123,6 +131,31 @@ Future<void> _run(_Environment environment) async {
     };
     _expect(insertedById[2]?.value == 'Second', 'multi-row value for ID 2');
     _expect(insertedById[3]?.value == 'Third', 'multi-row value for ID 3');
+    final recordCount = await queries.countRows(conflictRecords).one(database);
+    _expect(recordCount == 3, 'typed row count');
+    final filteredRecordCount = await queries
+        .countRows(conflictRecords, where: conflictRecords.id.isIn(<int>[2, 3]))
+        .one(database);
+    _expect(filteredRecordCount == 2, 'filtered typed row count');
+    await queries
+        .insertMany(conflictRecordLinks, <List<SqlAssignment>>[
+          <SqlAssignment>[conflictRecordLinks.recordId.set(1)],
+          <SqlAssignment>[conflictRecordLinks.recordId.set(1)],
+        ])
+        .execute(database);
+    final joinedRecordCount = await queries
+        .countRows(
+          conflictRecords,
+          joins: <SqlJoin>[
+            SqlJoin.left(
+              conflictRecordLinks,
+              on: conflictRecords.id.equalsColumn(conflictRecordLinks.recordId),
+            ),
+          ],
+          where: conflictRecords.id.isIn(<int>[1, 2]),
+        )
+        .one(database);
+    _expect(joinedRecordCount == 3, 'joined typed row count');
 
     final selectedMembership = await queries
         .selectTable(
@@ -360,6 +393,15 @@ final class _ConflictRecords extends SqlTable<_ConflictRecord> {
         id,
         value,
       ], (row) => (id: id.read(row, 0), value: value.read(row, 1)));
+}
+
+final class _ConflictRecordLinks extends SqlTable<int> {
+  _ConflictRecordLinks() : super('conflict_record_links');
+
+  late final SqlTableColumn<int> recordId = column<int>('record_id', sqlInt);
+
+  @override
+  late final SqlProjection<int> projection = SqlProjection.column(recordId);
 }
 
 BoundSql _insertTag(String slug) {

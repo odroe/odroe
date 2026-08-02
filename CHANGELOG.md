@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add provider-neutral `SqlQueries.countRows` for typed `COUNT(*)` over the
+  existing table, join, and predicate path across SQLite, PostgreSQL,
+  MySQL/MariaDB, and D1. Joined duplicates count as relation rows; ordering,
+  pagination, grouping, and a general aggregate DSL remain outside the API.
 - Add type-safe `SqlTableColumn.isIn` and `isNotIn` predicates across SQLite,
   PostgreSQL, MySQL/MariaDB, and D1. Non-null candidates are encoded eagerly;
   empty `isIn` and explicit Dart `null` candidates compile to portable predicates,
