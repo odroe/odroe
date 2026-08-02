@@ -1,0 +1,74 @@
+---
+title: API entrypoints
+description: Choose the smallest Odroe public library for each product boundary.
+order: 41
+language: en
+---
+# API entrypoints
+
+Odroe is one Dart package with product-first public libraries. Import the
+smallest entrypoint that owns the behavior; platform entrypoints re-export
+their neutral contract where useful.
+
+## Application and Flutter
+
+| Entrypoint | Owns |
+| --- | --- |
+| `odroe.dart` | `AppContext`, `Module`, typed bindings, registry lifecycle |
+| `odroe_flutter.dart` | Flutter `App` composition and context bindings |
+| `router.dart` | Typed routes, codecs, matching, loads, URL generation |
+| `router_flutter.dart` | Flutter Router module, pages, shells, navigation |
+
+## Query and RPC
+
+| Entrypoint | Owns |
+| --- | --- |
+| `query.dart` | Cache, keys, query/mutation/infinite lifecycles, hydration, persistence contracts |
+| `query_flutter.dart` | `QueryBuilder`, infinite/mutation builders, Flutter module/provider |
+| `rpc.dart` | Generated refs, client, transport, serializer, cancellation, `RpcModule` |
+
+`rpc.dart` exports the `http` package's `Client` interface needed by
+`HttpTransport`; implement `BaseClient` in application tests or adapters when a
+custom client is required.
+
+## Server hosts
+
+| Entrypoint | Owns |
+| --- | --- |
+| `server.dart` | `Server`, routes, functions, middleware, requests/responses, controlled errors |
+| `server_io.dart` | `dart:io` HTTP adapter and prerendering |
+| `server_fetch.dart` | Fetch adapter, invocation bindings, export helper |
+
+Server route files normally import only `server.dart`. Client code imports
+`rpc.dart`; Fetch and IO imports stay at their host entrypoints.
+
+## Data
+
+| Entrypoint | Owns |
+| --- | --- |
+| `database.dart` | Typed SQL contracts, codecs, rows, statements, modules, relational queries |
+| `database_sqlite.dart` | Native `SqliteDatabase` |
+| `database_postgres.dart` | `PostgresDatabase` plus public connection/pool constructor types |
+| `database_mysql.dart` | Native `MysqlDatabase` for MySQL/MariaDB |
+| `database_d1.dart` | Cloudflare `D1SqlDatabase` |
+
+Do not import native drivers into shared route or Worker code. Put the driver in
+the runtime-specific server entry and expose only `DatabaseModule` to handlers.
+
+## Documents and content
+
+| Entrypoint | Owns |
+| --- | --- |
+| `document.dart` | Semantic HTML nodes, route documents, renderer, server integration |
+| `document_flutter.dart` | Flutter handoff and Document module |
+| `mdc.dart` | MDC AST, parser, components, semantic HTML, outline |
+| `mdc_flutter.dart` | Flutter MDC renderer, controller, styles, view |
+| `press.dart` | Immutable typed content pages and collections |
+| `press_io.dart` | File-system content discovery for server/build tools |
+
+`press_io.dart`, `server_io.dart`, SQLite, PostgreSQL, and MySQL are not Web
+libraries. Conditional exports should make the platform boundary explicit.
+
+This page documents the current public entrypoints, not every exported member. Use
+the API docs generated from the package source for signatures, then return to
+the concept and guide pages for ownership rules.

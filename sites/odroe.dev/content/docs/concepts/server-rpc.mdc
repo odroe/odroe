@@ -1,0 +1,82 @@
+---
+title: Server and RPC
+description: Understand routes, functions, generated references, protocol errors, and host adapters.
+order: 23
+language: en
+---
+# Server and RPC
+
+Odroe separates the application server from the host. `Server` matches routes,
+runs request modules and middleware, invokes typed functions, and returns an
+adapter-neutral `ServerResponse`. `server_io.dart` and `server_fetch.dart`
+translate that contract to native HTTP and Fetch respectively.
+
+## Routes and functions have different jobs
+
+A route can load document data or handle normal HTTP methods:
+
+```dart
+final route = definition.route.server(
+  handlers: <HttpMethod, ServerRouteHandler<NoParams, NoSearch>>{
+    HttpMethod.get: (_) => ServerResponse.json(<String, bool>{'ok': true}),
+  },
+);
+```
+
+A `ServerFunction<Input, Output>` adds a generated typed client call:
+
+```dart
+final readTitle = ServerFunction<int, String>(
+  id: 'posts.read-title',
+  method: HttpMethod.get,
+  handler: (context) => readPostTitle(context.data),
+);
+```
+
+The compiler scans `server.dart`, rejects duplicate explicit IDs, and emits a
+server manifest plus client-safe references. `package:odroe/server.dart` is the
+complete server product entrypoint; route server files do not need to import
+`rpc.dart` as well.
+
+## The wire identifier is a public contract
+
+Use an explicit ID for functions shipped to clients and keep it stable. A
+source path fallback exists for gradual migration, but renaming its file or
+variable changes that fallback.
+
+The default RPC namespace accepts exactly one encoded function-ID path segment.
+The server rejects the namespace root, empty IDs, extra literal segments, and
+invalid custom namespaces before a handler can run. Encoded data such as `%2F`
+remains part of the ID instead of becoming a route separator. Client and server
+canonicalize a custom `functionPath` with the same rules.
+
+## Errors remain typed at the boundary
+
+- `NotFound` becomes a controlled 404.
+- `Redirect` preserves its explicit redirect status and location.
+- `HttpError` carries an application-owned HTTP status and safe message.
+- unexpected failures reach `Server.onError`; `exposeErrors` controls only what
+  is disclosed to the client.
+- protocol, payload, and response-frame limits reject malformed or oversized
+  work before it can become unbounded application processing.
+
+Every typed response frame carries protocol `version: 1`. The client rejects
+unknown frame shapes, mismatched redirect status, and responses beyond its own
+configured byte limit.
+
+## Cancellation is cooperative
+
+`ServerRequest.cancelled` completes when the host exposes a disconnect. A
+`ServerFunction` receives it through its request context; generated clients can
+abort an HTTP request with their `cancelled` future. Cancellation cannot undo a
+database write or another side effect that already happened, so mutation
+handlers still need transaction and idempotency decisions at the application
+layer.
+
+The Fetch runtime needs Cloudflare's `enable_request_signal` compatibility flag
+for real incoming disconnects. A synthetic `AbortController` test proves the
+adapter path, not that host setting.
+
+Use [Server operations](/docs/guides/server-operations) for authentication,
+payload budgets, reporting, shutdown, and runtime details. See
+[API entrypoints](/docs/reference/api) for import boundaries.

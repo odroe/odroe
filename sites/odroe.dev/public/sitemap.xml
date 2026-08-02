@@ -2,12 +2,19 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://odroe.dev/</loc></url>
   <url><loc>https://odroe.dev/docs</loc></url>
-  <url><loc>https://odroe.dev/docs/core/app</loc></url>
-  <url><loc>https://odroe.dev/docs/core/query</loc></url>
-  <url><loc>https://odroe.dev/docs/core/routing</loc></url>
-  <url><loc>https://odroe.dev/docs/data/database</loc></url>
-  <url><loc>https://odroe.dev/docs/deploy</loc></url>
   <url><loc>https://odroe.dev/docs/getting-started</loc></url>
-  <url><loc>https://odroe.dev/docs/server</loc></url>
-  <url><loc>https://odroe.dev/docs/web/document</loc></url>
+  <url><loc>https://odroe.dev/docs/tutorials/full-stack</loc></url>
+  <url><loc>https://odroe.dev/docs/concepts/application</loc></url>
+  <url><loc>https://odroe.dev/docs/concepts/routing</loc></url>
+  <url><loc>https://odroe.dev/docs/concepts/query</loc></url>
+  <url><loc>https://odroe.dev/docs/concepts/server-rpc</loc></url>
+  <url><loc>https://odroe.dev/docs/concepts/database</loc></url>
+  <url><loc>https://odroe.dev/docs/concepts/content</loc></url>
+  <url><loc>https://odroe.dev/docs/guides/server-operations</loc></url>
+  <url><loc>https://odroe.dev/docs/guides/query-workflows</loc></url>
+  <url><loc>https://odroe.dev/docs/guides/database-providers</loc></url>
+  <url><loc>https://odroe.dev/docs/guides/deployment</loc></url>
+  <url><loc>https://odroe.dev/docs/reference/cli-and-files</loc></url>
+  <url><loc>https://odroe.dev/docs/reference/api</loc></url>
+  <url><loc>https://odroe.dev/docs/reference/support</loc></url>
 </urlset>

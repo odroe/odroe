@@ -1,17 +1,20 @@
 ---
-title: Getting started
-description: Create, initialize, run, and build an Odroe product.
+title: First product
+description: Create and run one Odroe product from Flutter to SQLite and local Cloudflare D1.
 order: 2
 language: en
 ---
-# Getting started
+# Build your first product
 
-Odroe is currently developed from source. Keep the source checkout and the
-Flutter application beside each other while the public package is prepared.
+This path starts with an empty Flutter application and ends with one working
+vertical slice: Flutter → Query → typed RPC → Server → typed SQL → SQLite.
+The same project also contains a D1 migration and a locked local Cloudflare
+toolchain. No global Wrangler install is required.
 
-## Create the product
+## Create the application
 
-From their shared parent directory:
+Odroe is currently consumed from source. Keep the checkout and application
+beside each other while the next public package release is prepared:
 
 ```sh
 git clone https://github.com/odroe/odroe.git
@@ -19,11 +22,7 @@ flutter create --empty --platforms=android,ios,web my_app
 cd my_app
 ```
 
-Skip the clone when the Odroe checkout already exists. `--empty` is deliberate:
-the initializer refuses to replace Flutter's counter example or any custom Dart
-source.
-
-Add the sibling checkout as a direct application dependency:
+Add the checkout as a direct dependency:
 
 ```yaml
 dependencies:
@@ -31,136 +30,123 @@ dependencies:
     path: ../odroe
 ```
 
-Resolve it, then initialize the product:
+Resolve the dependency, then initialize the complete product in the current
+application:
 
 ```sh
 flutter pub get
-dart run odroe init
+dart run odroe init --full-stack
 ```
 
-`init` verifies a Flutter application, its direct Odroe dependency, and the
-resolved checkout before writing anything. It creates only this starter:
+`init --full-stack` verifies that this is an empty Flutter application and that
+it resolves the same Odroe checkout that is running the command. It preflights
+every destination before writing, rejects custom or linked targets, and rolls
+the whole operation back on failure. There is deliberately no `--force`.
+
+## Know what was created
 
 ```text
-lib/
-├── main.dart
-├── routes/
-│   ├── route.dart
-│   └── page.dart
-├── routes.dart          # generated client tree
-└── routes.server.dart   # generated server tree
+my_app/
+├── lib/
+│   ├── main.dart              # Flutter composition root
+│   ├── posts_database.dart    # shared schema and typed query builder
+│   ├── rpc_origin.dart        # browser/native origin policy
+│   ├── server.dart            # conditional server export
+│   ├── server_native.dart     # process-owned SQLite
+│   ├── server_cloudflare.dart # invocation-scoped D1
+│   ├── routes/
+│   │   ├── route.dart         # shared route and semantic document
+│   │   ├── page.dart          # Flutter Query + typed RPC
+│   │   └── server.dart        # typed RPC + typed SQL
+│   ├── routes.dart            # generated client references
+│   └── routes.server.dart     # generated server manifest
+├── migrations/0001_posts.sql
+├── package.json
+├── package-lock.json
+└── wrangler.jsonc
 ```
 
-Running `init` again makes no changes. A custom `main.dart`, route, generated
-target without Odroe ownership, or Dart test causes the complete operation to
-fail without partial writes. There is no `--force`; `init --project <dir>` is
-available for automation.
+The root page asks for post `42`. Native execution seeds `SQLite post 42`;
+local D1 seeds `D1 post 42`. The route, function input, function result, SQL
+column, and decoded value remain typed throughout the path.
 
-## Customize the shared route
+Run the initializer again at any time. An unchanged starter produces no file
+changes. The smaller `dart run odroe init` remains available when a product
+needs only Document and Router; an untouched small starter can later upgrade
+atomically with `--full-stack`.
 
-`lib/routes/route.dart` owns the platform-neutral route and its semantic
-Document. The starter is immediately useful to a browser, crawler, or native
-server without importing Flutter.
+## Run on Flutter and the native server
 
-```dart
-import 'package:odroe/document.dart';
-import 'package:odroe/router.dart';
+Start both the Odroe development server and Flutter Web:
 
-final route =
-    AppRoute<NoParams, NoSearch, NoData>(
-      metadata: const RouteMetadata(
-        title: 'Odroe App',
-        description: 'A product built with Odroe.',
-      ),
-    ).document(
-      (_) => const RouteDocument(
-        language: 'en',
-        body: HtmlElement(
-          'main',
-          children: <HtmlNode>[
-            HtmlElement(
-              'h1',
-              children: <HtmlNode>[HtmlText('Hello from Odroe')],
-            ),
-          ],
-        ),
-      ),
-    );
+```sh
+dart run odroe dev -- -d chrome
 ```
 
-Each directory becomes its URL. For example,
-`lib/routes/about/route.dart` maps to `/about`.
+Open the reported Flutter URL. The page renders `SQLite post 42` after Query
+calls the generated `posts.read-title` reference. Stop the command with
+Ctrl-C; Odroe drains the listener before closing the process-owned database.
 
-## Customize the Flutter page
-
-`lib/routes/page.dart` projects the same route into Flutter:
-
-```dart
-import 'package:flutter/material.dart';
-import 'package:odroe/router_flutter.dart';
-
-import 'route.dart' as definition;
-
-final route = definition.route.page(
-  build: (_) => const Scaffold(
-    body: Center(child: Text('Hello from Odroe')),
-  ),
-);
-```
-
-The initialized `lib/main.dart` already installs `DocumentModule` before
-`RouterModule` and returns `MaterialApp.router`. Add Query, RPC, or other
-product modules only when the application uses them.
-
-## Develop
-
-Run the semantic server alone:
+To inspect only the semantic server response, run:
 
 ```sh
 dart run odroe dev --server-only
 ```
 
-Development serves files directly from `public/` and never reuses stale
-`build/web` HTML. For Flutter, pass Flutter arguments after `--`:
+Visit `http://127.0.0.1:3000/`. Development reads `public/` directly and never
+reuses stale HTML from `build/web`.
+
+Browser RPC is same-origin. A native device cannot use the browser's relative
+origin, so pass the server origin explicitly:
 
 ```sh
 flutter devices
-dart run odroe dev -- -d chrome
-dart run odroe dev -- -d <ios-device-id>
+dart run odroe dev -- -d <device-id> \
+  --dart-define=ODROE_API_ORIGIN=https://api.example.com
 ```
 
-Replace `<ios-device-id>` with the identifier reported by Flutter. `dev` and
-`build` regenerate routes automatically; `dart run odroe generate` remains a
-fast explicit compiler check.
+The generated `rpc_origin.dart` rejects a missing or malformed native origin at
+startup rather than failing on the first request.
 
-## Build
+## Run the edge path locally
 
-Choose the artifact intentionally:
+Node 22+ and npm 10.9+ are used only by the project-owned Cloudflare toolchain.
+They do not enter the Dart dependency graph, Flutter artifact, or Worker
+bundle. Run these commands from `my_app`:
 
 ```sh
-# Flutter Web plus prerendered assets, without a deployable server
+npm ci
+dart run odroe build --server-target cloudflare web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+The migration and Wrangler development scripts include `--local`. The final
+command starts local Workerd; `/` serves the semantic handoff and the same
+typed RPC reads `D1 post 42` through the invocation's `DB` binding. Removing
+`--local` or deploying changes remote state and is a separate operation.
+
+## Build only what you need
+
+```sh
+# Flutter Web plus prerendered HTML; no deployable server
 dart run odroe build --no-server web
 
-# The same artifact path, compiled with Flutter WebAssembly
+# Flutter WebAssembly plus the same Document handoff
 dart run odroe build --no-server -- web --wasm
-
-# Flutter Web plus the default native server artifact
-dart run odroe build web
-
-# Client-only Android APK
-dart run odroe build --no-server apk
 
 # Native server only
 dart run odroe build --server-only
+
+# Cloudflare Worker only
+dart run odroe build --server-only --server-target cloudflare
 ```
 
-`--no-server` skips only the deployable server artifact. Odroe still runs the
-generated Dart server source to prerender known locations into `build/web`.
-Because this starter contains `page.dart`, an assets-only build must name a
-Flutter target such as `web`; a Document-only product can use bare
-`dart run odroe build --no-server`.
+`dev` and `build` regenerate route targets automatically. Use
+`dart run odroe generate` for a fast explicit compiler check.
 
-Known locations come from static file routes and `lib/prerender.dart`; link
-crawling is disabled by default. Add `--prerender-crawl` only when page links
-should discover additional same-origin HTML. See [Deployment](/docs/deploy)
-for budgets, static-root behavior, and platform targets.
+Next, follow the [full-stack tutorial](/docs/tutorials/full-stack) to change the
+model, query, function, and UI as one coherent feature. Use the
+[CLI and generated files reference](/docs/reference/cli-and-files) when choosing
+artifacts, and the [deployment guide](/docs/guides/deployment) before publishing
+anything.

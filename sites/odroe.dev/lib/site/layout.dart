@@ -97,8 +97,8 @@ HtmlElement _header() => element(
       },
       children: <HtmlNode>[
         _navLink('Docs', '/docs'),
-        _navLink('Database', '/docs/data/database'),
-        _navLink('Deploy', '/docs/deploy'),
+        _navLink('Database', '/docs/concepts/database'),
+        _navLink('Deploy', '/docs/guides/deployment'),
         _navLink('GitHub', _github, external: true),
       ],
     ),

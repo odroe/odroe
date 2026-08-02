@@ -1,0 +1,120 @@
+---
+title: CLI and generated files
+description: Commands, flags, output ownership, artifact paths, and pass-through rules.
+order: 40
+language: en
+---
+# CLI and generated files
+
+Run the CLI from an application that directly depends on the active Odroe
+package:
+
+```sh
+dart run odroe <command> [odroe options] -- [flutter options]
+```
+
+Arguments after `--` belong to Flutter. A build target without options may be
+passed directly, for example `dart run odroe build apk`.
+
+## Commands
+
+| Command | Purpose | Important options |
+| --- | --- | --- |
+| `init` | Initialize an empty Flutter application | `--project`, `--full-stack` |
+| `generate` | Generate client and server route targets | `--routes`, `--output`, `--server-output`, `--watch` |
+| `dev` | Watch sources, run the server, and optionally run Flutter | `--host`, `--port`, `--server-only` |
+| `build` | Build Flutter, prerendered HTML, and/or a server artifact | target and options below |
+
+Every command accepts `--project`, defaulting to the current directory.
+
+## Initializers
+
+`dart run odroe init` writes the minimal Document + Router starter.
+
+`dart run odroe init --full-stack` writes the Flutter + Query + typed RPC +
+typed SQL + SQLite + D1/Cloudflare vertical product. Both modes preflight all
+owned paths, reject application source, and write transactionally. There is no
+destructive force mode.
+
+The small starter owns `lib/main.dart`, `lib/routes/route.dart`, and
+`lib/routes/page.dart`. Full-stack mode owns these 13 application files:
+
+```text
+lib/main.dart
+lib/posts_database.dart
+lib/rpc_origin.dart
+lib/server.dart
+lib/server_native.dart
+lib/server_cloudflare.dart
+lib/routes/route.dart
+lib/routes/page.dart
+lib/routes/server.dart
+migrations/0001_posts.sql
+package.json
+package-lock.json
+wrangler.jsonc
+```
+
+It also appends `node_modules/` and `.wrangler/` to `.gitignore`, then writes
+the generated route and bootstrap targets. Re-running an unchanged starter is
+idempotent. An untouched small starter can upgrade to full-stack mode.
+
+## Route generation
+
+| Option | Default |
+| --- | --- |
+| `--routes` | `lib/routes` |
+| `--output` | `lib/routes.dart` |
+| `--server-output` | `lib/routes.server.dart` |
+| `--watch` | off |
+
+`routes.dart`, `routes.server.dart`, and `.dart_tool/odroe/server.dart` begin
+with Odroe ownership markers. Do not edit them. Each route directory owns a
+neutral `route.dart`; optional `page.dart`, `shell.dart`, and `server.dart`
+attach platform behavior.
+
+Directories support static segments, `[name]` parameters, `[...name]` rest
+parameters, and pathless `(group)` segments. `route.dart` exposes one top-level
+`AppRoute<Params, Search, Data>` named `route`. Named-record parameter and
+search schemas generate codecs for `String`, `int`, `double`, `bool`, and
+`List<String>`; custom field types require an explicit codec.
+
+Public top-level `ServerFunction<Input, Output>` declarations in `server.dart`
+become generated client references. Give released functions an explicit,
+stable `id`.
+
+Cloudflare builds also own `.dart_tool/odroe/server_fetch.dart`. Applications
+may provide `lib/server.dart` with `createServer()` and `lib/prerender.dart`
+with `prerenderLocations()`; those two files remain application source.
+
+## Development
+
+`dev` defaults to `127.0.0.1:3000`. `--server-only` does not start Flutter.
+Otherwise pass the device and Flutter flags after `--`:
+
+```sh
+dart run odroe dev -- -d chrome
+```
+
+## Build options
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--server-only` | off | Build no Flutter target or static output |
+| `--[no-]server` | on | Emit or skip a deployable server artifact |
+| `--server-target` | `native` | `native` or `cloudflare` |
+| `--server-artifact` | target-specific | Path inside the project build directory |
+| `--[no-]prerender` | on | Generate static HTML where applicable |
+| `--prerender-output` | `build/web` | Static output inside the project |
+| `--prerender-concurrency` | `4` | Parallel prerender requests |
+| `--prerender-crawl` | off | Discover same-origin, query-free HTML links |
+| `--prerender-max-routes` | `1000` | Explicit plus discovered route ceiling |
+| `--prerender-max-response-bytes` | `1048576` | HTML bytes allowed per route |
+
+Native output defaults to `build/odroe/server`. Cloudflare writes
+`build/odroe/cloudflare/server.js` and `worker.mjs`. Static Document and Flutter
+output lives under `build/web` unless changed explicitly.
+
+The application owns `pubspec.yaml`, platform hosts, `public/`, migrations,
+secrets, `wrangler.jsonc`, container files, and provider deployment policy.
+Odroe never deploys as a side effect of `build`.

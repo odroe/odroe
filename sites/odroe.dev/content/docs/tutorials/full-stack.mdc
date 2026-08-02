@@ -1,0 +1,169 @@
+---
+title: Full-stack vertical slice
+description: Trace and evolve the generated Flutter, RPC, SQL, SQLite, and D1 product.
+order: 10
+language: en
+---
+# Full-stack vertical slice
+
+Start from the project created in [First product](/docs/getting-started). This
+tutorial follows one value—post title `42`—through every runtime boundary. The
+goal is to make each owner visible before adding more product behavior.
+
+```text
+Flutter → Query → typed RPC → Server → typed SQL → SQLite or D1
+```
+
+## Read the product from the middle
+
+The most useful starting point is `lib/routes/server.dart`. It is the boundary
+between the generated wire contract and application data:
+
+```dart
+final readTitle = ServerFunction<int, String>(
+  id: 'posts.read-title',
+  method: HttpMethod.get,
+  handler: (context) async {
+    final titles = await postQueries
+        .selectTable(
+          posts,
+          where: posts.id.equals(context.data),
+          limit: 1,
+        )
+        .all(context.request.read(databaseKey));
+    if (titles.isEmpty) throw const NotFound('Post not found.');
+    return titles.single;
+  },
+);
+```
+
+The input is `int`, the result is `String`, and the stable wire ID is
+`posts.read-title`. `odroe generate` discovers this declaration and emits the
+matching client reference in `lib/routes.dart`. Do not hand-edit generated
+targets or change a released function ID casually.
+
+## Keep the schema shared
+
+`lib/posts_database.dart` is imported by native and edge server code. It owns
+the table, codecs, projection, and SQLite-compatible query dialect:
+
+```dart
+final class Posts extends SqlTable<String> {
+  Posts() : super('posts');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<String> title = column<String>('title', sqlText);
+
+  @override
+  late final SqlProjection<String> projection =
+      SqlProjection<String>.column(title);
+}
+
+final posts = Posts();
+const postQueries = SqlQueries(SqlDialect.sqlite);
+```
+
+`posts.title.set(42)` does not analyze. A query generated with another explicit
+dialect is rejected before it reaches SQLite or D1. The layer is typed SQL, not
+an identity-map ORM: schema, resource ownership, and migrations remain visible.
+
+## Choose database ownership at the runtime edge
+
+The native entry creates one in-memory SQLite database before the listener can
+start. Requests borrow it; server shutdown closes it:
+
+```dart
+final database = SqliteDatabase.openInMemory();
+await initializePostsDatabase(database);
+return generated.createServer(
+  modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
+  onClose: database.close,
+);
+```
+
+The Cloudflare entry cannot own a process database. It wraps the invocation's
+`DB` binding instead:
+
+```dart
+return generated.createServer(
+  invocationModules: (invocation) {
+    final bindings = invocation.requireBindings<FetchBindings>();
+    final environment = _Environment(bindings.raw);
+    return <DatabaseModule>[
+      DatabaseModule.owned(D1SqlDatabase.fromBinding(environment.database)),
+    ];
+  },
+);
+```
+
+`lib/server.dart` conditionally exports one of these implementations. SQLite
+FFI therefore cannot become reachable from the Worker artifact.
+
+The native demo schema and seed live in `initializePostsDatabase`; the D1
+schema and seed live in `migrations/0001_posts.sql`. When changing this sample,
+update both deliberately. Odroe does not hide that migration boundary or run
+DDL during Fetch startup.
+
+## Follow the generated client reference
+
+`lib/routes/page.dart` never builds a URL or decodes JSON. It calls the typed
+reference and gives the HTTP request Query's cancellation signal:
+
+```dart
+QueryOptions<String>(
+  key: QueryKey('post-title', <Object?>[postId]),
+  query: (query) => generated.routes.readTitle(
+    routeContext.read(rpcClientKey),
+    postId,
+    cancelled: query.cancelToken.whenCancelled.then<void>((_) {}),
+  ),
+)
+```
+
+The page renders loading, error with retry, and data states. Retry invalidates
+only the exact `post-title/42` key. Leaving the page can cancel the active HTTP
+request; cancellation does not become application error state.
+
+## Verify each boundary
+
+Regenerate and analyze before running either host:
+
+```sh
+dart run odroe generate
+dart analyze --fatal-infos
+```
+
+Verify the native path:
+
+```sh
+dart run odroe dev -- -d chrome
+```
+
+The Flutter page should display `SQLite post 42`. Then stop it and verify D1
+through local Workerd:
+
+```sh
+npm ci
+dart run odroe build --server-target cloudflare web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+The root page should display `D1 post 42`. These two checks prove different
+database adapters behind the same route, generated RPC, and typed query. They
+do not prove a remote deployment.
+
+## Evolve one feature at a time
+
+For a new field or operation, keep the change vertical:
+
+1. Add the column codec and projection in `posts_database.dart`.
+2. Add a reviewable D1 migration and the equivalent native demo setup.
+3. Add or change one `ServerFunction` with an explicit stable ID.
+4. Regenerate routes and fix analyzer errors at the boundary.
+5. Update one Query key and all UI states that consume the result.
+6. Run both native SQLite and local D1 paths before documenting support.
+
+Continue with the [server and RPC concept](/docs/concepts/server-rpc),
+[database concept](/docs/concepts/database), and
+[query workflows](/docs/guides/query-workflows).

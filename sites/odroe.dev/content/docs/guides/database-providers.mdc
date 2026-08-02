@@ -1,22 +1,25 @@
 ---
-title: Database
-description: The honest runtime matrix and typed SQL boundary for Odroe data.
-order: 30
+title: Database providers
+description: Connect typed SQL to SQLite, PostgreSQL, MySQL, MariaDB, and D1.
+order: 32
 language: en
 ---
-# Database
+# Database providers
 
 Odroe starts with a small typed SQL transport instead of pretending one driver
 behaves identically on every runtime.
 
 ```dart
-abstract interface class SqlDatabase {
+abstract interface class SqlExecutor {
   Future<List<T>> query<T>(
     BoundSql statement,
     T Function(SqlRow row) decode,
   );
 
   Future<SqlWriteResult> execute(BoundSql statement);
+}
+
+abstract interface class SqlDatabase implements SqlExecutor {
   Future<List<SqlWriteResult>> atomicWrite(
     List<BoundSql> statements,
   );
@@ -270,12 +273,15 @@ not persistence. The Cloudflare entry creates an invocation-owned D1 wrapper;
 `migrations/0001_posts.sql` owns the schema and seed instead of running DDL in
 the Fetch bootstrap.
 
-With Wrangler installed, the example's local D1 path is:
+The example owns a locked local Wrangler toolchain. With Node 22+ and npm 10.9+,
+its D1 path is:
 
 ```sh
+flutter pub get
+npm ci
 dart run odroe build --server-target cloudflare web
-wrangler d1 migrations apply DB --local
-wrangler dev --local
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
 ```
 
 Native returns `SQLite post 42`; local D1 returns `D1 post 42`. A missing ID

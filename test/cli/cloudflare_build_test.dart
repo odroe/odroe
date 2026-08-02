@@ -225,7 +225,6 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       final logs = '${build.stdout}\n${build.stderr}';
 
       expect(build.exitCode, 0, reason: logs);
-      expect(build.stdout, contains('Prerendered 11 routes.'));
       expect(build.stdout, isNot(contains('prerender-server')));
       expect(build.stdout, isNot(contains('.odroe-staging-')));
       expect(build.stdout, isNot(contains('Built Cloudflare Worker')));
@@ -247,19 +246,26 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
               )
               .toList()
             ..sort();
-      expect(relativeHtml, <String>[
-        '404.html',
-        'docs/core/app/index.html',
-        'docs/core/query/index.html',
-        'docs/core/routing/index.html',
-        'docs/data/database/index.html',
-        'docs/deploy/index.html',
-        'docs/getting-started/index.html',
-        'docs/index.html',
-        'docs/server/index.html',
-        'docs/web/document/index.html',
-        'index.html',
-      ]);
+      final sourceSitemap = await File(
+        p.join(project.path, 'public', 'sitemap.xml'),
+      ).readAsString();
+      final expectedHtml =
+          RegExp(r'<loc>([^<]+)</loc>')
+              .allMatches(sourceSitemap)
+              .map((match) => Uri.parse(match.group(1)!).path)
+              .map(
+                (path) => path == '/'
+                    ? 'index.html'
+                    : '${path.substring(1)}/index.html',
+              )
+              .toList()
+            ..add('404.html')
+            ..sort();
+      expect(relativeHtml, expectedHtml);
+      expect(
+        build.stdout,
+        contains('Prerendered ${expectedHtml.length} routes.'),
+      );
       for (final asset in <String>['_redirects', 'robots.txt', 'sitemap.xml']) {
         final source = File(p.join(project.path, 'public', asset));
         final built = File(p.join(web.path, asset));

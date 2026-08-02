@@ -26,3 +26,11 @@
 /zh/docs/oref/core https://oref.medz.dev/zh/guide/core-concepts 301
 /zh/docs/oref/advanced https://oref.medz.dev/zh/guide/effects 301
 /zh/docs/oref/utils https://pub.dev/documentation/oref/latest/oref/ 301
+
+/docs/core/app /docs/concepts/application 301
+/docs/core/routing /docs/concepts/routing 301
+/docs/core/query /docs/concepts/query 301
+/docs/web/document /docs/concepts/content 301
+/docs/server /docs/concepts/server-rpc 301
+/docs/data/database /docs/concepts/database 301
+/docs/deploy /docs/guides/deployment 301

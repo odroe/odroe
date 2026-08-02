@@ -141,14 +141,13 @@ HtmlElement _outline(PressPage page) => element(
 
 String _section(PressPage page) {
   if (page.slug.isEmpty || page.slug.first == 'getting-started') {
-    return 'Introduction';
+    return 'Start';
   }
   return switch (page.slug.first) {
-    'core' => 'Core',
-    'web' => 'Web',
-    'data' => 'Data',
-    'deploy' => 'Deployment',
-    'server' => 'Core',
+    'tutorials' => 'Tutorials',
+    'concepts' => 'Concepts',
+    'guides' => 'Guides',
+    'reference' => 'Reference',
     _ => 'Guides',
   };
 }

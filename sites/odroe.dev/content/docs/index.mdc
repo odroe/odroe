@@ -1,71 +1,90 @@
 ---
 title: Overview
-description: The product model and current capabilities of Odroe.
+description: One Dart package with explicit product entrypoints from Flutter to database and edge.
 order: 1
 language: en
 ---
-# One package, explicit layers
+# One package, explicit product boundaries
 
-Odroe is a composable full-stack framework for Dart and Flutter products. It
-keeps the application model shared, then places platform-specific code at the
-runtime boundary.
+Odroe is a composable full-stack framework for Dart and Flutter products. One
+package supplies the application model, typed routing, Query, RPC, server,
+semantic documents, content, typed SQL, database drivers, and build tooling.
+Each runtime remains visible through a focused public entrypoint.
 
-```dart
-App(
-  webPathUrls: true,
-  modules: <Module>[
-    QueryModule(),
-    RpcModule.http(baseUri: rpcBaseUri()),
-    DocumentModule(),
-    RouterModule(routes: routeTree),
-  ],
-  builder: (app) => Product(router: app.read(routerKey)),
-)
+## The default product path
+
+```text
+Flutter page
+  → Query key and lifecycle
+  → generated typed RPC reference
+  → adapter-neutral ServerFunction
+  → DatabaseModule
+  → typed SQL
+  → SQLite, PostgreSQL, MySQL/MariaDB, or D1
 ```
 
-`rpcBaseUri()` keeps browser RPC on the current origin and requires native
-applications to supply `ODROE_API_ORIGIN`. Copy the validated helper from
-[Client origin](/docs/server#client-origin); a native build never falls back to
-a non-network `Uri.base`.
+The generated full-stack starter proves that path with native SQLite and local
+Cloudflare D1. It also renders a semantic Document at `/`, so the first route
+has useful HTML before Flutter takes over.
 
-## What is available
+The Flutter composition root is ordinary application code:
 
-- A small application container with deterministic module disposal.
-- Typed filesystem routing without annotations or `build_runner`.
-- Query and mutation state for Dart and Flutter.
-- Typed RPC and adapter-neutral HTTP server contracts.
-- Semantic Document rendering, SSR, SSG, and Flutter Web handoff.
-- Renderer-neutral MDC and filesystem-backed Press collections.
-- Typed relational SQL plus explicit SQLite, PostgreSQL, MySQL/MariaDB, and
-  D1 drivers.
-- Dart VM server artifacts for local hosts and containers.
+```dart
+void main() {
+  runApp(
+    App(
+      webPathUrls: true,
+      modules: <Module>[
+        QueryModule(),
+        RpcModule.http(baseUri: rpcBaseUri()),
+        DocumentModule(),
+        RouterModule(routes: routeTree),
+      ],
+      builder: (app) => MaterialApp.router(
+        routerConfig: app.read(routerKey),
+      ),
+    ),
+  );
+}
+```
 
-## What stays explicit
+`rpcBaseUri()` keeps browser RPC on the current origin and requires an explicit
+HTTP(S) origin on native clients. It never guesses that a mobile device can
+reach its own loopback interface.
 
-Odroe does not install a global database, transport, router, or cache. Import
-the product entrypoint you need and install only the corresponding module.
-That keeps runtime wiring and reachable Dart code explicit. Dart pub does not
-provide optional dependencies inside one package, so every application still
-resolves Odroe's shared dependency graph and native build hooks may still add
-assets. Measure the actual target artifact rather than inferring cost from an
-import alone.
+## One package does not mean one import
 
-Runtime support is documented as a matrix, not implied by a package name.
-SQLite and PostgreSQL are verified. D1 and MySQL/MariaDB remain Preview with
-documented limits. Edge Fetch has required Node coverage and an optional local
-Workerd integration; it has not been remotely deployed.
+Use `odroe.dart` for neutral application composition, `router.dart` for route
+contracts, and `query.dart` for asynchronous server state. Import Flutter, IO,
+Fetch, FFI, and database drivers only at their owning boundary. This limits
+reachable Dart code without pretending the package has optional dependencies:
+pub still resolves one shared dependency graph.
 
-| Product target | Artifact | Status | Current evidence |
-| --- | --- | --- | --- |
-| Flutter Android, iOS, and Web | Flutter build | Verified locally | Example source builds Web, Android release APK, and unsigned iOS release in generated host scaffolds; no signed or device release claim |
-| Semantic Document and SSG | `build/web` | Verified locally | Real route rendering and prerender integration |
-| Native server | Dart VM executable | Verified locally | Runs on the build OS and architecture |
-| Cloudflare | Worker plus static assets | Preview | Website assets pass pinned Wrangler dry-run and local Workerd smoke; compiled Worker has required Node smoke and optional local Workerd integration; no remote deployment claim |
+The public [API entrypoint reference](/docs/reference/api) lists all 21 current
+libraries and the behavior each owns.
 
-Database support has its own provider-by-provider evidence and limits.
+## Current capability boundary
 
-## Next
+| Layer | Current product surface |
+| --- | --- |
+| Application | Typed modules, bindings, initialization, reverse-order disposal |
+| Flutter | App composition, Router pages and shells, Query builders, Document handoff |
+| Web | Semantic HTML, metadata, SSG/prerendering, MDC and Press content |
+| Server | Typed routes/functions, middleware, cancellation, native and Fetch hosts |
+| Data | Typed relational SQL; SQLite and PostgreSQL verified; MySQL/MariaDB and D1 Preview |
+| Build | Flutter pass-through, native server, static output, Cloudflare Worker |
 
-Start with [Getting started](/docs/getting-started), then read the
-[support matrix](/docs/data/database#runtime-matrix) before selecting a
-database runtime.
+Odroe does not currently claim a full identity-map ORM, automatic schema
+migrations, streaming database queries, mobile store release automation, or
+provider-specific deployment beyond the native and Cloudflare build targets.
+Those limits are part of the product contract, not footnotes.
+
+## Choose the next page
+
+- [First product](/docs/getting-started): create and run the complete starter.
+- [Full-stack vertical slice](/docs/tutorials/full-stack): trace one feature
+  through every generated and runtime boundary.
+- [Concepts](/docs/concepts/application): understand ownership before extending
+  the framework.
+- [Support and limits](/docs/reference/support): distinguish verified,
+  Preview, local, and remote claims.

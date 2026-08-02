@@ -1,0 +1,92 @@
+---
+title: Database and typed SQL
+description: Understand Odroe's relational query boundary, dialects, capabilities, and ownership.
+order: 24
+language: en
+---
+# Database and typed SQL
+
+Odroe provides a small typed relational query layer over explicit database
+drivers. It is intentionally not a full identity-map ORM and it does not hide
+migrations, connection scope, or provider differences.
+
+## One shared transport
+
+```dart
+abstract interface class SqlExecutor {
+  Future<List<T>> query<T>(
+    BoundSql statement,
+    T Function(SqlRow row) decode,
+  );
+
+  Future<SqlWriteResult> execute(BoundSql statement);
+}
+
+abstract interface class SqlDatabase implements SqlExecutor {
+  Future<List<SqlWriteResult>> atomicWrite(List<BoundSql> statements);
+  Future<void> close();
+}
+```
+
+`TransactionalSqlDatabase` is a separate capability. D1 can support atomic
+batches without pretending to support an interactive transaction callback.
+
+## Types stop mistakes before I/O
+
+A `SqlTable<T>` owns columns and a projection. `SqlQueries` creates select,
+insert, update, and delete statements for an explicit dialect:
+
+```dart
+final posts = Posts();
+const queries = SqlQueries(SqlDialect.sqlite);
+
+final titles = await queries
+    .selectTable(posts, where: posts.id.equals(42), limit: 1)
+    .all(database);
+```
+
+Column assignment and predicate types are checked by Dart. Joined reads qualify
+columns; left joins require an explicitly optional result selection. Updating
+or deleting every row requires the `allRows` confirmation token. Mutations stay
+single-table.
+
+Generated statements retain their dialect. SQLite and D1 use
+`SqlDialect.sqlite`, PostgreSQL uses `postgres`, and MySQL/MariaDB uses `mysql`.
+An explicit mismatch throws `SqlException(SqlErrorCode.unsupported)` before
+the driver sends the statement.
+
+`BoundSql.parts` is the escape hatch for source-owned SQL. Fragments are
+trusted source and values are bound. Pin `dialect` and `kind` when known; Odroe
+does not parse arbitrary SQL to invent portability.
+
+## Ownership follows the host
+
+| Runtime | Resource scope | Odroe module contract |
+| --- | --- | --- |
+| Flutter + SQLite | Application | `DatabaseModule.owned`, closed with `AppContext` |
+| Native server + SQLite/PostgreSQL/MySQL | Process | requests borrow; `Server.onClose` closes |
+| Cloudflare D1 | Invocation | request-owned wrapper around the host binding |
+
+A request-scoped module must not close a shared process pool. A Fetch isolate
+has no reliable process-shutdown hook, so D1 remains invocation-scoped.
+
+## Provider status is explicit
+
+| Entrypoint | Status | Current boundary |
+| --- | --- | --- |
+| `database_sqlite.dart` | Verified | Native CRUD, returning rows, batches, transactions |
+| `database_postgres.dart` | Verified | Single connection, bounded pool, transactions |
+| `database_mysql.dart` | Preview | MySQL and MariaDB, one serialized connection |
+| `database_d1.dart` | Preview | Local Workerd/D1 contract, atomic batches |
+
+All drivers are in the same Dart package but use separate entrypoints so the
+wrong implementation is not reachable from a target. Package dependency
+resolution and native build hooks still have cost; inspect real artifacts when
+binary size matters.
+
+Schema files remain application-owned. D1 uses reviewable Wrangler migrations;
+server databases use their provider's migration path. Odroe does not add code
+generation or a migration DSL.
+
+Continue with [Database providers](/docs/guides/database-providers) for working
+code, pool ownership, D1 bindings, and the complete runtime matrix.

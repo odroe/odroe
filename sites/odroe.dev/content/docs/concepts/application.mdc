@@ -1,10 +1,10 @@
 ---
-title: Application
-description: Compose product capabilities with explicit modules and lifecycles.
-order: 10
+title: Application model
+description: Compose product capabilities with explicit modules, bindings, and lifecycles.
+order: 20
 language: en
 ---
-# Application
+# Application model
 
 `AppContext` is the smallest shared composition root. It owns explicit modules,
 typed bindings, and reverse-order disposal.
@@ -35,10 +35,23 @@ and no implicit global registry.
 ## Identity keys
 
 ```dart
-final sessionKey = ContextKey<Session>('session');
+final buildLabelKey = ContextKey<String>('build-label');
 
-sessionKey.provide(registry, session);
-final current = context.read(sessionKey);
+final class BuildLabelModule extends Module {
+  const BuildLabelModule(this.label);
+
+  final String label;
+
+  @override
+  void register(ModuleRegistry registry) {
+    buildLabelKey.provide(registry, label);
+  }
+}
+
+final context = await AppContext.create(<Module>[
+  const BuildLabelModule('development'),
+]);
+final label = context.read(buildLabelKey);
 ```
 
 A key is matched by instance identity, not by its diagnostic name. Define one
@@ -50,7 +63,7 @@ This replaces the old `const ContextKey(...)` form. Do not reconstruct a key
 at a read site: a new instance intentionally names a different binding.
 Registration is key-first so the analyzer fixes the value type from the key
 instead of widening an incompatible key/value pair to `Object`. Lazy values
-use `sessionKey.provideFactory(registry, createSession)`.
+use `buildLabelKey.provideFactory(registry, createLabel)`.
 
 ## Flutter composition
 
@@ -62,9 +75,12 @@ runApp(
     webPathUrls: true,
     modules: <Module>[
       QueryModule(),
+      DocumentModule(),
       RouterModule(routes: routeTree),
     ],
-    builder: (app) => Product(router: app.read(routerKey)),
+    builder: (app) => MaterialApp.router(
+      routerConfig: app.read(routerKey),
+    ),
   ),
 );
 ```

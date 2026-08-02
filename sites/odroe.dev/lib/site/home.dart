@@ -339,7 +339,7 @@ HtmlElement _output() => element(
           children: <HtmlNode>[
             element(
               'code',
-              children: <HtmlNode>[text(r'$ dart run odroe init')],
+              children: <HtmlNode>[text(r'$ dart run odroe init --full-stack')],
             ),
             element(
               'code',

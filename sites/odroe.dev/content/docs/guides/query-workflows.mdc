@@ -1,0 +1,91 @@
+---
+title: Query workflows
+description: Build loading, error, retry, cancellation, invalidation, and handoff flows.
+order: 31
+language: en
+---
+# Query workflows
+
+Query is server-state coordination. It does not choose HTTP, RPC, SQL, local
+storage, persistence, or a widget tree for the application.
+
+## Name cache identity first
+
+```dart
+const postId = 42;
+final key = QueryKey('post-title', <Object?>[postId]);
+```
+
+Keys snapshot JSON-like parts, including nested lists and string-keyed maps.
+Prefer a small scalar identity. Use structured parts only when they really
+distinguish resources.
+
+## Connect typed RPC with cancellation
+
+The full-stack starter uses the generated reference directly:
+
+```dart
+QueryOptions<String>(
+  key: key,
+  query: (query) => routes.readTitle(
+    routeContext.read(rpcClientKey),
+    postId,
+    cancelled: query.cancelToken.whenCancelled.then<void>((_) {}),
+  ),
+)
+```
+
+Reading the cancel token marks the fetch as cancellation-aware. Removing the
+last observer or explicitly cancelling the query can then abort
+`HttpTransport`. RPC reports `RpcCancelledException`; Query keeps normal
+cancellation out of error state.
+
+## Render every useful state
+
+Keep stale data visible during a background refresh, but make an initial error
+actionable:
+
+```dart
+builder: (_, result) {
+  if (!result.hasData && result.isFetching) {
+    return const CircularProgressIndicator();
+  }
+  if (result.isError && !result.hasData) {
+    return FilledButton(
+      onPressed: () => client.invalidateQueries(
+        QueryFilter(key: key, exact: true),
+      ),
+      child: const Text('Retry'),
+    );
+  }
+  return Text(result.requireData);
+}
+```
+
+An exact filter targets only this resource. A prefix filter is appropriate
+after a mutation that invalidates a collection and its members together.
+
+## Keep mutations and queries separate
+
+Mutation results have their own cache, observers, retry policy, and scope.
+After a successful side effect, invalidate the queries whose server truth may
+have changed. Cache removal cannot interrupt a mutation Future that already
+started and cannot roll back its side effects.
+
+When offline retry is enabled, a paused mutation waits for the online manager.
+`QueryClient.clear()` cancels a mutation before its next attempt and releases
+listeners, but still does not revoke completed external work.
+
+## Share initial server state deliberately
+
+When Query and Document are installed for one server request, Document can
+serialize completed and pending Query values into the handoff. Flutter restores
+them before taking over. Use the same `Serializer` adapter set on the server,
+`RpcModule`, and `DocumentModule`; a custom wire tag available on only one side
+is rejected.
+
+Persistence is another explicit adapter. Installing Query never silently
+writes cache state to disk.
+
+See [Query](/docs/concepts/query) for the complete lifecycle and
+[Server and RPC](/docs/concepts/server-rpc) for the transport boundary.

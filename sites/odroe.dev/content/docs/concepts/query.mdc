@@ -1,7 +1,7 @@
 ---
 title: Query
 description: Cache asynchronous state without coupling it to a UI runtime.
-order: 12
+order: 22
 language: en
 ---
 # Query
@@ -12,11 +12,13 @@ layer: a query may call HTTP, RPC, local storage, or a typed SQL driver.
 ## Platform-neutral client
 
 ```dart
+Future<String> readTitle(int postId) async => 'Post $postId';
+
 final client = QueryClient();
 final post = await client.fetchQuery(
-  QueryOptions(
+  QueryOptions<String>(
     key: QueryKey('post', <Object?>[postId]),
-    query: (_) => repository.read(postId),
+    query: (_) => readTitle(postId),
   ),
 );
 ```
@@ -48,7 +50,8 @@ takes over. The default configuration supports `DateTime`, `Duration`, `Uri`,
 
 For a custom wire type, keep one small serializer factory in shared source.
 Use equivalent adapter sets on both runtime boundaries; no mutable global
-serializer is required.
+serializer is required. `MoneyAdapter` below represents an application-owned
+`SerializationAdapter` implementation.
 
 ```dart
 Serializer createSerializer() => Serializer(
@@ -73,7 +76,7 @@ final modules = <Module>[
 ];
 ```
 
-The client uses the same [cross-platform RPC origin helper](/docs/server#client-origin)
+The client uses the same [cross-platform RPC origin helper](/docs/guides/server-operations#client-origin)
 as the application composition root.
 
 The same serializer contract covers the initial handoff and later streamed
@@ -90,8 +93,8 @@ generated RPC ref without coupling either subsystem:
 QueryBuilder<String>(
   options: QueryOptions<String>(
     key: QueryKey('post', <Object?>[postId]),
-    query: (context) => routes.posts.postId.readTitle(
-      app.read(rpcClientKey),
+    query: (context) => generated.routes.readTitle(
+      routeContext.read(rpcClientKey),
       postId,
       cancelled: context.cancelToken.whenCancelled.then<void>((_) {}),
     ),

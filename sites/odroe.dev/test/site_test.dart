@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:odroe/document.dart';
+import 'package:odroe/mdc.dart';
+import 'package:odroe/press.dart';
 import 'package:odroe/query.dart';
 import 'package:odroe/server.dart';
 import 'package:odroe_dev/content.dart';
@@ -95,6 +97,70 @@ void main() {
   });
 
   test(
+    'documentation navigation exposes the five-part information architecture',
+    () async {
+      expect(await docs.locations(), hasLength(16));
+      final server = Server(
+        routes: generated.serverRouteTree,
+        functions: generated.serverFunctions,
+        renderer: const DocumentRenderer(baseHref: '/').call,
+      );
+      final response = await server.handle(
+        ServerRequest(
+          method: HttpMethod.get,
+          uri: Uri(path: '/docs/getting-started'),
+          headers: Headers.single(<String, String>{'accept': 'text/html'}),
+        ),
+      );
+      final body = await utf8.decodeStream(response.body);
+
+      expect(response.status, 200);
+      _expectInOrder('Documentation sections', body, <String>[
+        '<h2>Start</h2>',
+        '<h2>Tutorials</h2>',
+        '<h2>Concepts</h2>',
+        '<h2>Guides</h2>',
+        '<h2>Reference</h2>',
+      ]);
+      expect(
+        body,
+        contains(
+          'href="/docs/getting-started" aria-current="page">First product</a>',
+        ),
+      );
+      expect(body, contains('href="/docs/tutorials/full-stack"'));
+      expect(body, contains('href="/docs/reference/api"'));
+    },
+  );
+
+  test('internal documentation links resolve to pages and headings', () async {
+    final snapshot = await docs.snapshot();
+    final pages = <String, PressPage>{
+      for (final page in snapshot.pages) page.location.path: page,
+    };
+    final link = RegExp(r'\]\((/docs[^\s)#]*)(?:#([^\s)]+))?\)');
+
+    for (final page in snapshot.pages) {
+      final source = await File(
+        'content/docs/${page.sourcePath}',
+      ).readAsString();
+      for (final match in link.allMatches(source)) {
+        final path = match.group(1)!;
+        final target = pages[path];
+        expect(target, isNotNull, reason: '${page.sourcePath}: $path');
+        final fragment = match.group(2);
+        if (fragment != null) {
+          expect(
+            _outlineIds(target!.outline),
+            contains(fragment),
+            reason: '${page.sourcePath}: $path#$fragment',
+          );
+        }
+      }
+    }
+  });
+
+  test(
     'homepage structured data describes source without invented commerce',
     () async {
       final server = Server(
@@ -169,95 +235,109 @@ void main() {
     expect(source, isNot(contains('Data · Edge')));
   });
 
-  test('onboarding closes the Flutter and Document run paths', () async {
+  test('onboarding closes the full-stack native and edge paths', () async {
     final gettingStarted = await File(
       'content/docs/getting-started.mdc',
     ).readAsString();
+    final tutorial = await File(
+      'content/docs/tutorials/full-stack.mdc',
+    ).readAsString();
+    final deployment = await File(
+      'content/docs/guides/deployment.mdc',
+    ).readAsString();
     final readme = await File('../../README.md').readAsString();
-    final deployment = await File('content/docs/deploy.mdc').readAsString();
 
-    for (final entry in <String, String>{
-      'README': readme,
-      'Getting started': gettingStarted,
-    }.entries) {
-      final source = entry.value;
-      expect(source, contains('git clone https://github.com/odroe/odroe.git'));
-      expect(
-        source,
-        contains('flutter create --empty --platforms=android,ios,web'),
-      );
-      expect(source, contains('dart run odroe init'));
+    for (final source in <String>[readme, gettingStarted]) {
       expect(source, contains('flutter pub get'));
+      expect(source, contains('dart run odroe init --full-stack'));
+      expect(source, contains('dart run odroe dev -- -d chrome'));
       expect(source, contains('dart run odroe build --no-server web'));
       expect(
         source,
         contains('dart run odroe build --no-server -- web --wasm'),
       );
-      expect(
-        RegExp(
-          r'^dart run odroe build --no-server$',
-          multiLine: true,
-        ).hasMatch(source),
-        isFalse,
-        reason: entry.key,
-      );
-      expect(
-        source.indexOf('flutter pub get'),
-        lessThan(source.indexOf('dart run odroe init')),
-      );
-      expect(
-        source.indexOf('dart run odroe init'),
-        lessThan(source.indexOf('dart run odroe dev -- -d chrome')),
-      );
+      _expectInOrder('Primary product path', source, <String>[
+        'flutter pub get',
+        'dart run odroe init --full-stack',
+        'dart run odroe dev -- -d chrome',
+      ]);
     }
-    expect(gettingStarted, contains('lib/routes/route.dart'));
-    expect(gettingStarted, contains('lib/routes/page.dart'));
-    expect(
-      deployment,
-      contains('dart run odroe build --no-server -- web --wasm'),
-    );
-    expect(deployment, contains('same browser DOM path'));
-    expect(gettingStarted, contains('MaterialApp.router'));
+
+    for (final marker in <String>[
+      'posts_database.dart',
+      'rpc_origin.dart',
+      'server_native.dart',
+      'server_cloudflare.dart',
+      'routes.server.dart',
+      'migrations/0001_posts.sql',
+      'package-lock.json',
+      'wrangler.jsonc',
+    ]) {
+      expect(gettingStarted, contains(marker), reason: marker);
+    }
     expect(gettingStarted, contains('dart run odroe dev --server-only'));
     expect(gettingStarted, contains('flutter devices'));
-    expect(
-      gettingStarted,
-      contains('dart run odroe dev -- -d <ios-device-id>'),
-    );
-    expect(gettingStarted, isNot(contains('dart run odroe dev -- -d ios')));
-    expect(gettingStarted, contains('never reuses stale'));
-    expect(gettingStarted, contains('`build/web` HTML'));
-    expect(
-      deployment,
-      contains('dart run odroe build --server-target cloudflare web'),
-    );
-    expect(
-      deployment,
-      contains('dart run odroe build --server-target cloudflare\n'),
-    );
+    expect(gettingStarted, contains('dart run odroe dev -- -d <device-id>'));
+    expect(gettingStarted, contains('ODROE_API_ORIGIN'));
+    expect(gettingStarted, contains('reuses stale HTML'));
+    expect(gettingStarted, contains('SQLite post 42'));
+    expect(gettingStarted, contains('D1 post 42'));
+    expect(gettingStarted, contains('serves the semantic handoff'));
+    expect(gettingStarted, isNot(contains('cd ../odroe/example/app')));
+    expect(gettingStarted, isNot(contains('/posts/42')));
+
+    for (final entry in <String, String>{
+      'README': _shellBlockContaining(
+        readme,
+        'npm run cloudflare:migrate:local',
+      ),
+      'Getting started': _shellBlockContaining(
+        gettingStarted,
+        'npm run cloudflare:migrate:local',
+      ),
+      'Deployment': _shellBlockContaining(
+        deployment,
+        'npm run cloudflare:migrate:local',
+      ),
+    }.entries) {
+      expect(entry.value, isNot(contains('cd example/app')), reason: entry.key);
+      expect(
+        entry.value,
+        isNot(contains('cd ../odroe/example/app')),
+        reason: entry.key,
+      );
+      _expectInOrder(entry.key, entry.value, <String>[
+        'npm ci',
+        'dart run odroe build --server-target cloudflare web',
+        'npm run cloudflare:migrate:local',
+        'npm run cloudflare:dev',
+      ]);
+    }
+
+    expect(tutorial, contains('Flutter → Query → typed RPC'));
+    expect(tutorial, contains('ServerFunction<int, String>'));
+    expect(tutorial, contains('DatabaseModule.borrowed(database)'));
+    expect(tutorial, contains('D1SqlDatabase.fromBinding'));
+    expect(tutorial, contains('generated.routes.readTitle'));
   });
 
-  test('runtime matrix reports Flutter evidence honestly', () async {
-    final source = await File('content/docs/index.mdc').readAsString();
+  test('support matrix reports evidence and limits honestly', () async {
+    final source = await File(
+      'content/docs/reference/support.mdc',
+    ).readAsString();
 
+    expect(source, contains('| Flutter Web | Verified locally |'));
     expect(
       source,
-      contains(
-        '| Flutter Android, iOS, and Web | Flutter build | Verified locally | '
-        'Example source builds Web, Android release APK, and unsigned iOS '
-        'release in generated host scaffolds; no signed or device release '
-        'claim |',
-      ),
+      contains('| Flutter Android and iOS | Available, not yet verified |'),
     );
-    expect(
-      source,
-      isNot(
-        contains(
-          '| Flutter Android, iOS, and Web | Flutter build | Available |',
-        ),
-      ),
-    );
-    expect(source, contains('provide optional dependencies'));
+    expect(source, contains('no repository build, device, or store-release'));
+    expect(source, contains('| Cloudflare Worker + D1 | Preview |'));
+    expect(source, contains('| Remote Cloudflare deploy | Not claimed |'));
+    expect(source, contains('typed SQL, not a full ORM'));
+    expect(source, contains('there is no streaming database query'));
+    expect(source, isNot(contains('all major databases')));
+    expect(source, isNot(contains('one-click deployment')));
   });
 
   test('cross-platform RPC examples require a native HTTP origin', () async {
@@ -266,8 +346,10 @@ void main() {
     final gettingStarted = await File(
       'content/docs/getting-started.mdc',
     ).readAsString();
-    final query = await File('content/docs/core/query.mdc').readAsString();
-    final server = await File('content/docs/server.mdc').readAsString();
+    final query = await File('content/docs/concepts/query.mdc').readAsString();
+    final server = await File(
+      'content/docs/guides/server-operations.mdc',
+    ).readAsString();
     final homepage = await File('lib/site/home.dart').readAsString();
 
     expect(readme, contains("import 'rpc_origin.dart';"));
@@ -289,7 +371,7 @@ void main() {
       ),
     );
     expect(overview, contains('RpcModule.http(baseUri: rpcBaseUri())'));
-    expect(overview, contains('ODROE_API_ORIGIN'));
+    expect(gettingStarted, contains('ODROE_API_ORIGIN'));
     expect(query, contains('baseUri: rpcBaseUri(),'));
     expect(server, contains('## Client origin'));
     expect(server, contains('Android, iOS, and desktop apps must pass'));
@@ -322,22 +404,28 @@ void main() {
 
   test('extension key docs require one shared identity', () async {
     final app = (await File(
-      'content/docs/core/app.mdc',
+      'content/docs/concepts/application.mdc',
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
     final routing = (await File(
-      'content/docs/core/routing.mdc',
+      'content/docs/concepts/routing.mdc',
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
     final server = (await File(
-      'content/docs/server.mdc',
+      'content/docs/guides/server-operations.mdc',
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
 
-    expect(app, contains("final sessionKey = ContextKey<Session>('session');"));
+    expect(
+      app,
+      contains("final buildLabelKey = ContextKey<String>('build-label');"),
+    );
     expect(app, contains('matched by instance identity'));
     expect(app, contains('reuse that exact instance'));
-    expect(app, contains('sessionKey.provide(registry, session)'));
-    expect(app, contains('context.read(sessionKey)'));
+    expect(app, contains('buildLabelKey.provide(registry, label)'));
+    expect(app, contains('context.read(buildLabelKey)'));
     expect(app, contains('replaces the old `const ContextKey(...)` form'));
-    expect(app, contains('sessionKey.provideFactory(registry, createSession)'));
+    expect(
+      app,
+      contains('buildLabelKey.provideFactory(registry, createLabel)'),
+    );
     expect(routing, contains('Capability keys also use instance identity'));
     expect(routing, contains('name is only diagnostic'));
     expect(routing, contains('Replace old `const RouteCapability(...)`'));
@@ -352,12 +440,12 @@ void main() {
     expect(server, contains('userKey.set(context, user)'));
     expect(server, contains('`key.set(context, value)`'));
     expect(server, isNot(contains('context.set(userKey, user)')));
-    expect(app, isNot(contains('const sessionKey = ContextKey')));
+    expect(app, isNot(contains('const buildLabelKey = ContextKey')));
   });
 
   test('routing docs preserve live browser path and search state', () async {
     final routing = (await File(
-      'content/docs/core/routing.mdc',
+      'content/docs/concepts/routing.mdc',
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
     final readme = (await File(
       '../../README.md',
@@ -413,7 +501,7 @@ void main() {
     },
   );
 
-  test('website deployment pins a gated and readable workflow', () async {
+  test('website operations stay locked and out of public docs', () async {
     final package =
         jsonDecode(await File('package.json').readAsString())
             as Map<String, Object?>;
@@ -425,14 +513,14 @@ void main() {
     final packages = lock['packages']! as Map<String, Object?>;
     final root = packages['']! as Map<String, Object?>;
     final wrangler = packages['node_modules/wrangler']! as Map<String, Object?>;
-    final deployment = await File('content/docs/deploy.mdc').readAsString();
-    final normalizedDeployment = deployment.replaceAll(RegExp(r'\s+'), ' ');
-    final npmConfig = await File('.npmrc').readAsString();
-    final readme = await File('../../README.md').readAsString();
+    final operations = await File('README.md').readAsString();
+    final publicDeployment = await File(
+      'content/docs/guides/deployment.mdc',
+    ).readAsString();
 
     expect(package['private'], isTrue);
     expect(package['engines'], <String, Object?>{'node': '>=22.0.0'});
-    expect(npmConfig, 'engine-strict=true\n');
+    expect(await File('.npmrc').readAsString(), 'engine-strict=true\n');
     expect(dependencies, <String, Object?>{'wrangler': '4.118.0'});
     expect(root['devDependencies'], dependencies);
     expect(root['engines'], package['engines']);
@@ -447,55 +535,39 @@ void main() {
     expect(scripts['deploy:account'], 'wrangler whoami --json');
     expect(scripts['deploy:status'], 'wrangler deployments status --json');
     expect(scripts['deploy:versions'], 'wrangler versions list --json');
-    expect(deployment, contains('npm run deploy:check'));
-    expect(deployment, contains('Node 22 or newer'));
-    expect(deployment, contains('without authenticating, uploading'));
-    expect(deployment, contains('requires explicit authorization'));
-    expect(deployment, contains('creates the `odroe-dev` Worker'));
-    expect(deployment, contains('explicitly permit creation or replacement'));
-    expect(deployment, contains('rather than treated as absence'));
-    expect(deployment, contains('CLOUDFLARE_ACCOUNT_ID'));
-    expect(deployment, contains('npm run deploy:account'));
+
+    expect(operations, contains('## Local quality gate'));
+    expect(operations, contains('npm run deploy:check'));
+    expect(operations, contains('does not authenticate or upload'));
+    expect(operations, contains('## Remote deployment authorization'));
+    expect(operations, contains('requires explicit authorization'));
+    expect(operations, contains('CLOUDFLARE_ACCOUNT_ID'));
+    expect(operations, contains('npm run deploy:account'));
+    expect(operations, contains('ODROE_DEPLOY_SHA'));
+    expect(operations, contains('npm run deploy:status'));
+    expect(operations, contains('npm run deploy:versions'));
+    expect(operations, contains('100% of traffic'));
+    final deploymentGate = RegExp(
+      r'The application gate is:\n\n```sh\n(\([\s\S]*?\n\))\n```',
+    ).firstMatch(operations)?.group(1);
+    expect(deploymentGate, isNotNull);
+    expect(deploymentGate, startsWith('(\n  set -eu\n'));
+    expect(
+      deploymentGate!.indexOf('npm run deploy --'),
+      greaterThan(deploymentGate.indexOf('npm run deploy:check')),
+    );
     expect(
       RegExp(
         RegExp.escape(r'test -z "$(git status --porcelain)"'),
-      ).allMatches(deployment),
+      ).allMatches(operations),
       hasLength(2),
     );
-    expect(deployment, contains('ODROE_DEPLOY_SHA'));
-    expect(deployment, contains('npm run deploy:status'));
-    expect(deployment, contains('npm run deploy:versions'));
-    expect(
-      RegExp(r'^  set -eu$', multiLine: true).allMatches(deployment),
-      hasLength(4),
-    );
-    expect(deployment, contains('grouped shell is fail-closed'));
-    expect(deployment, contains('100% of traffic'));
-    expect(normalizedDeployment, contains('full reviewed Git SHA'));
-    expect(deployment, contains('ODROE_DEPLOY_URL'));
-    expect(
-      deployment,
-      contains("export ODROE_DEPLOY_URL='https://<deployment>.workers.dev'"),
-    );
-    expect(
-      deployment,
-      isNot(contains('export ODROE_DEPLOY_URL=https://<deployment>')),
-    );
-    expect(deployment, contains('/__odroe_missing__'));
-    expect(deployment, contains('/zh/'));
-    expect(
-      deployment.lastIndexOf('npm run deploy:check'),
-      lessThan(deployment.indexOf('npm run deploy --')),
-    );
-    expect(
-      deployment.indexOf('npm run deploy --'),
-      lessThan(deployment.lastIndexOf('npm run deploy:status')),
-    );
-    expect(readme, contains('sites/odroe.dev/package.json'));
-    expect(readme, contains('npm run deploy:check'));
-    expect(readme, contains('必须获得明确授权'));
-    expect(readme, contains('发布前必须通过 `npm run deploy:account`'));
-    expect(readme, contains('发布后运行 `npm run deploy:status`'));
+
+    expect(publicDeployment, isNot(contains('odroe-dev')));
+    expect(publicDeployment, isNot(contains('CLOUDFLARE_ACCOUNT_ID')));
+    expect(publicDeployment, isNot(contains('ODROE_DEPLOY_SHA')));
+    expect(publicDeployment, isNot(contains('DNS')));
+    expect(publicDeployment, isNot(contains('certificate')));
   });
 
   test('search assets match published pages and exact migrations', () async {
@@ -581,7 +653,7 @@ void main() {
 
   test('Query docs match key and mutation lifecycle contracts', () async {
     final source = (await File(
-      'content/docs/core/query.mdc',
+      'content/docs/concepts/query.mdc',
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
 
     final options = QueryOptions<int>(
@@ -643,9 +715,14 @@ void main() {
   });
 
   test('Database docs preserve the typed dialect boundary', () async {
-    final source = (await File(
-      'content/docs/data/database.mdc',
-    ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
+    final document = await File(
+      'content/docs/guides/database-providers.mdc',
+    ).readAsString();
+    final source = document.replaceAll(RegExp(r'\s+'), ' ');
+    final fullStack = _shellBlockContaining(
+      document,
+      'npm run cloudflare:migrate:local',
+    );
 
     expect(source, contains('preserves its selected dialect'));
     expect(source, contains('SQLite and D1 accept `SqlDialect.sqlite`'));
@@ -663,7 +740,16 @@ void main() {
     expect(source, contains('onClose: database.close'));
     expect(source, contains('## One query, two runtimes'));
     expect(source, contains('generated typed RPC'));
-    expect(source, contains('wrangler d1 migrations apply DB --local'));
+    expect(source, contains('locked local Wrangler toolchain'));
+    expect(source, contains('npm run cloudflare:migrate:local'));
+    expect(source, contains('npm run cloudflare:dev'));
+    _expectInOrder('Database docs', fullStack, <String>[
+      'flutter pub get',
+      'npm ci',
+      'dart run odroe build --server-target cloudflare web',
+      'npm run cloudflare:migrate:local',
+      'npm run cloudflare:dev',
+    ]);
   });
 
   test('full-stack database example keeps platform drivers isolated', () async {
@@ -680,7 +766,24 @@ void main() {
       '$example/migrations/0001_posts.sql',
     ).readAsString();
     final exampleReadme = await File('$example/README.md').readAsString();
-    final deployment = await File('content/docs/deploy.mdc').readAsString();
+    final exampleFullStack = _shellBlockContaining(
+      exampleReadme,
+      'npm run cloudflare:migrate:local',
+    );
+    final deployment = await File(
+      'content/docs/guides/deployment.mdc',
+    ).readAsString();
+    final package =
+        jsonDecode(await File('$example/package.json').readAsString())
+            as Map<String, Object?>;
+    final packageLock =
+        jsonDecode(await File('$example/package-lock.json').readAsString())
+            as Map<String, Object?>;
+    final pubIgnore = await File('../../.pubignore').readAsLines();
+    final lockPackages = packageLock['packages']! as Map<String, Object?>;
+    final lockedRoot = lockPackages['']! as Map<String, Object?>;
+    final lockedWrangler =
+        lockPackages['node_modules/wrangler']! as Map<String, Object?>;
     final config =
         jsonDecode(await File('$example/wrangler.jsonc').readAsString())
             as Map<String, Object?>;
@@ -710,6 +813,7 @@ void main() {
     expect(migration, contains('CREATE TABLE posts'));
     expect(migration, contains("VALUES (42, 'D1 post 42')"));
     expect(config['main'], './build/odroe/cloudflare/worker.mjs');
+    expect(config[r'$schema'], './node_modules/wrangler/config-schema.json');
     expect(config['compatibility_date'], '2026-08-01');
     expect(config['compatibility_flags'], contains('enable_request_signal'));
     expect(database['binding'], 'DB');
@@ -717,15 +821,62 @@ void main() {
     expect(exampleReadme, contains('Flutter page → Query'));
     expect(exampleReadme, contains('SQLite post 42'));
     expect(exampleReadme, contains('D1 post 42'));
-    expect(deployment, contains('wrangler d1 migrations apply DB --local'));
+    expect(package['private'], isTrue);
+    expect(package['engines'], <String, Object?>{
+      'node': '>=22.0.0',
+      'npm': '>=10.9.0',
+    });
+    expect(package['devEngines'], <String, Object?>{
+      'runtime': <String, Object?>{
+        'name': 'node',
+        'version': '>=22.0.0',
+        'onFail': 'error',
+      },
+      'packageManager': <String, Object?>{
+        'name': 'npm',
+        'version': '>=10.9.0',
+        'onFail': 'error',
+      },
+    });
+    expect(package['devDependencies'], <String, Object?>{
+      'wrangler': '4.118.0',
+    });
+    expect(package['scripts'], <String, Object?>{
+      'cloudflare:migrate:local': 'wrangler d1 migrations apply DB --local',
+      'cloudflare:dev': 'wrangler dev --local',
+    });
+    expect(packageLock['lockfileVersion'], 3);
+    expect(lockedRoot['devDependencies'], package['devDependencies']);
+    expect(lockedRoot['engines'], package['engines']);
+    expect(lockedWrangler['version'], '4.118.0');
+    expect(pubIgnore, contains('node_modules/'));
+    expect(pubIgnore, contains('.wrangler/'));
+    expect(exampleReadme, contains('npm ci'));
+    expect(exampleReadme, contains('`engines`'));
+    expect(exampleReadme, contains('`devEngines`'));
+    expect(exampleReadme, contains('npm run cloudflare:migrate:local'));
+    expect(exampleReadme, contains('npm run cloudflare:dev'));
+    _expectInOrder('Example README', exampleFullStack, <String>[
+      'flutter pub get',
+      'npm ci',
+      'dart run odroe build --server-target cloudflare web',
+      'npm run cloudflare:migrate:local',
+      'npm run cloudflare:dev',
+    ]);
+    expect(deployment, contains('`odroe init --full-stack`'));
+    expect(deployment, contains('owns a locked Wrangler toolchain'));
+    expect(deployment, contains('npm run cloudflare:migrate:local'));
+    expect(deployment, contains('npm run cloudflare:dev'));
     expect(deployment, contains('Removing `--local` changes the remote'));
   });
 
   test('Constructor dependency types stay on product entrypoints', () async {
     final database = await File(
-      'content/docs/data/database.mdc',
+      'content/docs/guides/database-providers.mdc',
     ).readAsString();
-    final server = await File('content/docs/server.mdc').readAsString();
+    final server = await File(
+      'content/docs/guides/server-operations.mdc',
+    ).readAsString();
     final readme = await File('../../README.md').readAsString();
 
     expect(
@@ -751,12 +902,18 @@ void main() {
   test(
     'Lifecycle ownership is consistent across public documentation',
     () async {
-      final app = await File('content/docs/core/app.mdc').readAsString();
-      final server = await File('content/docs/server.mdc').readAsString();
-      final database = await File(
-        'content/docs/data/database.mdc',
+      final app = await File(
+        'content/docs/concepts/application.mdc',
       ).readAsString();
-      final deploy = await File('content/docs/deploy.mdc').readAsString();
+      final server = await File(
+        'content/docs/guides/server-operations.mdc',
+      ).readAsString();
+      final database = await File(
+        'content/docs/guides/database-providers.mdc',
+      ).readAsString();
+      final deploy = await File(
+        'content/docs/guides/deployment.mdc',
+      ).readAsString();
       final readme = await File('../../README.md').readAsString();
 
       expect(app, contains('ownership transfers as each module is yielded'));
@@ -797,8 +954,12 @@ void main() {
   );
 
   test('Server docs close the authenticated RPC contract', () async {
-    final source = await File('content/docs/server.mdc').readAsString();
-    final appSource = await File('content/docs/core/app.mdc').readAsString();
+    final source = await File(
+      'content/docs/guides/server-operations.mdc',
+    ).readAsString();
+    final appSource = await File(
+      'content/docs/concepts/application.mdc',
+    ).readAsString();
 
     expect(source, isNot(contains('SessionModule')));
     expect(appSource, isNot(contains('SessionModule')));
@@ -836,7 +997,7 @@ void main() {
 
   test('Server docs define bounded typed RPC frames', () async {
     final source = (await File(
-      'content/docs/server.mdc',
+      'content/docs/guides/server-operations.mdc',
     ).readAsString()).replaceAll(RegExp(r'\s+'), ' ');
 
     expect(source, contains('`Server.maxFunctionPayload`'));
@@ -870,7 +1031,9 @@ void main() {
   });
 
   test('Server docs define unexpected error reporting', () async {
-    final document = await File('content/docs/server.mdc').readAsString();
+    final document = await File(
+      'content/docs/guides/server-operations.mdc',
+    ).readAsString();
     final firstDartBlock = RegExp(
       r'```dart\s+([\s\S]*?)\s+```',
     ).firstMatch(document)!.group(1)!;
@@ -921,7 +1084,9 @@ void main() {
   });
 
   test('Native deploy docs preserve reporter ownership', () async {
-    final document = await File('content/docs/deploy.mdc').readAsString();
+    final document = await File(
+      'content/docs/guides/deployment.mdc',
+    ).readAsString();
     final source = document.replaceAll(RegExp(r'\s+'), ' ');
 
     expect(source, contains('creates the application `Server` once'));
@@ -937,7 +1102,9 @@ void main() {
   });
 
   test('Cloudflare hybrid example preserves dynamic page navigation', () async {
-    final source = await File('content/docs/deploy.mdc').readAsString();
+    final source = await File(
+      'content/docs/guides/deployment.mdc',
+    ).readAsString();
     final block = RegExp(r'```json\s+([\s\S]*?)\s+```').firstMatch(source);
 
     expect(block, isNotNull);
@@ -1049,6 +1216,13 @@ const _legacyRedirects = <String, String>{
   '/zh/docs/oref/core': 'https://oref.medz.dev/zh/guide/core-concepts',
   '/zh/docs/oref/advanced': 'https://oref.medz.dev/zh/guide/effects',
   '/zh/docs/oref/utils': 'https://pub.dev/documentation/oref/latest/oref/',
+  '/docs/core/app': '/docs/concepts/application',
+  '/docs/core/routing': '/docs/concepts/routing',
+  '/docs/core/query': '/docs/concepts/query',
+  '/docs/web/document': '/docs/concepts/content',
+  '/docs/server': '/docs/concepts/server-rpc',
+  '/docs/data/database': '/docs/concepts/database',
+  '/docs/deploy': '/docs/guides/deployment',
 };
 
 Iterable<RegExpMatch> _meta(String body, String property) => RegExp(
@@ -1059,6 +1233,30 @@ String _single(Iterable<RegExpMatch> matches, Uri location, String label) {
   final values = matches.toList(growable: false);
   expect(values, hasLength(1), reason: '${location.path}: $label');
   return values.single.group(1)!;
+}
+
+String _shellBlockContaining(String source, String marker) {
+  for (final match in RegExp(r'```sh\n([\s\S]*?)\n```').allMatches(source)) {
+    final block = match.group(1)!;
+    if (block.contains(marker)) return block;
+  }
+  throw StateError('Missing shell block containing $marker.');
+}
+
+void _expectInOrder(String label, String source, Iterable<String> values) {
+  var offset = -1;
+  for (final value in values) {
+    final next = source.indexOf(value, offset + 1);
+    expect(next, greaterThan(offset), reason: '$label: $value');
+    offset = next;
+  }
+}
+
+Iterable<String> _outlineIds(Iterable<MdcOutlineEntry> entries) sync* {
+  for (final entry in entries) {
+    yield entry.id;
+    yield* _outlineIds(entry.children);
+  }
 }
 
 int _uint32(List<int> bytes, int offset) =>

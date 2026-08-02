@@ -1,10 +1,10 @@
 ---
-title: Document and Press
+title: Content and documents
 description: Produce semantic HTML, static pages, and typed MDC content.
-order: 20
+order: 25
 language: en
 ---
-# Document and Press
+# Content and documents
 
 Document is an optional platform-neutral binding owned by `route.dart`. It
 merges route-owned metadata and HTML trees, then renders a complete response
@@ -33,7 +33,7 @@ final route =
 When a route also has a Flutter page, the server emits readable HTML and
 handoff state before Flutter takes over. Completed and pending Query values use
 the same explicit serializer contract; see
-[Query server handoff](/docs/core/query#server-handoff).
+[Query server handoff](/docs/concepts/query#server-handoff).
 The browser handoff, streamed frames, semantic HTML transition, and external
 Router navigation use the same DOM implementation in JavaScript and
 WebAssembly builds.

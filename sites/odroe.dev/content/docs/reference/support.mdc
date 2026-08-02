@@ -1,0 +1,72 @@
+---
+title: Support and limits
+description: Current support status, known boundaries, diagnostics, and useful issue evidence.
+order: 42
+language: en
+---
+# Support and limits
+
+Odroe is evolving in public. “Verified” below means the repository has a real
+local or provider contract test for that path. “Preview” means the API is usable
+but the deployment or provider boundary is still deliberately narrow.
+
+## Current status
+
+| Surface | Status | Evidence boundary |
+| --- | --- | --- |
+| Flutter Web | Verified locally | Build, semantic handoff, Query/RPC application |
+| Flutter Android and iOS | Available, not yet verified | Generated targets exist; no repository build, device, or store-release gate |
+| Native server | Verified locally | Real socket, static files, streaming, shutdown |
+| SQLite | Verified | CRUD, returning rows, batches, transactions |
+| PostgreSQL | Verified | Real single connection, pool concurrency, transactions |
+| MySQL/MariaDB | Preview | Real provider suites; one serialized connection |
+| Cloudflare Worker + D1 | Preview | Compiled Worker and optional local Workerd/D1 suite |
+| Remote Cloudflare deploy | Not claimed | Deployment remains application-owned |
+
+## Deliberate boundaries
+
+- one package does not mean one import; runtime-specific entrypoints keep IO,
+  FFI, and JavaScript interop out of the wrong reachable program;
+- Odroe's database layer is typed SQL, not a full ORM or migration framework;
+- MySQL/MariaDB does not currently expose a pool and has no portable
+  `RETURNING` contract;
+- D1 exposes atomic batches, not an interactive transaction callback;
+- query results are materialized lists; there is no streaming database query
+  surface yet;
+- browser RPC is same-origin; native apps must provide an explicit HTTP(S)
+  origin;
+- local tests do not imply a remote deployment, signed mobile release, DNS
+  change, certificate result, or production database migration.
+
+## First diagnostics
+
+```sh
+dart run odroe generate
+dart analyze --fatal-infos
+dart test
+```
+
+For a generated project, confirm that `.dart_tool/package_config.json` resolves
+`odroe` to the checkout you intend to run. `init` intentionally refuses a
+transitive dependency, custom Dart source, conflicting configuration, or a
+symbolic-link target.
+
+For native RPC, confirm `ODROE_API_ORIGIN` is an absolute HTTP(S) origin with no
+path, query, fragment, or credentials. For local D1, run the locked sequence in
+[First product](/docs/getting-started) and keep every Wrangler command local.
+
+## Report an actionable issue
+
+Include:
+
+- Odroe commit or package version and the imported entrypoint;
+- Dart, Flutter, operating system, Node, npm, and provider versions that matter;
+- the smallest route/function/schema that reproduces the problem;
+- exact command, exit code, and complete first error;
+- whether the failure is analyzer, unit test, native socket, browser, Workerd,
+  real database, or remote provider evidence;
+- generated target diff only when generation changed unexpectedly.
+
+Do not publish credentials, connection strings, access tokens, private request
+bodies, or production data. Open a focused report in the
+[Odroe issue tracker](https://github.com/odroe/odroe/issues).

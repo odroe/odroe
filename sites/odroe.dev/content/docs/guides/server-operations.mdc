@@ -1,10 +1,10 @@
 ---
-title: Server
-description: Typed routes and RPC behind an adapter-neutral HTTP contract.
-order: 40
+title: Server operations
+description: Authenticate, bound, observe, cancel, and host Odroe server work.
+order: 30
 language: en
 ---
-# Server
+# Server operations
 
 `Server` matches typed routes, runs application-owned request modules and
 middleware, loads route data, and returns an adapter-neutral `ServerResponse`.

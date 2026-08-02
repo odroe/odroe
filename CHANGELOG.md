@@ -15,6 +15,10 @@
   gates, D1 migration and development scripts, and a direct Getting Started
   handoff.
   Keep installed Node and Wrangler state out of the Dart publication archive.
+- Rebuild odroe.dev documentation as 16 product-first pages across start,
+  tutorial, concepts, guides, and reference. Make the generated full-stack
+  project the primary onboarding path, preserve old documentation URLs with
+  redirects, and move website-only deployment operations out of public docs.
 - Keep the full-stack reference application product-focused by removing
   uncalled demonstration RPCs, including a custom `PostId` function that had
   no registered serialization adapter. Preserve stream, collection, and
