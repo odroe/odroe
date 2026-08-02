@@ -712,12 +712,17 @@ Wasm 与 Worker 产物都不需要触达 SQLite FFI。
 
 ```sh
 npm ci
-dart run odroe build --server-target cloudflare web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
 
-最后一条命令在当前应用目录启动本地 Workerd；访问 `/` 会得到语义 HTML，
+最后一条命令通过 `odroe dev --server-target cloudflare --server-only`
+重新生成 route，并在成功编译后原子替换 server JavaScript，再调用项目锁定的
+Wrangler 启动本地 Workerd；它不会直接复用可能陈旧的
+`build/odroe/cloudflare`。Dart server 源码变化会重新编译并触发 Workerd reload；
+成功启动后的生成或编译失败会继续服务上一份可用 Worker，修复源码后自动恢复。
+首次 route 生成或编译失败则直接退出，不会运行旧 artifact。访问 `/` 会得到语义 HTML，
 `posts.list` 从 D1 读取记录，`posts.create` 通过 D1 `INSERT ... RETURNING`
 创建并返回完整 `Post`，随后同一列表会刷新。移除 `--local` 或运行 deploy 会
 修改远端状态，不属于这条本地路径。
@@ -821,6 +826,7 @@ callback 必须声明 `write` 或 `rowReturning`，因此 transaction control
 dart run odroe init
 dart run odroe generate
 dart run odroe dev --server-only
+dart run odroe dev --server-target cloudflare --server-only
 flutter devices
 dart run odroe dev -- -d <ios-device-id> --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe dev -- -d chrome
@@ -875,7 +881,11 @@ content hash；若上游代理负责内容编码，可设置
 
 Cloudflare target 生成 `build/odroe/cloudflare/server.js` 与薄
 `worker.mjs`。平台配置仍由应用持有；Odroe 不覆盖已有
-`wrangler.jsonc`。生成的 Fetch bootstrap 只创建一次 `Server`，并把同一实例的
+`wrangler.jsonc`。Cloudflare 开发模式要求 `--server-only`、项目本地
+`node_modules/wrangler` 与 `wrangler.jsonc`；CLI 把本轮生成的
+`worker.mjs` 作为 Wrangler 的显式 entrypoint，从而不会因配置仍指向旧 artifact
+而静默运行陈旧代码。该模式只热更 Dart server，Flutter Web/static assets 仍由
+显式 build 负责。生成的 Fetch bootstrap 只创建一次 `Server`，并把同一实例的
 `invocationHandler` 与 `onError` 交给 adapter。status、header、`Response` 构造及
 response byte bridge 的 adapter-owned 异常只上报一次；handler 与 source stream
 仍由 `Server` 上报。异步 reporter 由 host `waitUntil` 持有，不阻塞 response。

@@ -99,10 +99,7 @@ void main() {
       expect(errors, isEmpty);
       expect(output.toString(), contains('Odroe full-stack starter'));
       expect(output.toString(), contains('npm ci'));
-      expect(
-        output.toString(),
-        contains('build --server-target cloudflare web'),
-      );
+      expect(output.toString(), contains('build --no-server web'));
       final ownedFiles = <File>[
         for (final path in _fullStackFiles) File(p.join(project.path, path)),
       ];
@@ -154,6 +151,10 @@ void main() {
         'init-fixture',
       );
       expect(wrangler['name'], 'init-fixture');
+      expect(
+        (package['scripts']! as Map<String, Object?>)['cloudflare:dev'],
+        'dart run odroe dev --server-target cloudflare --server-only',
+      );
       final nativeServer = File(
         p.join(project.path, 'lib', 'server_native.dart'),
       ).readAsStringSync();

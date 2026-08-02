@@ -336,10 +336,16 @@ its D1 path is:
 ```sh
 flutter pub get
 npm ci
-dart run odroe build --server-target cloudflare web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
+
+`cloudflare:dev` compiles the current Dart Worker before it starts local
+Wrangler and watches later server changes. Initial route generation and compile
+must succeed; after startup, a failed generation or compile leaves the previous
+Worker live. The command never applies migrations or touches remote D1.
+Flutter Web and static assets remain an explicit `build --no-server web` step.
 
 Native returns `SQLite post 42`; local D1 returns `D1 post 42`. A missing ID
 returns a typed RPC 404. Applying a remote migration or deploying the Worker is

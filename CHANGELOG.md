@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `odroe dev --server-target cloudflare --server-only` with a
+  project-local Wrangler runtime, required initial route generation and
+  source-to-Worker compilation, Dart source watching, atomic server JavaScript
+  replacement, and last-known-good service when a subsequent generation or
+  compilation fails.
 - Bind each Query cache identity to an exact `QueryKey<T>` data type across
   options, reads, writes, infinite queries, hydration, and pending server
   handoff. Reject covariant or same-canonical type conflicts without replacing

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:odroe/server_io.dart';
 import 'package:path/path.dart' as p;
 
+import '../atomic_write.dart';
 import 'prerender_manifest.dart';
 import 'project.dart';
 
@@ -258,35 +259,92 @@ Future<int> _buildServer(
   if (target == ServerBuildTarget.native) {
     return _compileNativeServer(project, artifact);
   }
+  return buildCloudflareServer(project, artifact: artifact, out: out);
+}
+
+/// Compiles and atomically replaces one Cloudflare Worker artifact.
+///
+/// Compilation happens beside the final artifact. A failed compile leaves the
+/// previous runnable Worker untouched, which lets local development keep its
+/// last-known-good server while the source is being fixed.
+Future<int> buildCloudflareServer(
+  CliProject project, {
+  required File artifact,
+  required StringSink out,
+  Future<void>? cancelled,
+}) async {
   if (p.extension(artifact.path) != '.js') {
     throw const FormatException(
       'Cloudflare server artifacts must use the .js extension.',
     );
   }
+  artifact.parent.createSync(recursive: true);
   project.writeFetchBootstrap();
-  final process =
-      await startProjectProcess(Platform.resolvedExecutable, <String>[
-        'compile',
-        'js',
-        '-O4',
-        '--no-source-maps',
-        project.fetchBootstrap.path,
-        '-o',
-        artifact.path,
-      ], project: project);
-  final code = await process.exitCode;
-  if (code != 0) return code;
+  final staging = artifact.parent.createTempSync('.odroe-cloudflare-');
+  final stagedArtifact = File(p.join(staging.path, p.basename(artifact.path)));
+  try {
+    final process =
+        await startProjectProcess(Platform.resolvedExecutable, <String>[
+          'compile',
+          'js',
+          '-O4',
+          '--no-source-maps',
+          project.fetchBootstrap.path,
+          '-o',
+          stagedArtifact.path,
+        ], project: project);
+    final code = await _compilerExitCode(process, cancelled);
+    if (code != 0) return code;
 
-  final worker = File(p.join(artifact.parent.path, 'worker.mjs'));
-  _writeTextAtomically(
-    worker,
-    _cloudflareWorkerSource(p.basename(artifact.path)),
-  );
-  out.writeln(
-    'Built Cloudflare Worker -> '
-    '${p.relative(worker.path, from: project.root.path)}',
-  );
-  return 0;
+    final stagedDependencies = File('${stagedArtifact.path}.deps');
+    if (stagedDependencies.existsSync()) {
+      stagedDependencies.renameSync('${artifact.path}.deps');
+    }
+    stagedArtifact.renameSync(artifact.path);
+    final worker = File(p.join(artifact.parent.path, 'worker.mjs'));
+    writeStringIfChanged(
+      worker,
+      _cloudflareWorkerSource(p.basename(artifact.path)),
+    );
+    out.writeln(
+      'Built Cloudflare Worker -> '
+      '${p.relative(worker.path, from: project.root.path)}',
+    );
+    return 0;
+  } finally {
+    if (staging.existsSync()) staging.deleteSync(recursive: true);
+  }
+}
+
+Future<int> _compilerExitCode(Process process, Future<void>? cancelled) async {
+  final exitCode = process.exitCode;
+  if (cancelled == null) return exitCode;
+  var cancellationWon = false;
+  final code = await Future.any<int>(<Future<int>>[
+    exitCode,
+    cancelled.then((_) {
+      cancellationWon = true;
+      return 130;
+    }),
+  ]);
+  if (!cancellationWon) return code;
+  await _terminateProcess(process, exitCode);
+  return 130;
+}
+
+Future<void> _terminateProcess(Process process, Future<int> exitCode) async {
+  process.kill(ProcessSignal.sigterm);
+  try {
+    await exitCode.timeout(const Duration(seconds: 5));
+    return;
+  } on TimeoutException {
+    process.kill(ProcessSignal.sigkill);
+  }
+  try {
+    await exitCode.timeout(const Duration(seconds: 5));
+  } on TimeoutException {
+    // Do not let an unresponsive child keep the CLI alive forever.
+  }
 }
 
 Future<int> _compileNativeServer(CliProject project, File artifact) async {
@@ -309,17 +367,6 @@ export default {
   },
 };
 ''';
-
-void _writeTextAtomically(File file, String source) {
-  if (file.existsSync() && file.readAsStringSync() == source) return;
-  final temporary = File('${file.path}.tmp');
-  try {
-    temporary.writeAsStringSync(source);
-    temporary.renameSync(file.path);
-  } finally {
-    if (temporary.existsSync()) temporary.deleteSync();
-  }
-}
 
 Future<int> _copyPublicAssets(CliProject project, Directory output) async {
   final source = Directory(p.join(project.root.path, 'public')).absolute;

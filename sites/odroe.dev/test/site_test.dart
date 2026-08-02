@@ -313,7 +313,7 @@ void main() {
       );
       _expectInOrder(entry.key, entry.value, <String>[
         'npm ci',
-        'dart run odroe build --server-target cloudflare web',
+        'dart run odroe build --no-server web',
         'npm run cloudflare:migrate:local',
         'npm run cloudflare:dev',
       ]);
@@ -783,7 +783,7 @@ void main() {
     _expectInOrder('Database docs', fullStack, <String>[
       'flutter pub get',
       'npm ci',
-      'dart run odroe build --server-target cloudflare web',
+      'dart run odroe build --no-server web',
       'npm run cloudflare:migrate:local',
       'npm run cloudflare:dev',
     ]);
@@ -892,7 +892,8 @@ void main() {
     });
     expect(package['scripts'], <String, Object?>{
       'cloudflare:migrate:local': 'wrangler d1 migrations apply DB --local',
-      'cloudflare:dev': 'wrangler dev --local',
+      'cloudflare:dev':
+          'dart run odroe dev --server-target cloudflare --server-only',
     });
     expect(packageLock['lockfileVersion'], 3);
     expect(lockedRoot['devDependencies'], package['devDependencies']);
@@ -909,7 +910,7 @@ void main() {
     _expectInOrder('Example README', exampleFullStack, <String>[
       'flutter pub get',
       'npm ci',
-      'dart run odroe build --server-target cloudflare web',
+      'dart run odroe build --no-server web',
       'npm run cloudflare:migrate:local',
       'npm run cloudflare:dev',
     ]);

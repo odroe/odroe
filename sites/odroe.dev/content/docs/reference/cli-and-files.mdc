@@ -22,7 +22,7 @@ passed directly, for example `dart run odroe build apk`.
 | --- | --- | --- |
 | `init` | Initialize an empty Flutter application | `--project`, `--full-stack` |
 | `generate` | Generate client and server route targets | `--routes`, `--output`, `--server-output`, `--watch` |
-| `dev` | Watch sources, run the server, and optionally run Flutter | `--host`, `--port`, `--server-only` |
+| `dev` | Watch sources, run one selected server runtime, and optionally run Flutter | `--host`, `--port`, `--server-target`, `--server-only` |
 | `build` | Build Flutter, prerendered HTML, and/or a server artifact | target and options below |
 
 Every command accepts `--project`, defaulting to the current directory.
@@ -101,6 +101,33 @@ Otherwise pass the device and Flutter flags after `--`:
 ```sh
 dart run odroe dev -- -d chrome
 ```
+
+The default `--server-target native` runs the Dart IO server and retains the
+Flutter integration above. Cloudflare development is intentionally an explicit
+server-only path:
+
+```sh
+npm ci
+dart run odroe build --no-server web
+dart run odroe dev --server-target cloudflare --server-only
+```
+
+It requires application-owned `wrangler.jsonc` and
+the project-local `node_modules/wrangler` package. The starter's config serves
+`build/web`, so the explicit assets build above is required on a clean project
+and after Flutter UI or asset changes. Odroe generates routes, compiles
+`build/odroe/cloudflare/server.js` through a temporary sibling, atomically
+replaces that server JavaScript, and starts `wrangler dev --local` with the
+current `worker.mjs` as an explicit entrypoint. This prevents a stale configured
+entrypoint from silently surviving a Dart source change.
+
+Changes under `lib/` regenerate routes. Server-relevant changes compile a new
+Worker and let Wrangler reload it without restarting the CLI. Initial route
+generation and compilation must succeed before Wrangler starts. After that,
+invalid route or Dart source never replaces the last-known-good Worker; the
+compiler reports the failure and the watcher retries after the next edit. This
+mode does not apply D1 migrations, build Flutter Web, or deploy. Those remain
+explicit commands.
 
 ## Build options
 

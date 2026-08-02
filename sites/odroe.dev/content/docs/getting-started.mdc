@@ -134,16 +134,26 @@ bundle. Run these commands from `my_app`:
 
 ```sh
 npm ci
-dart run odroe build --server-target cloudflare web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
 
-The migration and Wrangler development scripts include `--local`. The final
-command starts local Workerd; `/` serves the semantic handoff and the same
-typed list/create RPC uses the invocation's `DB` binding. Creating a post
-exercises D1 `INSERT ... RETURNING` and refreshes the same typed list. Removing
-`--local` or deploying changes remote state and is a separate operation.
+The migration script and Odroe's Cloudflare development runtime both keep
+Wrangler local. `cloudflare:dev` regenerates routes, compiles the current
+Worker, atomically replaces its server JavaScript, and then starts the
+project-local Wrangler. Dart server changes recompile without restarting the
+CLI. After a successful start, a failed
+generation or compile leaves the last-known-good Worker serving requests until
+the source is fixed. An initial route generation or compile failure exits
+instead of running an old artifact.
+
+`/` serves the semantic handoff and the same typed list/create RPC uses the
+invocation's `DB` binding. Creating a post exercises D1 `INSERT ... RETURNING`
+and refreshes the same typed list. This server-only watch does not rebuild
+Flutter Web or static assets; run `build --no-server web` again after UI or
+asset changes. Removing `--local` or deploying changes remote state and is a
+separate operation.
 
 ## Build only what you need
 

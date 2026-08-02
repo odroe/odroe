@@ -19,7 +19,7 @@
   },
   "scripts": {
     "cloudflare:migrate:local": "wrangler d1 migrations apply DB --local",
-    "cloudflare:dev": "wrangler dev --local"
+    "cloudflare:dev": "dart run odroe dev --server-target cloudflare --server-only"
   },
   "devDependencies": {
     "wrangler": "4.118.0"

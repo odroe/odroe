@@ -6,6 +6,7 @@ import 'package:odroe/server_io.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 
 import 'build.dart';
+import 'cloudflare_development.dart';
 import 'development.dart';
 import 'initialize.dart';
 import 'project.dart';
@@ -34,6 +35,12 @@ Future<int> runOdroe(
   final dev = _generationParser()
     ..addOption('host', defaultsTo: '127.0.0.1')
     ..addOption('port', defaultsTo: '3000')
+    ..addOption(
+      'server-target',
+      allowed: ServerBuildTarget.values.map((target) => target.name),
+      defaultsTo: ServerBuildTarget.native.name,
+      help: 'Server runtime to run.',
+    )
     ..addFlag(
       'server-only',
       negatable: false,
@@ -142,15 +149,7 @@ Future<int> runOdroe(
         command.flag('watch')
             ? await _watchRoutes(project, out, err)
             : (generateRoutes(project, out, err) == null ? 1 : 0),
-      'dev' => await runDevelopment(
-        project,
-        host: command.option('host')!,
-        port: _port(command.option('port')!),
-        serverOnly: command.flag('server-only'),
-        flutterArguments: command.rest,
-        out: out,
-        err: err,
-      ),
+      'dev' => await _runDevelopmentCommand(project, command, out, err),
       'build' => await runBuild(
         project,
         serverOnly: command.flag('server-only'),
@@ -195,6 +194,43 @@ Future<int> runOdroe(
     err.writeln(error.message);
     return error.errorCode == 0 ? 1 : error.errorCode;
   }
+}
+
+Future<int> _runDevelopmentCommand(
+  CliProject project,
+  ArgResults command,
+  StringSink out,
+  StringSink err,
+) {
+  final target = ServerBuildTarget.values.byName(
+    command.option('server-target')!,
+  );
+  final arguments = (
+    host: command.option('host')!,
+    port: _port(command.option('port')!),
+    serverOnly: command.flag('server-only'),
+    flutterArguments: command.rest,
+  );
+  return switch (target) {
+    ServerBuildTarget.native => runDevelopment(
+      project,
+      host: arguments.host,
+      port: arguments.port,
+      serverOnly: arguments.serverOnly,
+      flutterArguments: arguments.flutterArguments,
+      out: out,
+      err: err,
+    ),
+    ServerBuildTarget.cloudflare => runCloudflareDevelopment(
+      project,
+      host: arguments.host,
+      port: arguments.port,
+      serverOnly: arguments.serverOnly,
+      flutterArguments: arguments.flutterArguments,
+      out: out,
+      err: err,
+    ),
+  };
 }
 
 ArgParser _projectParser() => ArgParser()

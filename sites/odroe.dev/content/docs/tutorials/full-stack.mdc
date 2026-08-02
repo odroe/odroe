@@ -331,10 +331,16 @@ Use the project-owned, locked Cloudflare toolchain:
 
 ```sh
 npm ci
-dart run odroe build --server-target cloudflare web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
+
+The final command uses Odroe's Cloudflare server-only watcher rather than
+starting Wrangler against an unchecked artifact. Initial route generation and
+compilation must succeed before Wrangler starts. After startup it watches Dart
+server sources and preserves the last-known-good Worker when generation or
+compilation fails. Rebuild Flutter Web explicitly after page or asset changes.
 
 The generated starter must list `D1 post 42`, create a post through D1
 `INSERT ... RETURNING`, and list it again. The reference app additionally reads

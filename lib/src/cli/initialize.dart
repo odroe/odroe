@@ -174,7 +174,7 @@ bool initializeProject(
     if (fullStack) {
       out.writeln('Cloudflare local:');
       out.writeln('  npm ci');
-      out.writeln('  dart run odroe build --server-target cloudflare web');
+      out.writeln('  dart run odroe build --no-server web');
       out.writeln('  npm run cloudflare:migrate:local');
       out.writeln('  npm run cloudflare:dev');
     } else {

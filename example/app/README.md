@@ -44,10 +44,17 @@ Odroe 的 Dart 依赖图或应用产物。
 ```sh
 flutter pub get
 npm ci
-dart run odroe build --server-target cloudflare web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
+
+`cloudflare:dev` 进入 Odroe 的 Cloudflare server-only 开发模式：每次启动先从
+当前 Dart route 编译 Worker，成功后原子替换 server JavaScript，再调用本项目
+锁定的 Wrangler。后续 server 源码变化会自动 reload；成功启动后的生成或编译
+失败会继续运行上一份可用 Worker，修复后自动恢复。首次 route 生成或编译失败
+会退出。Flutter Web/static assets 不在这条 server-only watch 中，UI 变化后再次
+执行 `dart run odroe build --no-server web`。
 
 访问 `/posts?sort=newest`，创建一条记录，再进入返回 ID 对应的详情页。Native
 初始包含 `SQLite post 42`，本地 D1 初始包含 `D1 post 42`；两者都必须完成
