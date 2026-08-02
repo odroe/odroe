@@ -105,7 +105,7 @@ final class MutationContext {
   final QueryClient client;
 
   /// The optional mutation key.
-  final QueryKey? key;
+  final QueryKey<Object?>? key;
 
   /// User metadata attached to the mutation.
   final Map<String, Object?> meta;
@@ -173,7 +173,7 @@ final class MutationOptions<TData, TVariables, TOptimistic> {
   final MutationFunction<TData, TVariables> mutation;
 
   /// The optional key used for defaults and filtering.
-  final QueryKey? key;
+  final QueryKey<Object?>? key;
 
   /// Mutations in the same non-null scope execute serially.
   final String? scope;

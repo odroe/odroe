@@ -22,7 +22,7 @@ final class QueryFilter {
   });
 
   /// The exact key or key prefix to match.
-  final QueryKey? key;
+  final QueryKey<Object?>? key;
 
   /// Whether [key] must match the complete query key.
   final bool exact;
@@ -101,8 +101,8 @@ final class QueryClient {
   /// Clock and timer implementation.
   final QueryScheduler scheduler;
 
-  final List<(QueryKey, QueryPolicy)> _queryDefaults =
-      <(QueryKey, QueryPolicy)>[];
+  final List<(QueryKey<Object?>, QueryPolicy)> _queryDefaults =
+      <(QueryKey<Object?>, QueryPolicy)>[];
   final Map<String, MutationOptions<dynamic, dynamic, dynamic>>
   _mutationDefaults = <String, MutationOptions<dynamic, dynamic, dynamic>>{};
   int _mounts = 0;
@@ -138,13 +138,13 @@ final class QueryClient {
   }
 
   /// Registers a policy inherited by keys beginning with [prefix].
-  void setQueryDefaults(QueryKey prefix, QueryPolicy policy) {
+  void setQueryDefaults(QueryKey<Object?> prefix, QueryPolicy policy) {
     _queryDefaults.removeWhere((entry) => entry.$1 == prefix);
     _queryDefaults.add((prefix, policy));
   }
 
   /// Resolves client and prefix defaults for [key].
-  QueryPolicy getQueryDefaults(QueryKey key) {
+  QueryPolicy getQueryDefaults(QueryKey<Object?> key) {
     var policy = options.queries;
     for (final entry in _queryDefaults) {
       if (key.startsWith(entry.$1)) policy = policy.merge(entry.$2);
@@ -154,6 +154,7 @@ final class QueryClient {
 
   /// Resolves every runtime option for [value].
   ResolvedQueryOptions<T> resolve<T>(QueryOptions<T> value) {
+    _requireKeyType<T>(value.key);
     final policy = getQueryDefaults(value.key).merge(value.policy);
     final networkMode = policy.networkMode ?? QueryNetworkMode.online;
     return ResolvedQueryOptions<T>(
@@ -186,23 +187,25 @@ final class QueryClient {
 
   /// Returns or creates the cache entry for [options].
   Query<T> query<T>(QueryOptions<T> options) {
-    final existing = queryCache.get<T>(options.key.canonical);
-    if (existing != null) {
-      existing.setOptions(options);
-      return existing;
+    _requireKeyType<T>(options.key);
+    final cached = queryCache.getAny(options.key.canonical);
+    if (cached != null) {
+      if (cached.dataType == T) {
+        final existing = cached as Query<T>;
+        existing.setOptions(options);
+        return existing;
+      }
+      if (cached.dataType == dynamic && cached.options.query == null) {
+        return adoptHydratedQuery(cached, options);
+      }
+      throw _queryTypeConflict(options.key, cached.dataType, T);
     }
-    final untyped = queryCache.getAny(options.key.canonical);
-    final restoredState = untyped == null
-        ? null
-        : _castQueryState<T>(untyped.state);
-    if (untyped != null) queryCache.remove(untyped);
     final resolved = resolve(options);
     final created = Query<T>(
       client: this,
       cache: queryCache,
       options: resolved,
       sourceOptions: options,
-      state: restoredState,
     );
     queryCache.add(created);
     return created;
@@ -210,12 +213,18 @@ final class QueryClient {
 
   /// Restores a query before its executable [QueryOptions] are registered.
   Query<T> restoreQuery<T>(
-    QueryKey key,
+    QueryKey<T> key,
     QueryState<T> state, {
     Map<String, Object?> meta = const <String, Object?>{},
   }) {
+    _requireKeyType<T>(key);
     final existing = queryCache.getAny(key.canonical);
-    if (existing != null) return existing as Query<T>;
+    if (existing != null) {
+      if (existing.dataType != T) {
+        throw _queryTypeConflict(key, existing.dataType, T);
+      }
+      return existing as Query<T>;
+    }
     final policy = getQueryDefaults(key);
     final networkMode = policy.networkMode ?? QueryNetworkMode.online;
     final restored = Query<T>(
@@ -256,7 +265,7 @@ final class QueryClient {
 
   /// Registers executable defaults for mutations with [key].
   void setMutationDefaults<TData, TVariables, TOptimistic>(
-    QueryKey key,
+    QueryKey<Object?> key,
     MutationOptions<TData, TVariables, TOptimistic> options,
   ) {
     if (options.key != key) {
@@ -267,7 +276,7 @@ final class QueryClient {
 
   /// Returns mutation defaults registered for [key].
   MutationOptions<dynamic, dynamic, dynamic>? getMutationDefaults(
-    QueryKey key,
+    QueryKey<Object?> key,
   ) => _mutationDefaults[key.canonical];
 
   /// Creates an observer for a mutation definition.
@@ -283,11 +292,8 @@ final class QueryClient {
   ) => mutationCache.build(this, options).execute(variables);
 
   /// Returns fresh cached data or fetches it.
-  Future<T> fetchQuery<T>(QueryOptions<T> options) {
-    final target = query(options);
-    if (!target.isStale()) return Future<T>.value(target.state.requireData);
-    return target.fetch(cancelRefetch: false);
-  }
+  Future<T> fetchQuery<T>(QueryOptions<T> options) =>
+      dispatchQueryFetch(options, this);
 
   /// Fetches [options] while reporting errors only through cache state.
   Future<void> prefetchQuery<T>(QueryOptions<T> options) async {
@@ -302,41 +308,55 @@ final class QueryClient {
   Future<T> ensureQueryData<T>(
     QueryOptions<T> options, {
     bool revalidateIfStale = false,
-  }) {
-    final target = query(options);
-    if (target.state.hasData) {
-      if (revalidateIfStale && target.isStale()) {
-        unawaited(target.fetch().then<void>((_) {}, onError: (_) {}));
-      }
-      return Future<T>.value(target.state.requireData);
-    }
-    return target.fetch(cancelRefetch: false);
-  }
+  }) =>
+      dispatchQueryEnsure(options, this, revalidateIfStale: revalidateIfStale);
 
   /// Returns cached data for [key], if present.
-  T? getQueryData<T>(QueryKey key) =>
-      queryCache.getAny(key.canonical)?.state.data as T?;
+  T? getQueryData<T>(QueryKey<T> key) {
+    _requireKeyType<T>(key);
+    final query = queryCache.getAny(key.canonical);
+    if (query == null) return null;
+    if (query.dataType == dynamic && query.options.query == null) {
+      return readHydratedQueryState(query, key).data;
+    }
+    if (query.dataType != T) {
+      throw _queryTypeConflict(key, query.dataType, T);
+    }
+    return (query as Query<T>).state.data;
+  }
 
   /// Returns cached state for [key], if present.
-  QueryState<T>? getQueryState<T>(QueryKey key) {
-    final state = queryCache.getAny(key.canonical)?.state;
-    return state == null ? null : _castQueryState<T>(state);
+  QueryState<T>? getQueryState<T>(QueryKey<T> key) {
+    _requireKeyType<T>(key);
+    final query = queryCache.getAny(key.canonical);
+    if (query == null) return null;
+    if (query.dataType == dynamic && query.options.query == null) {
+      return readHydratedQueryState(query, key);
+    }
+    if (query.dataType != T) {
+      throw _queryTypeConflict(key, query.dataType, T);
+    }
+    return (query as Query<T>).state;
   }
 
   /// Updates data for an already registered query.
   T setQueryData<T>(
-    QueryKey key,
+    QueryKey<T> key,
     T Function(T? previous) update, {
     DateTime? updatedAt,
   }) {
+    _requireKeyType<T>(key);
     final target = queryCache.getAny(key.canonical);
     if (target == null) {
       throw StateError(
         'Register QueryOptions for ${key.canonical} before setting its data.',
       );
     }
-    return target.setData(update(target.state.data as T?), updatedAt: updatedAt)
-        as T;
+    if (target.dataType != T) {
+      throw _queryTypeConflict(key, target.dataType, T);
+    }
+    final typed = target as Query<T>;
+    return typed.setData(update(typed.state.data), updatedAt: updatedAt);
   }
 
   /// Returns cached queries matching [filter].
@@ -462,19 +482,19 @@ final class QueryClient {
   }
 }
 
-QueryState<T> _castQueryState<T>(QueryState<dynamic> state) => QueryState<T>(
-  status: state.status,
-  fetchStatus: state.fetchStatus,
-  hasData: state.hasData,
-  data: state.data as T?,
-  dataUpdatedAt: state.dataUpdatedAt,
-  error: state.error,
-  errorStackTrace: state.errorStackTrace,
-  errorUpdatedAt: state.errorUpdatedAt,
-  dataUpdateCount: state.dataUpdateCount,
-  errorUpdateCount: state.errorUpdateCount,
-  fetchFailureCount: state.fetchFailureCount,
-  fetchFailureReason: state.fetchFailureReason,
-  isInvalidated: state.isInvalidated,
-  fetchMeta: state.fetchMeta,
+void _requireKeyType<T>(QueryKey<T> key) {
+  if (key.dataType != T) {
+    throw StateError(
+      'Query key ${key.canonical} has data type ${key.dataType}, not $T.',
+    );
+  }
+}
+
+StateError _queryTypeConflict(
+  QueryKey<Object?> key,
+  Type registered,
+  Type requested,
+) => StateError(
+  'Query ${key.canonical} is registered with data type $registered, '
+  'not $requested.',
 );

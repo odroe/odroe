@@ -36,7 +36,7 @@ final class InfiniteData<TPage, TPageParam> {
 }
 
 /// Input supplied while fetching one page.
-final class InfinitePageContext<TPageParam> {
+final class InfinitePageContext<TPage, TPageParam> {
   /// Creates input for one page fetch.
   const InfinitePageContext({
     required this.query,
@@ -45,7 +45,7 @@ final class InfinitePageContext<TPageParam> {
   });
 
   /// The underlying query context.
-  final QueryContext query;
+  final QueryContext<InfiniteData<TPage, TPageParam>> query;
 
   /// The parameter for the page being fetched.
   final TPageParam pageParam;
@@ -56,7 +56,7 @@ final class InfinitePageContext<TPageParam> {
 
 /// Fetches one page of an infinite query.
 typedef InfinitePageFunction<TPage, TPageParam> =
-    FutureOr<TPage> Function(InfinitePageContext<TPageParam> context);
+    FutureOr<TPage> Function(InfinitePageContext<TPage, TPageParam> context);
 
 /// Selects the parameter for the page after the current last page.
 typedef InfiniteNextPage<TPage, TPageParam> =
@@ -95,7 +95,7 @@ final class InfiniteQueryOptions<TPage, TPageParam> {
   }
 
   /// The cache key shared by all pages.
-  final QueryKey key;
+  final QueryKey<InfiniteData<TPage, TPageParam>> key;
 
   /// Fetches one page.
   final InfinitePageFunction<TPage, TPageParam> query;
@@ -128,10 +128,10 @@ final class InfiniteQueryOptions<TPage, TPageParam> {
         merge: (_, next) => next,
       );
 
-  Future<InfiniteData<TPage, TPageParam>> _fetch(QueryContext context) async {
-    final old = context.client.getQueryData<InfiniteData<TPage, TPageParam>>(
-      key,
-    );
+  Future<InfiniteData<TPage, TPageParam>> _fetch(
+    QueryContext<InfiniteData<TPage, TPageParam>> context,
+  ) async {
+    final old = context.client.getQueryData(key);
     final direction = switch (context.fetchMeta?.kind) {
       'infinite.forward' => InfiniteDirection.forward,
       'infinite.backward' => InfiniteDirection.backward,
@@ -154,7 +154,7 @@ final class InfiniteQueryOptions<TPage, TPageParam> {
             );
       if (parameter == null) return old;
       final page = await query(
-        InfinitePageContext<TPageParam>(
+        InfinitePageContext<TPage, TPageParam>(
           query: context,
           pageParam: parameter,
           direction: direction,
@@ -187,7 +187,7 @@ final class InfiniteQueryOptions<TPage, TPageParam> {
     for (var index = 0; index < targetPages; index++) {
       context.cancelToken.throwIfCancelled();
       final page = await query(
-        InfinitePageContext<TPageParam>(
+        InfinitePageContext<TPage, TPageParam>(
           query: context,
           pageParam: parameter,
           direction: InfiniteDirection.forward,

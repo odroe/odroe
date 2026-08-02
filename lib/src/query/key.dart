@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 /// A deterministic, serializable identity for one server-state resource.
-final class QueryKey {
+final class QueryKey<T extends Object?> {
   /// Creates a key from a stable namespace and optional JSON-like parts.
   QueryKey(this.namespace, [Iterable<Object?> parts = const <Object?>[]])
     : parts = _freezeParts(parts) {
@@ -24,8 +24,13 @@ final class QueryKey {
     if (value is! List || value.isEmpty || value.first is! String) {
       throw FormatException('A query key must be a non-empty JSON array.');
     }
-    return QueryKey(value.first as String, value.skip(1));
+    return QueryKey<T>(value.first as String, value.skip(1));
   }
+
+  /// Exact data type associated with this key.
+  ///
+  /// Runtime cache checks use this token instead of covariant generic checks.
+  Type get dataType => T;
 
   /// Human-readable resource namespace.
   final String namespace;
@@ -40,7 +45,7 @@ final class QueryKey {
   String get canonical => _canonical;
 
   /// Whether this key begins with [prefix].
-  bool startsWith(QueryKey prefix) {
+  bool startsWith(QueryKey<Object?> prefix) {
     if (namespace != prefix.namespace || parts.length < prefix.parts.length) {
       return false;
     }
@@ -55,7 +60,7 @@ final class QueryKey {
 
   @override
   bool operator ==(Object other) =>
-      other is QueryKey && other._canonical == _canonical;
+      other is QueryKey<Object?> && other._canonical == _canonical;
 
   @override
   int get hashCode => _canonical.hashCode;
