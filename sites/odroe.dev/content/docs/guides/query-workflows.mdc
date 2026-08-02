@@ -12,13 +12,18 @@ storage, persistence, or a widget tree for the application.
 ## Name cache identity first
 
 ```dart
-final listKey = QueryKey('posts.list', <Object?>['newest']);
-final detailKey = QueryKey('posts.detail', <Object?>[42]);
+final QueryKey<List<Post>> listKey =
+    QueryKey<List<Post>>('posts.list', <Object?>['newest']);
+final QueryKey<Post> detailKey =
+    QueryKey<Post>('posts.detail', <Object?>[42]);
 ```
 
 Keys snapshot JSON-like parts, including nested lists and string-keyed maps.
 Prefer a small scalar identity. Use structured parts only when they really
-distinguish resources.
+distinguish resources. A standalone key must name its data type; the same
+canonical value cannot hold a different exact type in one query cache. Mutation
+keys remain operation identities and do not bind mutation result types. The
+query data type is not serialized and does not change prefix matching.
 
 ## Connect typed RPC with cancellation
 
@@ -48,7 +53,7 @@ QueryOptions<List<Post>> _createListOptions() {
   final sort = widget.sort;
   final rpc = widget.rpc;
   return QueryOptions<List<Post>>(
-    key: QueryKey('posts.list', <Object?>[sort]),
+    key: QueryKey<List<Post>>('posts.list', <Object?>[sort]),
     query: (query) => routes.listPosts(
       rpc,
       sort,
@@ -109,7 +114,7 @@ typed `INSERT ... RETURNING` statement. The form widget's `State` owns one
 reusable mutation options instance:
 
 ```dart
-final _postListsKey = QueryKey('posts.list');
+final QueryKey<Object?> _postListsPrefix = QueryKey('posts.list');
 late MutationOptions<Post, CreatePost, void> _createOptions;
 
 @override
@@ -132,7 +137,7 @@ MutationOptions<Post, CreatePost, void> _createMutationOptions() {
     key: QueryKey('posts.create'),
     mutation: (input, _) => routes.createPost(rpc, input),
     onSuccess: (_, _, _, mutation) => mutation.client.invalidateQueries(
-      QueryFilter(key: _postListsKey),
+      QueryFilter(key: _postListsPrefix),
     ),
   );
 }
@@ -157,10 +162,10 @@ active execution and its state stay attached. Reuse stored instances for
 unrelated rebuilds; replace them only when a real input, captured client, or
 operation policy changes.
 
-The prefix filter invalidates every sorted post list while leaving unrelated
-resources alone. The UI disables duplicate submission, waits for invalidation,
-and clears the input only after success. It does not optimistically invent a
-database ID.
+The prefix filter uses `_postListsPrefix` to invalidate every sorted post list
+while leaving unrelated resources alone. The UI disables duplicate submission,
+waits for invalidation, and clears the input only after success. It does not
+optimistically invent a database ID.
 
 After any successful side effect, invalidate only the queries whose server
 truth may have changed. Cache removal cannot interrupt a mutation Future that

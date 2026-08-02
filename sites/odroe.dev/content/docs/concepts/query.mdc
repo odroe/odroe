@@ -17,7 +17,7 @@ Future<String> readTitle(int postId) async => 'Post $postId';
 final client = QueryClient();
 final post = await client.fetchQuery(
   QueryOptions<String>(
-    key: QueryKey('post', <Object?>[postId]),
+    key: QueryKey<String>('post', <Object?>[postId]),
     query: (_) => readTitle(postId),
   ),
 );
@@ -28,6 +28,23 @@ string-keyed maps are copied and frozen, so later changes to caller-owned
 collections cannot change cache identity, prefix matching, hydration, or the
 serialized key. Prefer small scalar IDs; use lists and maps only when the
 resource identity is genuinely structured.
+
+The generic argument is an exact query-cache data contract. One canonical query
+entry in a `QueryClient` can hold only one exact `T`; widening `QueryKey<int>`
+to `QueryKey<num>` does not permit a wider read or write. A conflicting options
+registration, read, or update throws `StateError` and leaves the existing query
+entry intact. Mutation keys are operation identities for defaults and filters;
+they do not bind a mutation result type. Give a standalone query key an explicit
+type:
+
+```dart
+final QueryKey<Post> postKey =
+    QueryKey<Post>('posts.detail', <Object?>[postId]);
+```
+
+An inline key can infer `T` from `QueryOptions<T>`. The type does not participate
+in canonical identity, equality, JSON, or prefix matching; use an explicit
+`QueryKey<Object?>` for a standalone prefix.
 
 Queries and infinite queries participate in `QueryClient` cancellation and
 invalidation. Mutations keep separate cache, observer, scope, and retry
@@ -88,6 +105,14 @@ The same serializer contract covers the initial handoff and later streamed
 Query frames. A custom tag available on only one side is rejected instead of
 silently changing the value type.
 
+Serialization deliberately erases the Dart type token. When the target cache
+has no entry, hydration restores a dynamic placeholder. Completed data is
+validated before a typed read or adoption; a mismatch reports `StateError` and
+preserves that placeholder. Pending options may adopt immediately and transfer
+the Future; its eventual value is then validated, and a mismatch leaves the
+typed query in error. Hydration into an existing typed query validates against
+that entry directly.
+
 ## Flutter
 
 Install `QueryModule` from `query_flutter.dart`, then use focused builders for
@@ -117,7 +142,7 @@ QueryOptions<Post> _createPostOptions() {
   final postId = widget.postId;
   final rpc = widget.rpc;
   return QueryOptions<Post>(
-    key: QueryKey('posts.detail', <Object?>[postId]),
+    key: QueryKey<Post>('posts.detail', <Object?>[postId]),
     query: (context) => generated.routes.posts.postId.readPost(
       rpc,
       postId,

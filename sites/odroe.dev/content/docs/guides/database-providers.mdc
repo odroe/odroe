@@ -102,6 +102,17 @@ await sql
     )
     .execute(database);
 
+final inserted = await sql
+    .insertMany(posts, <List<SqlAssignment>>[
+      <SqlAssignment>[posts.id.set(43), posts.title.set('First')],
+      <SqlAssignment>[posts.id.set(44), posts.title.set('Second')],
+    ])
+    .returning(posts.projection)
+    .all(database);
+final insertedById = <int, Post>{
+  for (final post in inserted) post.id: post,
+};
+
 await sql.updateAll(
   posts,
   <SqlAssignment>[posts.title.set('Archived')],
@@ -122,6 +133,18 @@ remain explicit `BoundSql`. SQLite, D1, and PostgreSQL compile the exact
 target-aware operation. MySQL rejects it before reading either iterable or
 touching the database; Odroe does not substitute `INSERT IGNORE` or a different
 conflict contract.
+
+`insertMany` compiles one multi-row `INSERT`. It requires at least one row and
+at least one assignment per row. Every row must use the same table columns,
+objects, and order; duplicate or foreign columns are rejected during preflight,
+before SQL construction or I/O. It is not an `atomicWrite` batch of separate
+statements. Odroe does not auto-chunk, so split large inputs according to the
+selected provider's bound-parameter limit.
+
+SQLite, D1, and PostgreSQL can append `RETURNING`; correlate the result through
+a stable business key such as `id`, because the database does not promise input
+order. MySQL/MariaDB executes the multi-row write with `.execute(database)` and
+has no `RETURNING`; read back by stable keys when rows are needed.
 
 `SqlQueries` preserves its selected dialect on every generated `BoundSql`.
 SQLite and D1 accept `SqlDialect.sqlite`, PostgreSQL accepts

@@ -205,10 +205,23 @@ strategy，使惰性 modules 中的 Router 也能让 typed path/search 与服务
 key-first 实例方法会在分析期拒绝直接错型，并在 key 被泛型宽化后保留运行时
 类型校验。
 
-`QueryKey` 与上述实例身份 key 不同，它是可序列化的值身份。构造时会递归复制并
-冻结 JSON-like parts；调用方之后修改嵌套 List 或 String-keyed Map，不会改变
-cache identity、prefix matching、hydration 或持久化后的 key。优先使用小型标量
-ID，只有资源身份本身是结构化值时才放入 List 或 Map。
+`QueryKey<T>` 与上述实例身份 key 不同，它是可序列化的值身份，也是 cache 中数据的
+精确类型合同。构造时会递归复制并冻结 JSON-like parts；调用方之后修改嵌套 List
+或 String-keyed Map，不会改变 cache identity、prefix matching、hydration 或持久化
+后的 key。独立保存 key 时显式写出类型，例如
+`final QueryKey<Post> postKey = QueryKey('posts.detail', [id]);`；内联放入
+`QueryOptions<Post>` 时可由上下文推断。同一 `QueryClient` 的 query cache 中，同一个
+canonical key 只能绑定一个精确的 `T`；`QueryKey<int>` 不能通过协变当作
+`QueryKey<num>` 读写。错型注册、读取或写入会抛出 `StateError`，原 query cache
+entry 保持不变。Mutation key 只是 mutation defaults/filter 的操作身份，不绑定
+mutation 结果类型。
+
+`T` 不参与 canonical、相等比较、JSON 或 prefix matching。目标 query cache 尚无
+entry 时，序列化 handoff 会先恢复为 dynamic placeholder。completed data 会在 typed
+读取或 adoption 前校验，错型时保留 placeholder；pending options 可以立即 adopt 为
+typed entry，Future 完成时再校验，错型会让该 typed query 进入 error。用于 prefix
+filter 的独立 key 应显式声明为 `QueryKey<Object?>`。优先使用小型标量 ID，只有资源
+身份本身是结构化值时才放入 List 或 Map。
 
 `QueryClient.clear()` 会取消尚在等待网络或串行 scope、还没开始下一次尝试的
 mutation，并让其 Future 以 `MutationCancelledException` 结束，同时释放 cache 与
@@ -610,6 +623,23 @@ await sql
     )
     .execute(database);
 
+final inserted = await sql
+    .insertMany(posts, <List<SqlAssignment>>[
+      <SqlAssignment>[
+        posts.id.set(43),
+        posts.title.set('First'),
+      ],
+      <SqlAssignment>[
+        posts.id.set(44),
+        posts.title.set('Second'),
+      ],
+    ])
+    .returning(posts.projection)
+    .all(database);
+final insertedById = <int, Post>{
+  for (final post in inserted) post.id: post,
+};
+
 await sql.updateAll(
   posts,
   <SqlAssignment>[posts.title.set('Archived')],
@@ -628,6 +658,14 @@ SQLite、D1 与 PostgreSQL 编译为同一条 target-aware
 `ON CONFLICT DO NOTHING`。MySQL 没有等价的 target 语义，因此该方法会在读取
 输入或访问数据库前返回 `SqlErrorCode.unsupported`，不会暗中退化为
 `INSERT IGNORE` 或任意唯一键冲突处理。
+
+`insertMany` 生成一条 multi-row `INSERT`，不是把多条 statement 包进
+`atomicWrite`。外层 rows 与每一行都不能为空；每行必须使用同一张表、没有重复列，
+并与首行保持完全相同的列对象和顺序。Odroe 会先验证全部输入，再构造 SQL。
+它不会自动分块，调用方必须按 provider 的 bound-parameter limit 切分。SQLite、D1
+与 PostgreSQL 可以继续调用 `returning`；MySQL/MariaDB 支持多行写入但不支持
+`RETURNING`。数据库不保证返回行与输入行同序，必须像上例一样按稳定业务 key
+关联，不能按输入下标配对。
 
 `SqlQueries` 会把所选方言保留到每个 `BoundSql`。SQLite 与 D1 接受
 `SqlDialect.sqlite`，PostgreSQL 接受 `SqlDialect.postgres`，MySQL/MariaDB

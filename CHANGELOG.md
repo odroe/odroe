@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Bind each Query cache identity to an exact `QueryKey<T>` data type across
+  options, reads, writes, infinite queries, hydration, and pending server
+  handoff. Reject covariant or same-canonical type conflicts without replacing
+  the existing cache entry.
+- Add provider-neutral `SqlQueries.insertMany` for one typed multi-row INSERT,
+  with complete shape validation before SQL construction and SQLite,
+  PostgreSQL, MySQL/MariaDB, and Cloudflare D1 provider contracts.
 - Generate symmetric typed RPC codecs for project-local named-record typedefs,
   including record inputs, outputs, collections, nullable values, and stream
   items. Upgrade the full-stack starter from a scalar read to typed post list

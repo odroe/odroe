@@ -71,6 +71,36 @@ PostgreSQL support this exact target-aware operation. MySQL is rejected before
 Odroe reads the inputs or performs database I/O because its conflict operations
 do not preserve this contract.
 
+## One statement for many rows
+
+Use `insertMany` when rows share one typed column shape and should be sent as a
+single multi-row `INSERT`:
+
+```dart
+final inserted = await queries
+    .insertMany(posts, <List<SqlAssignment>>[
+      <SqlAssignment>[posts.id.set(43), posts.title.set('First')],
+      <SqlAssignment>[posts.id.set(44), posts.title.set('Second')],
+    ])
+    .returning(posts.projection)
+    .all(database);
+final insertedById = <int, Post>{
+  for (final post in inserted) post.id: post,
+};
+```
+
+The outer collection and every row must be non-empty. Every row must use the
+same table, contain no duplicate columns, and preserve the first row's exact
+column objects and order. Odroe validates the complete input before building
+SQL. It does not split work automatically; the caller must stay within the
+provider's bound-parameter limit.
+
+This is one statement. `atomicWrite` is different: it makes several explicit
+statements one atomic unit. SQLite, D1, and PostgreSQL support `RETURNING` on
+the multi-row insert; MySQL/MariaDB accepts the write but not `RETURNING`.
+Returned row order is database-defined, so correlate by a stable key as above,
+never by input index.
+
 Column assignment and predicate types are checked by Dart. Joined reads qualify
 columns; left joins require an explicitly optional result selection. Updating
 or deleting every row requires the `allRows` confirmation token. Mutations stay

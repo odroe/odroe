@@ -36,6 +36,16 @@ generated record codecs. Application code normally consumes the typed
 `ServerFunctionRef` and does not construct these callbacks itself. A bad typed
 output frame is reported as `RpcProtocolException`.
 
+`QueryKey<T>` binds one canonical query-cache identity to one exact data type.
+`T` does not affect equality, JSON, or prefix matching, but a same-canonical
+type conflict throws `StateError` without replacing the active query entry.
+When no entry exists, hydration restores an untyped placeholder. Completed data
+is checked before typed adoption; pending options may adopt immediately and the
+transferred Future is checked when it completes. A mismatch then leaves that
+typed query in error. Mutation keys are operation identities and do not bind a
+mutation result type. Standalone query keys should declare `T`; standalone
+prefixes should use `QueryKey<Object?>`.
+
 ## Server hosts
 
 | Entrypoint | Owns |
@@ -87,6 +97,7 @@ remain observable.
 | Builder | Contract |
 | --- | --- |
 | `SqlQueries.insert(table, values)` | Inserts one row; empty values use the dialect's default-row syntax |
+| `SqlQueries.insertMany(table, rows)` | Inserts non-empty, identically shaped rows in one statement |
 | `SqlQueries.insertOnConflictDoNothing(table, values, target: columns)` | Inserts one row or ignores the named unique/primary-key conflict |
 | `SqlQueries.updateWhere` / `deleteWhere` | Requires an explicit predicate |
 | `SqlQueries.updateAll` / `deleteAll` | Requires the visible `allRows` confirmation token |
@@ -99,6 +110,14 @@ returns `SqlErrorCode.unsupported` before reading the input iterables because
 MySQL has no equivalent target-specific contract.
 `SqlWrite.returning(projection)` remains available where the dialect supports
 `RETURNING`; an ignored conflict returns no row.
+
+`insertMany` requires at least one row and at least one assignment per row, then
+validates the complete input before SQL construction. Rows must use the same
+table, contain no duplicate columns, and keep the first row's exact column
+objects and order. It does not auto-chunk; callers own provider parameter
+limits. SQLite, D1, and PostgreSQL support `RETURNING`, while MySQL/MariaDB does
+not. Returned rows have no portable input-order guarantee, so associate them by
+a stable key rather than list index.
 
 ## Documents and content
 

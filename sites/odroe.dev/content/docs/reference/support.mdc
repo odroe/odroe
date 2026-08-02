@@ -31,6 +31,9 @@ but the deployment or provider boundary is still deliberately narrow.
 - Odroe's database layer is typed SQL, not a full ORM or migration framework;
 - MySQL/MariaDB does not currently expose a pool and has no portable
   `RETURNING` or conflict-target insert contract;
+- multi-row inserts are one statement and are not auto-chunked; callers must
+  respect provider bind limits. MySQL has no `RETURNING`, and other providers
+  do not guarantee that returned rows follow input order;
 - D1 exposes atomic batches, not an interactive transaction callback;
 - there is no streaming database query surface yet; drivers materialize result
   sets, while typed single-row selects cap the SQL result at two rows;
@@ -58,6 +61,11 @@ symbolic-link target.
 For native RPC, confirm `ODROE_API_ORIGIN` is an absolute HTTP(S) origin with no
 path, query, fragment, or credentials. For local D1, run the locked sequence in
 [First product](/docs/getting-started) and keep every Wrangler command local.
+
+For a Query type conflict, find every definition using the reported canonical
+key. They must share the same exact `QueryKey<T>` data type; do not widen or cast
+a typed key to bypass the check. Give keys stored outside `QueryOptions<T>` an
+explicit type, and use `QueryKey<Object?>` only for prefix matching.
 
 ## Report an actionable issue
 

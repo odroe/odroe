@@ -234,7 +234,8 @@ The Flutter page gives each sort order its own cache identity and passes Query's
 cancellation signal to the generated RPC reference:
 
 ```dart
-final listKey = QueryKey('posts.list', <Object?>[sort]);
+final QueryKey<List<Post>> listKey =
+    QueryKey<List<Post>>('posts.list', <Object?>[sort]);
 
 QueryBuilder<List<Post>>(
   options: QueryOptions<List<Post>>(
@@ -286,7 +287,7 @@ MutationBuilder<Post, CreatePost, void>(
     key: QueryKey('posts.create'),
     mutation: (input, _) => generated.routes.posts.createPost(rpc, input),
     onSuccess: (_, _, _, mutation) => mutation.client.invalidateQueries(
-      QueryFilter(key: QueryKey('posts.list')),
+      QueryFilter(key: QueryKey<Object?>('posts.list')),
     ),
   ),
   builder: (_, state, mutate, _) => FilledButton(

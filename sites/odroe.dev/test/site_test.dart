@@ -328,6 +328,11 @@ void main() {
     expect(tutorial, contains('DatabaseModule.borrowed(database)'));
     expect(tutorial, contains('D1SqlDatabase'));
     expect(tutorial, contains('generated.routes.posts.createPost'));
+    expect(tutorial, contains('final QueryKey<List<Post>> listKey'));
+    expect(
+      tutorial,
+      contains("QueryFilter(key: QueryKey<Object?>('posts.list'))"),
+    );
   });
 
   test('support matrix reports evidence and limits honestly', () async {
@@ -344,6 +349,9 @@ void main() {
     expect(source, contains('| Cloudflare Worker + D1 | Preview |'));
     expect(source, contains('| Remote Cloudflare deploy | Not claimed |'));
     expect(source, contains('typed SQL, not a full ORM'));
+    expect(source, contains('multi-row inserts are one statement'));
+    expect(source, contains('do not guarantee that returned rows'));
+    expect(source, contains('same exact `QueryKey<T>` data type'));
     expect(source, contains('there is no streaming database query'));
     expect(source, isNot(contains('all major databases')));
     expect(source, isNot(contains('one-click deployment')));
@@ -670,10 +678,18 @@ void main() {
       query: (_) async => 42,
     );
     expect(options.key, QueryKey('post', <Object?>[42]));
-    expect(source, contains("key: QueryKey('post', <Object?>[postId]),"));
+    expect(
+      source,
+      contains("key: QueryKey<String>('post', <Object?>[postId]),"),
+    );
     expect(source, isNot(contains("QueryKey(<Object?>['post', postId])")));
     expect(source, contains('Nested lists and string-keyed maps are copied'));
     expect(source, contains('cannot change cache identity, prefix matching'));
+    expect(source, contains('exact query-cache data contract'));
+    expect(source, contains('`QueryKey<int>` to `QueryKey<num>`'));
+    expect(source, contains('leaves the existing query entry intact'));
+    expect(source, contains('Mutation keys are operation identities'));
+    expect(source, contains('`QueryKey<Object?>` for a standalone prefix'));
     expect(
       source,
       contains(
@@ -721,6 +737,10 @@ void main() {
     expect(source, contains('baseUri: rpcBaseUri(),'));
     expect(source, contains('serializer: serializer'));
     expect(source, contains('DocumentModule(serializer: serializer)'));
+    expect(source, contains('hydration restores a dynamic placeholder'));
+    expect(source, contains('Completed data is validated before'));
+    expect(source, contains('Pending options may adopt immediately'));
+    expect(source, contains('leaves the typed query in error'));
   });
 
   test('Database docs preserve the typed dialect boundary', () async {
@@ -742,6 +762,14 @@ void main() {
     expect(source, contains('dialect: SqlDialect.postgres'));
     expect(source, contains('default to `dialect: null`'));
     expect(source, contains('does not prove that the SQL is portable'));
+    expect(source, contains('`insertMany` compiles one multi-row `INSERT`'));
+    expect(source, contains('requires at least one row'));
+    expect(source, contains('at least one assignment per row'));
+    expect(source, contains('before SQL construction or I/O'));
+    expect(source, contains('not an `atomicWrite` batch'));
+    expect(source, contains('does not auto-chunk'));
+    expect(source, contains('does not promise input order'));
+    expect(source, contains('MySQL/MariaDB executes the multi-row write'));
     expect(source, contains('Future<void> close()'));
     expect(source, contains('DatabaseModule.owned'));
     expect(source, contains('DatabaseModule.borrowed'));
