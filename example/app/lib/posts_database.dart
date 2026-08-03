@@ -10,8 +10,8 @@ final class Posts extends SqlTable<Post> {
 
   @override
   late final SqlProjection<Post> projection = SqlProjection<Post>(
-    <SqlSelection<Object?>>[id, title],
-    (row) => (id: id.read(row, 0), title: title.read(row, 1)),
+    columns: [id, title],
+    decode: (row) => (id: row.read(id), title: row.read(title)),
   );
 }
 

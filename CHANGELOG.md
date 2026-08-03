@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Define typed SQL projections with named `columns` and `decode` arguments,
+  then decode through `SqlProjectionRow.read(selection)` so application
+  records no longer depend on hand-maintained result indices.
+  Resolve selections by exact identity, reject missing or repeated selections,
+  and validate the complete row width before decoding. Keep positional
+  `SqlRow` access only for the explicit raw-SQL transport path.
 - Add the application-owned `odroe.yaml` with one explicit
   `sqlite_migrations` path. Full-stack starters now build and develop against
   their SQLite history without repeating a CLI flag, while

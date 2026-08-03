@@ -144,15 +144,25 @@ candidate, nullable rows retain SQL's three-valued behavior. Rejecting empty
 
 | Builder | Contract |
 | --- | --- |
+| `SqlProjection(columns:, decode:)` | Declares ordered result selections and a selection-addressed application decoder |
 | `SqlQueries.selectTable(table, ...)` | Reads the table's default typed projection |
 | `SqlQueries.select(from:, projection:, ...)` | Reads a custom typed projection with optional joins |
 | `SqlQueries.countRows(table, joins:, where:)` | Returns typed `COUNT(*)` for relation rows produced by the table, joins, and predicate |
+| `SqlProjectionRow.read(selection)` | Decodes the exact declared selection without a numeric result index |
 
 Both select builders accept explicit `orderBy`, `limit`, and `offset`. The
 full-stack starter builds keyset pages without another abstraction: strict ID
 comparison, unique ID ordering, and `limit + 1` determine a nullable
 `nextCursor`. The RPC result contains at most the requested limit. Odroe does
 not attach a count query or infer a cursor from an arbitrary ordering.
+
+`SqlProjection` preserves the declared columns as the SQL result order, but its
+decoder addresses fields by selection identity. It rejects the same selection
+object twice, a decoder read for a selection outside the projection, and a raw
+row whose width differs from the declared columns. Alias and optional modifiers
+create distinct result selections; use those exact objects in both the column
+list and decoder. Positional `SqlRow.read(index, codec)` remains the raw SQL
+transport API.
 
 `countRows` returns `SqlRead<int>` and shares select's table scope, join
 validation, aliases, and bound predicates. Joined duplicates count separately;

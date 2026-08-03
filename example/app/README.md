@@ -32,8 +32,9 @@ ledger 行放在同一事务。它在取得跨连接写锁后重新校验完整�
 parser 执行 statement，不按分号切割。首次启动应用两条 migration；直接调用
 runner 时返回 2，后续调用返回 0。已应用文件被编辑、删除、重命名或补插低版本
 时会拒绝启动，而不是猜测或修复历史。
-`Posts` projection 解码完整的
-`Post` 记录。`Post`、`PostPage`、`CreatePost` 与 `ListPostsInput` 放在客户端安全的
+`Posts` projection 通过 `row.read(selection)` 解码完整的 `Post` 记录，不维护
+容易随列顺序漂移的数字下标。`Post`、`PostPage`、`CreatePost` 与
+`ListPostsInput` 放在客户端安全的
 `lib/posts.dart`，route compiler 为输入、输出、列表和 stream item 生成对称
 codec，不需要手写 JSON adapter。server 将 `limit` 限定在 `1..50`，按唯一
 ID 使用严格 keyset predicate，读取 `limit + 1` 行后只返回 `items` 与可选

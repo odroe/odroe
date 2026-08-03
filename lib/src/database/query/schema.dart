@@ -54,7 +54,9 @@ final class SqlTableColumn<T> implements SqlSelection<T> {
   /// Dart-to-SQL value codec.
   SqlCodec<T> get codec => resultColumn.codec;
 
-  /// Decodes this column from [row] at [index].
+  /// Decodes this column from a raw transport [row] at [index].
+  ///
+  /// Typed projection decoders should use [SqlProjectionRow.read] instead.
   @override
   T read(SqlRow row, int index) => resultColumn.read(row, index);
 
@@ -227,7 +229,9 @@ extension SqlNumericColumnUpdates<T extends num> on SqlTableColumn<T> {
 /// codec. This lets a `LEFT JOIN` decode a non-nullable schema column as an
 /// optional result without weakening INSERT and UPDATE types.
 abstract interface class SqlSelection<T> {
-  /// Decodes this selection from [row] at [index].
+  /// Decodes this selection from a raw transport [row] at [index].
+  ///
+  /// Typed projection decoders should use [SqlProjectionRow.read] instead.
   T read(SqlRow row, int index);
 
   SqlTableColumn<Object?> get _source;
@@ -263,34 +267,86 @@ final class _SqlSelection<T> implements SqlSelection<T> {
   T read(SqlRow row, int index) => _resultColumn.read(row, index);
 }
 
-/// Ordered selected columns and a decoder for one result value.
+/// One result row addressed by the selections declared in its projection.
+final class SqlProjectionRow {
+  const SqlProjectionRow._(this._row, this._columns);
+
+  final SqlRow _row;
+  final List<SqlSelection<Object?>> _columns;
+
+  /// Decodes [selection] from its declared position in this projection.
+  ///
+  /// Selection identity is exact. An alias or optional selection must be read
+  /// through the same object that was added to the projection.
+  T read<T>(SqlSelection<T> selection) {
+    for (var index = 0; index < _columns.length; index++) {
+      if (identical(_columns[index], selection)) {
+        return selection.read(_row, index);
+      }
+    }
+    throw ArgumentError(
+      'Selection "${selection._resultColumn.name}" is not part of this '
+      'SQL projection.',
+    );
+  }
+}
+
+/// Ordered selected columns and a selection-addressed decoder.
 final class SqlProjection<R> {
-  /// Creates a projection from [columns] in decoder order.
-  factory SqlProjection(
-    Iterable<SqlSelection<Object?>> columns,
-    R Function(SqlRow row) decode,
-  ) {
+  /// Creates a projection whose [columns] define the SQL result order.
+  ///
+  /// The decoder reads those same selection objects through
+  /// [SqlProjectionRow.read], so application fields never depend on numeric
+  /// result positions.
+  factory SqlProjection({
+    required Iterable<SqlSelection<Object?>> columns,
+    required R Function(SqlProjectionRow row) decode,
+  }) {
     final copied = List<SqlSelection<Object?>>.unmodifiable(columns);
     if (copied.isEmpty) {
       throw ArgumentError('A SQL projection requires at least one column.');
+    }
+    for (final (index, selection) in copied.indexed) {
+      for (var previous = 0; previous < index; previous++) {
+        if (identical(copied[previous], selection)) {
+          throw ArgumentError(
+            'Selection "${selection._resultColumn.name}" is used more than '
+            'once in one SQL projection. Create a distinct alias for each '
+            'result position.',
+          );
+        }
+      }
     }
     return SqlProjection<R>._(copied, decode);
   }
 
   /// Creates a scalar projection for one [column].
   factory SqlProjection.column(SqlSelection<R> column) {
-    return SqlProjection<R>(<SqlSelection<Object?>>[
-      column,
-    ], (row) => column.read(row, 0));
+    return SqlProjection<R>(
+      columns: <SqlSelection<Object?>>[column],
+      decode: (row) => row.read(column),
+    );
   }
 
-  const SqlProjection._(this.columns, this.decode);
+  const SqlProjection._(this.columns, this._decode);
 
   /// Selected columns in result order.
   final List<SqlSelection<Object?>> columns;
 
-  /// Converts one ordered [SqlRow] into an application value.
-  final R Function(SqlRow row) decode;
+  final R Function(SqlProjectionRow row) _decode;
+
+  /// Converts one raw transport [row] into an application value.
+  R decode(SqlRow row) {
+    if (row.length != columns.length) {
+      final expectedLabel = columns.length == 1 ? 'column' : 'columns';
+      throw SqlException(
+        SqlErrorCode.invalidRow,
+        'SQL projection expected ${columns.length} $expectedLabel, received '
+        '${row.length}.',
+      );
+    }
+    return _decode(SqlProjectionRow._(row, columns));
+  }
 }
 
 /// One type-checked assignment accepted by a SQL UPDATE.

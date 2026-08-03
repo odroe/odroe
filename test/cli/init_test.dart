@@ -199,6 +199,9 @@ void main() {
       expect(database, isNot(contains('CREATE TABLE')));
       expect(database, contains("import 'posts.dart';"));
       expect(database, contains('SqlTable<Post>'));
+      expect(database, contains('id: row.read(id)'));
+      expect(database, contains('title: row.read(title)'));
+      expect(database, isNot(contains('.read(row,')));
       expect(database, isNot(contains('INSERT INTO posts')));
       expect(models, contains('typedef Post = ({int id, String title});'));
       expect(models, contains('typedef CreatePost = ({String title});'));

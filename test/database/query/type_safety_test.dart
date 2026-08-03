@@ -38,6 +38,8 @@ void main() {
         'undefined_method',
         'undefined_method',
         'argument_type_not_assignable',
+        'argument_type_not_assignable',
+        'argument_type_not_assignable',
       ],
     );
   });

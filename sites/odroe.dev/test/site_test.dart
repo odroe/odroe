@@ -433,6 +433,28 @@ void main() {
     expect(api, contains('`connectTimeout` separately bounds'));
   });
 
+  test('typed SQL docs address projections by selection identity', () async {
+    final sources = <String>[
+      await File('../../README.md').readAsString(),
+      await File(
+        'content/docs/tutorials/full-stack.mdc',
+      ).readAsString(),
+      await File(
+        'content/docs/guides/database-providers.mdc',
+      ).readAsString(),
+      await File('content/docs/reference/api.mdc').readAsString(),
+    ];
+
+    for (final source in sources.take(3)) {
+      expect(source, contains('row.read('));
+    }
+    for (final source in sources) {
+      expect(source, isNot(contains('.read(row,')));
+    }
+    expect(sources.last, contains('SqlProjectionRow.read(selection)'));
+    expect(sources.last, contains('selection identity'));
+  });
+
   test('cross-platform RPC examples require a native HTTP origin', () async {
     final readme = await File('../../README.md').readAsString();
     final overview = await File('content/docs/index.mdc').readAsString();

@@ -174,10 +174,10 @@ final class _Users extends SqlTable<({int id, String? nickname})> {
 
   @override
   late final SqlProjection<({int id, String? nickname})> projection =
-      SqlProjection<({int id, String? nickname})>(<SqlSelection<Object?>>[
-        id,
-        nickname,
-      ], (row) => (id: id.read(row, 0), nickname: nickname.read(row, 1)));
+      SqlProjection<({int id, String? nickname})>(
+        columns: [id, nickname],
+        decode: (row) => (id: row.read(id), nickname: row.read(nickname)),
+      );
 }
 
 List<Object?> _values(BoundSql statement) => <Object?>[

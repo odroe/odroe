@@ -580,10 +580,10 @@ final class _MysqlBatchRecords extends SqlTable<_MysqlBatchRecord> {
 
   @override
   late final SqlProjection<_MysqlBatchRecord> projection =
-      SqlProjection<_MysqlBatchRecord>(<SqlSelection<Object?>>[
-        id,
-        label,
-      ], (row) => (id: id.read(row, 0), label: label.read(row, 1)));
+      SqlProjection<_MysqlBatchRecord>(
+        columns: [id, label],
+        decode: (row) => (id: row.read(id), label: row.read(label)),
+      );
 }
 
 final class _MysqlBatchLinks extends SqlTable<int> {

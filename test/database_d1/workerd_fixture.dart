@@ -416,10 +416,10 @@ final class _ConflictRecords extends SqlTable<_ConflictRecord> {
 
   @override
   late final SqlProjection<_ConflictRecord> projection =
-      SqlProjection<_ConflictRecord>(<SqlSelection<Object?>>[
-        id,
-        value,
-      ], (row) => (id: id.read(row, 0), value: value.read(row, 1)));
+      SqlProjection<_ConflictRecord>(
+        columns: [id, value],
+        decode: (row) => (id: row.read(id), value: row.read(value)),
+      );
 }
 
 final class _ConflictRecordLinks extends SqlTable<int> {

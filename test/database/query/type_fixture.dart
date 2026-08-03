@@ -13,10 +13,10 @@ final class TypeFixtureTable extends SqlTable<({String email, bool active})> {
 
   @override
   late final SqlProjection<({String email, bool active})> projection =
-      SqlProjection<({String email, bool active})>(<SqlTableColumn<Object?>>[
-        email,
-        active,
-      ], (row) => (email: email.read(row, 0), active: active.read(row, 1)));
+      SqlProjection<({String email, bool active})>(
+        columns: [email, active],
+        decode: (row) => (email: row.read(email), active: row.read(active)),
+      );
 }
 
 List<SqlPredicate> validPredicates(TypeFixtureTable table) => <SqlPredicate>[

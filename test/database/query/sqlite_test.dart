@@ -554,13 +554,14 @@ void main() {
     final posts = _Posts();
     await queries
         .insert(users, <SqlAssignment>[
+          users.id.set(42),
           users.email.set('ada@example.com'),
           users.active.set(true),
         ])
         .execute(database);
     await database.atomicWrite(<BoundSql>[
       queries.insert(posts, <SqlAssignment>[
-        posts.authorId.set(1),
+        posts.authorId.set(42),
         posts.title.set('Typed relations'),
       ]).statement,
       queries.insert(posts, <SqlAssignment>[
@@ -569,13 +570,18 @@ void main() {
       ]).statement,
     ]);
 
-    final innerProjection = SqlProjection<({String title, String authorEmail})>(
-      <SqlSelection<Object?>>[posts.title, users.email],
-      (row) => (
-        title: posts.title.read(row, 0),
-        authorEmail: users.email.read(row, 1),
-      ),
-    );
+    final innerProjection =
+        SqlProjection<
+          ({int postId, int authorId, String title, String authorEmail})
+        >(
+          columns: [users.id, posts.title, posts.id, users.email],
+          decode: (row) => (
+            postId: row.read(posts.id),
+            authorId: row.read(users.id),
+            title: row.read(posts.title),
+            authorEmail: row.read(users.email),
+          ),
+        );
     expect(
       await queries
           .select(
@@ -586,18 +592,21 @@ void main() {
             projection: innerProjection,
           )
           .all(database),
-      <({String title, String authorEmail})>[
-        (title: 'Typed relations', authorEmail: 'ada@example.com'),
+      <({int postId, int authorId, String title, String authorEmail})>[
+        (
+          postId: 1,
+          authorId: 42,
+          title: 'Typed relations',
+          authorEmail: 'ada@example.com',
+        ),
       ],
     );
 
     final optionalAuthor = users.email.optional.as('author_email');
     final leftProjection = SqlProjection<({String title, String? authorEmail})>(
-      <SqlSelection<Object?>>[posts.title, optionalAuthor],
-      (row) => (
-        title: posts.title.read(row, 0),
-        authorEmail: optionalAuthor.read(row, 1),
-      ),
+      columns: [posts.title, optionalAuthor],
+      decode: (row) =>
+          (title: row.read(posts.title), authorEmail: row.read(optionalAuthor)),
     );
     expect(
       await queries
@@ -633,12 +642,12 @@ final class _Users extends SqlTable<_User> {
 
   @override
   late final SqlProjection<_User> projection = SqlProjection<_User>(
-    <SqlTableColumn<Object?>>[id, email, nickname, active],
-    (row) => (
-      id: id.read(row, 0),
-      email: email.read(row, 1),
-      nickname: nickname.read(row, 2),
-      active: active.read(row, 3),
+    columns: [id, email, nickname, active],
+    decode: (row) => (
+      id: row.read(id),
+      email: row.read(email),
+      nickname: row.read(nickname),
+      active: row.read(active),
     ),
   );
 }
@@ -657,11 +666,11 @@ final class _Posts extends SqlTable<_Post> {
 
   @override
   late final SqlProjection<_Post> projection = SqlProjection<_Post>(
-    <SqlSelection<Object?>>[id, authorId, title],
-    (row) => (
-      id: id.read(row, 0),
-      authorId: authorId.read(row, 1),
-      title: title.read(row, 2),
+    columns: [id, authorId, title],
+    decode: (row) => (
+      id: row.read(id),
+      authorId: row.read(authorId),
+      title: row.read(title),
     ),
   );
 }
@@ -676,12 +685,9 @@ final class _Counters extends SqlTable<({int id, int value, double ratio})> {
   @override
   late final SqlProjection<({int id, int value, double ratio})> projection =
       SqlProjection<({int id, int value, double ratio})>(
-        <SqlSelection<Object?>>[id, value, ratio],
-        (row) => (
-          id: id.read(row, 0),
-          value: value.read(row, 1),
-          ratio: ratio.read(row, 2),
-        ),
+        columns: [id, value, ratio],
+        decode: (row) =>
+            (id: row.read(id), value: row.read(value), ratio: row.read(ratio)),
       );
 }
 

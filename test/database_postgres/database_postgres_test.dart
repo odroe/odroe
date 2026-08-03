@@ -807,9 +807,10 @@ final class _ConflictPosts extends SqlTable<_ConflictPost> {
 
   @override
   late final SqlProjection<_ConflictPost> projection =
-      SqlProjection<_ConflictPost>(<SqlSelection<Object?>>[id, title], (row) {
-        return (id: id.read(row, 0), title: title.read(row, 1));
-      });
+      SqlProjection<_ConflictPost>(
+        columns: [id, title],
+        decode: (row) => (id: row.read(id), title: row.read(title)),
+      );
 }
 
 final class _PostLinks extends SqlTable<int> {

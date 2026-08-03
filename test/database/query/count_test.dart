@@ -130,10 +130,10 @@ final class _Users extends SqlTable<({int id, bool active})> {
 
   @override
   late final SqlProjection<({int id, bool active})> projection =
-      SqlProjection<({int id, bool active})>(<SqlSelection<Object?>>[
-        id,
-        active,
-      ], (row) => (id: id.read(row, 0), active: active.read(row, 1)));
+      SqlProjection<({int id, bool active})>(
+        columns: [id, active],
+        decode: (row) => (id: row.read(id), active: row.read(active)),
+      );
 }
 
 final class _Posts extends SqlTable<({int id, int? authorId, String title})> {
@@ -149,11 +149,11 @@ final class _Posts extends SqlTable<({int id, int? authorId, String title})> {
   @override
   late final SqlProjection<({int id, int? authorId, String title})> projection =
       SqlProjection<({int id, int? authorId, String title})>(
-        <SqlSelection<Object?>>[id, authorId, title],
-        (row) => (
-          id: id.read(row, 0),
-          authorId: authorId.read(row, 1),
-          title: title.read(row, 2),
+        columns: [id, authorId, title],
+        decode: (row) => (
+          id: row.read(id),
+          authorId: row.read(authorId),
+          title: row.read(title),
         ),
       );
 }

@@ -55,11 +55,11 @@ final class Posts extends SqlTable<Post> {
 
   @override
   late final projection = SqlProjection<Post>(
-    <SqlSelection<Object?>>[id, authorId, title],
-    (row) => (
-      id: id.read(row, 0),
-      authorId: authorId.read(row, 1),
-      title: title.read(row, 2),
+    columns: [id, authorId, title],
+    decode: (row) => (
+      id: row.read(id),
+      authorId: row.read(authorId),
+      title: row.read(title),
     ),
   );
 }
@@ -83,10 +83,10 @@ final selected = await sql
 
 final authorName = authors.displayName.optional.as('author_name');
 final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
-  <SqlSelection<Object?>>[posts.title, authorName],
-  (row) => (
-    title: posts.title.read(row, 0),
-    authorName: authorName.read(row, 1),
+  columns: [posts.title, authorName],
+  decode: (row) => (
+    title: row.read(posts.title),
+    authorName: row.read(authorName),
   ),
 );
 final rows = await sql.select(
@@ -134,6 +134,13 @@ await sql.updateWhere(
   where: counters.id.equals(42),
 ).execute(database);
 ```
+
+`SqlProjectionRow.read(selection)` resolves the exact selection object rather
+than a caller-maintained result index. Reordering projection columns therefore
+does not exchange same-name JOIN values. Reading an undeclared selection or
+reusing the same selection object twice is rejected; create an explicit
+`.as(...)` result selection when one physical column must appear twice. Raw
+`SqlRow.read(index, codec)` remains available for handwritten `BoundSql`.
 
 The dialect is explicit. `posts.title.set(42)` is an analyzer error.
 `updateAll` and `deleteAll` also require the `allRows` confirmation token.

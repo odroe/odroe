@@ -582,12 +582,12 @@ final class Posts extends SqlTable<Post> {
 
   @override
   late final projection = SqlProjection<Post>(
-    <SqlSelection<Object?>>[id, authorId, title, views],
-    (row) => (
-      id: id.read(row, 0),
-      authorId: authorId.read(row, 1),
-      title: title.read(row, 2),
-      views: views.read(row, 3),
+    columns: [id, authorId, title, views],
+    decode: (row) => (
+      id: row.read(id),
+      authorId: row.read(authorId),
+      title: row.read(title),
+      views: row.read(views),
     ),
   );
 }
@@ -621,10 +621,10 @@ final totalPosts = await sql.countRows(posts).one(database);
 
 final authorName = authors.displayName.optional.as('author_name');
 final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
-  <SqlSelection<Object?>>[posts.title, authorName],
-  (row) => (
-    title: posts.title.read(row, 0),
-    authorName: authorName.read(row, 1),
+  columns: [posts.title, authorName],
+  decode: (row) => (
+    title: row.read(posts.title),
+    authorName: row.read(authorName),
   ),
 );
 final rows = await sql.select(
@@ -681,6 +681,13 @@ await sql.updateWhere(
   where: posts.id.equals(42),
 ).execute(database);
 ```
+
+`SqlProjectionRow.read(selection)` 将 application field 绑定到声明时的同一个
+selection 对象。即使调整 projection 中的 SQL 列顺序，decoder 也不会错读另一个
+同名、同 codec 的 JOIN 列。读取未声明的 selection、重复放入同一个 selection，
+或 provider 返回错误列数都会在结果进入业务值前失败；确需重复选择一列时先用
+`.as(...)` 创建独立 result selection。只有显式使用 `BoundSql` 的底层
+`SqlRow` decoder 继续按 index 读取。
 
 `posts.title.set(42)` 会在分析期失败。`updateAll`/`deleteAll` 同时要求方法名
 与 `allRows` 两次确认。联表查询会自动限定列名；`LEFT JOIN` 右侧的非空

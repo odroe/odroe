@@ -67,8 +67,8 @@ final class Posts extends SqlTable<Post> {
 
   @override
   late final SqlProjection<Post> projection = SqlProjection<Post>(
-    <SqlSelection<Object?>>[id, title],
-    (row) => (id: id.read(row, 0), title: title.read(row, 1)),
+    columns: [id, title],
+    decode: (row) => (id: row.read(id), title: row.read(title)),
   );
 }
 
@@ -77,9 +77,11 @@ const postQueries = SqlQueries(SqlDialect.sqlite);
 ```
 
 `posts.title.set(42)` fails analysis. The projection decodes an entire `Post`
-instead of letting a `Map<String, dynamic>` escape into the product. This is a
-typed relational layer, not an identity-map ORM: schema ownership, SQL
-operations, migrations, and resource lifetimes remain visible.
+through the declared selection objects, so there are no numeric result indices
+to keep synchronized with the column list. Missing or repeated selections fail
+before a value reaches the product. This is a typed relational layer, not an
+identity-map ORM: schema ownership, SQL operations, migrations, and resource
+lifetimes remain visible.
 
 ## Add page and create functions
 

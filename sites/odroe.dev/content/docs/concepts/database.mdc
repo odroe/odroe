@@ -52,6 +52,13 @@ multiple rows, preserving an exact zero-or-one cardinality contract. The table
 projection can decode a complete application record; the caller does not need
 to rebuild an entity from unrelated scalar queries.
 
+Projection decoders receive `SqlProjectionRow` and call `row.read(selection)`.
+The same selection object declares the SQL result and decodes its Dart field,
+so reordering columns cannot silently exchange same-name, same-codec JOIN
+values. A missing or repeated selection and an unexpected result width fail
+before the application value is returned. Numeric indices remain only on the
+explicit raw `SqlRow` transport escape hatch.
+
 `countRows` compiles typed `COUNT(*)` through the same table, join, and
 predicate scope. It counts relation rows, so one-to-many joins can increase the
 result; an empty relation returns `0`. Ordering, pagination, grouping, and a

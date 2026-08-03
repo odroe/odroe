@@ -294,10 +294,10 @@ void main() {
           final read = const SqlQueries(SqlDialect.sqlite).select(
             from: users,
             projection: SqlProjection<String>(
-              <SqlSelection<Object?>>[users.email],
-              (row) {
+              columns: [users.email],
+              decode: (row) {
                 decodeCalls++;
-                return users.email.read(row, 0);
+                return row.read(users.email);
               },
             ),
           );
@@ -325,10 +325,10 @@ void main() {
         final users = _Users();
         final authorEmail = users.email.optional.as('author_email');
         final projection = SqlProjection<({String title, String? authorEmail})>(
-          <SqlSelection<Object?>>[posts.title, authorEmail],
-          (row) => (
-            title: posts.title.read(row, 0),
-            authorEmail: authorEmail.read(row, 1),
+          columns: [posts.title, authorEmail],
+          decode: (row) => (
+            title: row.read(posts.title),
+            authorEmail: row.read(authorEmail),
           ),
         );
         final quote = dialect == SqlDialect.mysql ? '`' : '"';
@@ -833,12 +833,12 @@ final class _Users extends SqlTable<_User> {
 
   @override
   late final SqlProjection<_User> projection = SqlProjection<_User>(
-    <SqlTableColumn<Object?>>[id, email, nickname, active],
-    (row) => (
-      id: id.read(row, 0),
-      email: email.read(row, 1),
-      nickname: nickname.read(row, 2),
-      active: active.read(row, 3),
+    columns: [id, email, nickname, active],
+    decode: (row) => (
+      id: row.read(id),
+      email: row.read(email),
+      nickname: row.read(nickname),
+      active: row.read(active),
     ),
   );
 }
@@ -857,11 +857,11 @@ final class _Posts extends SqlTable<_Post> {
 
   @override
   late final SqlProjection<_Post> projection = SqlProjection<_Post>(
-    <SqlSelection<Object?>>[id, authorId, title],
-    (row) => (
-      id: id.read(row, 0),
-      authorId: authorId.read(row, 1),
-      title: title.read(row, 2),
+    columns: [id, authorId, title],
+    decode: (row) => (
+      id: row.read(id),
+      authorId: row.read(authorId),
+      title: row.read(title),
     ),
   );
 }
@@ -876,12 +876,9 @@ final class _Counters extends SqlTable<({int id, int value, double ratio})> {
   @override
   late final SqlProjection<({int id, int value, double ratio})> projection =
       SqlProjection<({int id, int value, double ratio})>(
-        <SqlSelection<Object?>>[id, value, ratio],
-        (row) => (
-          id: id.read(row, 0),
-          value: value.read(row, 1),
-          ratio: ratio.read(row, 2),
-        ),
+        columns: [id, value, ratio],
+        decode: (row) =>
+            (id: row.read(id), value: row.read(value), ratio: row.read(ratio)),
       );
 }
 
