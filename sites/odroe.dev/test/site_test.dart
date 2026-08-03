@@ -433,15 +433,46 @@ void main() {
     expect(api, contains('`connectTimeout` separately bounds'));
   });
 
+  test('native SQLite docs preserve the foreign-key safety boundary', () async {
+    final readme = await File('../../README.md').readAsString();
+    final concept = await File(
+      'content/docs/concepts/database.mdc',
+    ).readAsString();
+    final guide = await File(
+      'content/docs/guides/database-providers.mdc',
+    ).readAsString();
+    final api = await File('content/docs/reference/api.mdc').readAsString();
+
+    expect(readme, contains('PRAGMA foreign_keys = ON'));
+    expect(readme, contains('foreign_key_check'));
+    expect(readme, contains('SqlErrorCode.constraint'));
+    expect(readme, contains('既有孤儿数据'));
+    expect(readme, contains('raw `PRAGMA` 仍能改变连接状态'));
+    for (final source in <String>[concept, guide, api]) {
+      final normalized = source.replaceAll(RegExp(r'\s+'), ' ');
+      expect(normalized, contains('PRAGMA foreign_keys = ON'));
+      expect(normalized, contains('SqlErrorCode.constraint'));
+      expect(
+        normalized,
+        contains(
+          'Opening does not run `PRAGMA foreign_key_check`, scan, reject, or '
+          'repair historical orphan rows.',
+        ),
+      );
+      expect(normalized, contains('raw `PRAGMA` can still change'));
+    }
+    final normalizedGuide = guide.replaceAll(RegExp(r'\s+'), ' ');
+    final normalizedApi = api.replaceAll(RegExp(r'\s+'), ' ');
+    expect(normalizedGuide, contains('not evidence about a remote D1'));
+    expect(normalizedGuide, contains('cannot change `PRAGMA foreign_keys`'));
+    expect(normalizedApi, contains('changes to `PRAGMA foreign_keys`'));
+  });
+
   test('typed SQL docs address projections by selection identity', () async {
     final sources = <String>[
       await File('../../README.md').readAsString(),
-      await File(
-        'content/docs/tutorials/full-stack.mdc',
-      ).readAsString(),
-      await File(
-        'content/docs/guides/database-providers.mdc',
-      ).readAsString(),
+      await File('content/docs/tutorials/full-stack.mdc').readAsString(),
+      await File('content/docs/guides/database-providers.mdc').readAsString(),
       await File('content/docs/reference/api.mdc').readAsString(),
     ];
 

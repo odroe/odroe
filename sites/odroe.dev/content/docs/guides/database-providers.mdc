@@ -520,6 +520,17 @@ real artifact when binary size matters.
 
 ## Schema and migrations
 
+Native `SqliteDatabase.open` and `openInMemory` enable and read back
+`PRAGMA foreign_keys = ON` before migrations or application SQL can use the
+connection. A connection that cannot confirm the setting is closed instead of
+being returned. Later foreign-key violations use `SqlErrorCode.constraint`.
+Opening does not run `PRAGMA foreign_key_check`, scan, reject, or repair
+historical orphan rows. Caller-authored raw `PRAGMA` can still change this
+trusted connection setting; do not turn it off. D1 keeps its provider-owned
+runtime semantics; this native connection check is not evidence about a remote
+D1 deployment. Native migrations cannot change `PRAGMA foreign_keys`; the
+connection owns that safety setting.
+
 Native SQLite and D1 can consume one application-owned, append-only SQL history:
 
 ```text

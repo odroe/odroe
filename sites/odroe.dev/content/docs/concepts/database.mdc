@@ -209,7 +209,7 @@ has no reliable process-shutdown hook, so D1 remains invocation-scoped.
 
 | Entrypoint | Status | Current boundary |
 | --- | --- | --- |
-| `database_sqlite.dart` | Verified | Native CRUD, returning rows, batches, transactions, migrations |
+| `database_sqlite.dart` | Verified | Native CRUD, returning rows, batches, transactions, migrations, open-time enforcement-setting verification |
 | `database_postgres.dart` | Verified | Single connection, bounded pool, transactions |
 | `database_mysql.dart` | Preview | MySQL and MariaDB, serialized connection or owned pool with bounded connections and waiters |
 | `database_d1.dart` | Preview | Local Workerd/D1 contract, atomic batches, transient-error classification |
@@ -218,6 +218,13 @@ All drivers are in the same Dart package but use separate entrypoints so the
 wrong implementation is not reachable from a target. Package dependency
 resolution and native build hooks still have cost; inspect real artifacts when
 binary size matters.
+
+Every native `SqliteDatabase.open` and `openInMemory` connection enables and
+reads back `PRAGMA foreign_keys = ON` before it is returned. A connection that
+cannot confirm the setting is closed, and later violations use
+`SqlErrorCode.constraint`. Opening does not run `PRAGMA foreign_key_check`,
+scan, reject, or repair historical orphan rows. Caller-authored raw `PRAGMA`
+can still change this trusted connection setting; do not turn it off.
 
 Schema files remain application-owned. Native SQLite and D1 may consume the
 same append-only `NNNN_snake_case.sql` history while keeping provider-owned

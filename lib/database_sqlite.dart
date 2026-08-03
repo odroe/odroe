@@ -1,4 +1,5 @@
-/// Native SQLite database support for Odroe.
+/// Native SQLite support that enables and verifies foreign-key enforcement
+/// when opening each connection, with append-only migration support.
 library;
 
 export 'database.dart';

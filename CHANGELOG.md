@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Enable and verify SQLite foreign-key enforcement whenever a native in-memory
+  or file connection opens. Reject a connection that cannot enable the safety
+  setting, keep violations on the existing `SqlErrorCode.constraint` path, and
+  leave historical orphan detection or repair to explicit application work.
+  Reject migrations that try to change the connection-owned setting.
 - Define typed SQL projections with named `columns` and `decode` arguments,
   then decode through `SqlProjectionRow.read(selection)` so application
   records no longer depend on hand-maintained result indices.

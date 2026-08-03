@@ -147,6 +147,104 @@ UPDATE records SET slug = 'odroe' WHERE id = 1;
       );
     });
 
+    test('enforces foreign keys declared by a migration', () async {
+      final migration = _migration('0001_relations.sql', '''
+CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT;
+CREATE TABLE children (
+  id INTEGER PRIMARY KEY,
+  parent_id INTEGER NOT NULL REFERENCES parents (id)
+) STRICT;
+''');
+
+      expect(await database.applyMigrations(<SqliteMigration>[migration]), 1);
+      await expectLater(
+        database.execute(
+          BoundSql.raw('INSERT INTO children (id, parent_id) VALUES (1, 99)'),
+        ),
+        throwsA(
+          isA<SqlException>().having(
+            (error) => error.code,
+            'code',
+            SqlErrorCode.constraint,
+          ),
+        ),
+      );
+      expect(await _integer(database, 'SELECT count(*) FROM children'), 0);
+    });
+
+    test('rejects migrations that change foreign-key enforcement', () async {
+      for (final pragma in <String>[
+        'PRAGMA foreign_keys = OFF;',
+        "PRAGMA main.'foreign_keys' = OFF;",
+        'PRAGMA main."foreign_keys" = OFF;',
+        'PRAGMA main.`foreign_keys` = OFF;',
+        'PRAGMA main.[foreign_keys] = OFF;',
+        '; -- empty statement\nPRAGMA main.foreign_keys(OFF);',
+      ]) {
+        final migration = _migration('0001_disable_foreign_keys.sql', '''
+CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT;
+$pragma
+CREATE TABLE children (
+  id INTEGER PRIMARY KEY,
+  parent_id INTEGER NOT NULL REFERENCES parents (id)
+) STRICT;
+INSERT INTO children (id, parent_id) VALUES (1, 99);
+''');
+
+        await expectLater(
+          database.applyMigrations(<SqliteMigration>[migration]),
+          throwsA(
+            isA<SqliteMigrationException>()
+                .having(
+                  (error) => error.message,
+                  'message',
+                  contains('cannot change SQLite foreign-key enforcement'),
+                )
+                .having(
+                  (error) => error.migration,
+                  'migration',
+                  migration.name,
+                ),
+          ),
+          reason: pragma,
+        );
+        expect(await _integer(database, 'PRAGMA foreign_keys'), 1);
+        expect(
+          await _integer(
+            database,
+            "SELECT count(*) FROM sqlite_master WHERE name IN "
+            "('parents', 'children')",
+          ),
+          0,
+          reason: pragma,
+        );
+        expect(
+          await _integer(database, 'SELECT count(*) FROM _odroe_migrations'),
+          0,
+          reason: pragma,
+        );
+      }
+    });
+
+    test('allows unrelated and deferred foreign-key pragmas', () async {
+      final migration = _migration('0001_allowed_pragmas.sql', '''
+PRAGMA foreign_keys;
+PRAGMA defer_foreign_keys = ON;
+CREATE TABLE foreign_keys (id INTEGER PRIMARY KEY) STRICT;
+PRAGMA table_info(foreign_keys);
+PRAGMA foreign_key_list("foreign_keys");
+''');
+
+      expect(await database.applyMigrations(<SqliteMigration>[migration]), 1);
+      expect(
+        await _integer(
+          database,
+          "SELECT count(*) FROM sqlite_master WHERE name = 'foreign_keys'",
+        ),
+        1,
+      );
+    });
+
     test('rolls back the current file and can retry its correction', () async {
       final first = _migration(
         '0001_create_records.sql',

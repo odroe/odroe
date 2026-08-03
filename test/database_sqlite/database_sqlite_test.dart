@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:odroe/database_sqlite.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
@@ -12,6 +14,154 @@ void main() {
   });
 
   tearDown(() => database.close());
+
+  test('enables foreign keys for memory and file connections', () async {
+    expect(await _integer(database, 'PRAGMA foreign_keys'), 1);
+
+    final directory = await Directory.systemTemp.createTemp(
+      'odroe-foreign-keys-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final fileDatabase = SqliteDatabase.open(
+      p.join(directory.path, 'app.sqlite3'),
+    );
+    try {
+      expect(await _integer(fileDatabase, 'PRAGMA foreign_keys'), 1);
+    } finally {
+      await fileDatabase.close();
+    }
+  });
+
+  test('reenables foreign keys without rewriting existing file data', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'odroe-existing-orphan-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final path = p.join(directory.path, 'app.sqlite3');
+    final legacyDatabase = SqliteDatabase.open(path);
+    try {
+      await legacyDatabase.execute(
+        BoundSql.raw('CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT'),
+      );
+      await legacyDatabase.execute(
+        BoundSql.raw('''
+          CREATE TABLE children (
+            id INTEGER PRIMARY KEY,
+            parent_id INTEGER NOT NULL REFERENCES parents (id)
+          ) STRICT
+        '''),
+      );
+      await legacyDatabase.execute(BoundSql.raw('PRAGMA foreign_keys = OFF'));
+      expect(await _integer(legacyDatabase, 'PRAGMA foreign_keys'), 0);
+      await legacyDatabase.execute(
+        BoundSql.raw('INSERT INTO children (id, parent_id) VALUES (1, 99)'),
+      );
+    } finally {
+      await legacyDatabase.close();
+    }
+
+    final reopened = SqliteDatabase.open(path);
+    try {
+      expect(await _integer(reopened, 'PRAGMA foreign_keys'), 1);
+      expect(await _count(reopened, 'children'), 1);
+      await expectLater(
+        reopened.execute(
+          BoundSql.raw('INSERT INTO children (id, parent_id) VALUES (2, 99)'),
+        ),
+        _throwsSql(SqlErrorCode.constraint),
+      );
+      expect(await _count(reopened, 'children'), 1);
+    } finally {
+      await reopened.close();
+    }
+  });
+
+  test('rejects orphan inserts, updates, and parent deletes', () async {
+    await database.execute(
+      BoundSql.raw('CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT'),
+    );
+    await database.execute(
+      BoundSql.raw('''
+        CREATE TABLE children (
+          id INTEGER PRIMARY KEY,
+          parent_id INTEGER NOT NULL REFERENCES parents (id)
+        ) STRICT
+      '''),
+    );
+
+    await expectLater(
+      database.execute(
+        BoundSql.raw('INSERT INTO children (id, parent_id) VALUES (1, 99)'),
+      ),
+      _throwsSql(SqlErrorCode.constraint),
+    );
+    await database.execute(BoundSql.raw('INSERT INTO parents (id) VALUES (1)'));
+    await database.execute(
+      BoundSql.raw('INSERT INTO children (id, parent_id) VALUES (1, 1)'),
+    );
+    await expectLater(
+      database.execute(
+        BoundSql.raw('UPDATE children SET parent_id = 99 WHERE id = 1'),
+      ),
+      _throwsSql(SqlErrorCode.constraint),
+    );
+    await expectLater(
+      database.execute(BoundSql.raw('DELETE FROM parents WHERE id = 1')),
+      _throwsSql(SqlErrorCode.constraint),
+    );
+
+    expect(await _count(database, 'parents'), 1);
+    expect(await _count(database, 'children'), 1);
+  });
+
+  test('rolls back foreign key failures in every transaction API', () async {
+    await database.execute(
+      BoundSql.raw('CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT'),
+    );
+    await database.execute(
+      BoundSql.raw('''
+        CREATE TABLE children (
+          id INTEGER PRIMARY KEY,
+          parent_id INTEGER NOT NULL REFERENCES parents (id)
+        ) STRICT
+      '''),
+    );
+
+    await expectLater(
+      database.atomicWrite(<BoundSql>[
+        BoundSql.raw(
+          'INSERT INTO parents (id) VALUES (1)',
+          kind: SqlStatementKind.write,
+        ),
+        BoundSql.raw(
+          'INSERT INTO children (id, parent_id) VALUES (1, 99)',
+          kind: SqlStatementKind.write,
+        ),
+      ]),
+      _throwsSql(SqlErrorCode.constraint),
+    );
+    expect(await _count(database, 'parents'), 0);
+
+    await expectLater(
+      database.transaction<void>((transaction) async {
+        await transaction.execute(
+          BoundSql.raw(
+            'INSERT INTO parents (id) VALUES (2)',
+            kind: SqlStatementKind.write,
+          ),
+        );
+        await transaction.execute(
+          BoundSql.raw(
+            'INSERT INTO children (id, parent_id) VALUES (2, 99)',
+            kind: SqlStatementKind.write,
+          ),
+        );
+      }),
+      _throwsSql(SqlErrorCode.constraint),
+    );
+    expect(await _count(database, 'parents'), 0);
+    expect(await _count(database, 'children'), 0);
+  });
 
   test('runs real CRUD and maps SQLite values', () async {
     await database.execute(
@@ -600,6 +750,13 @@ Future<int> _count(SqlExecutor database, String table) async {
     (row) => row.read(0, sqlInt),
   );
   return values.single;
+}
+
+Future<int> _integer(SqlExecutor database, String sql) async {
+  return (await database.query(
+    BoundSql.raw(sql),
+    (row) => row.read(0, sqlInt),
+  )).single;
 }
 
 Matcher _throwsSql(SqlErrorCode code) {

@@ -783,6 +783,12 @@ final database = SqliteDatabase.open(databaseFile.path);
 await database.applyMigrations(migrations);
 ```
 
+`SqliteDatabase.open` 与 `openInMemory` 会在返回连接前设置并读回验证
+`PRAGMA foreign_keys = ON`。无法确认安全设置时，Odroe 会关闭底层连接并让打开失败；
+之后的外键违反沿用 `SqlErrorCode.constraint`。这只约束启用后的写入；打开连接不会
+运行 `foreign_key_check`，也不会拒绝或修复既有孤儿数据。Odroe 不提供专用关闭选项；
+调用方发送的 raw `PRAGMA` 仍能改变连接状态，因此不要主动关闭外键检查。
+
 文件名必须是 `NNNN_snake_case.sql`，版本唯一且只能向后追加。Native ledger 保存
 文件名与完整 SQL；已应用文件被修改、删除、改名或在较小版本补插时，启动会在
 执行 pending SQL 前失败。runner 取得 `BEGIN IMMEDIATE` 写锁后会再次校验完整
@@ -790,7 +796,7 @@ source 与 ledger，避免两个进程接受互不完整的历史。每个文件
 逐 statement 执行，而不是按分号切割；文件与 ledger 行仍在同一事务提交，失败只
 回滚当前文件，此前成功版本保留。`main._odroe_migrations` 是保留名，其 canonical
 schema 也会在提交前验证。这里没有 schema diff、down migration 或通用 migration
-DSL。
+DSL。Native migration 不能改变 `PRAGMA foreign_keys`；该安全设置由连接持有。
 
 Cloudflare 入口在 `invocationModules` 中包装 D1 binding。Wrangler 消费同一组
 `migrations/*.sql`，但维护自己的 `d1_migrations` ledger；Worker Fetch 不会自动

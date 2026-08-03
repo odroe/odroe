@@ -32,6 +32,27 @@ void main() {
 
   tearDown(() => database.close());
 
+  test('typed inserts respect SQLite foreign keys', () async {
+    final posts = _Posts();
+
+    await expectLater(
+      queries
+          .insert(posts, <SqlAssignment>[
+            posts.authorId.set(99),
+            posts.title.set('Orphan'),
+          ])
+          .execute(database),
+      throwsA(
+        isA<SqlException>().having(
+          (error) => error.code,
+          'code',
+          SqlErrorCode.constraint,
+        ),
+      ),
+    );
+    expect(await queries.selectTable(posts).all(database), isEmpty);
+  });
+
   test('runs typed SQLite CRUD and RETURNING', () async {
     final inserted = await queries
         .insert(users, <SqlAssignment>[

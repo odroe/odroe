@@ -12,7 +12,8 @@ import '../database/row.dart';
 import '../database/statement.dart';
 import 'migration.dart';
 
-/// A native SQLite database with serialized access.
+/// A native SQLite database with serialized access that enables and verifies
+/// foreign-key enforcement when opening each connection.
 final class SqliteDatabase implements TransactionalSqlDatabase {
   /// Opens the SQLite database at [path].
   factory SqliteDatabase.open(String path) {
@@ -446,6 +447,12 @@ final class SqliteDatabase implements TransactionalSqlDatabase {
       final consumed = statement.sql.length;
       try {
         final keyword = _firstSqlWord(statement.sql);
+        if (keyword == 'pragma' && _changesForeignKeysPragma(statement.sql)) {
+          throw SqliteMigrationException(
+            'Migration scripts cannot change SQLite foreign-key enforcement.',
+            migration: migration.name,
+          );
+        }
         if (_forbiddenMigrationStatements.contains(keyword)) {
           throw SqliteMigrationException(
             'Migration scripts cannot control transactions or connections.',
@@ -636,13 +643,31 @@ sqlite.Database _openSqliteDatabase(sqlite.Database Function() open) {
   final database = _runSqlite(open, operation: 'open');
   try {
     _runSqlite(
+      () => database.execute('PRAGMA foreign_keys = ON'),
+      operation: 'enable foreign keys',
+    );
+    final foreignKeysEnabled = _runSqlite(
+      () => database.select('PRAGMA foreign_keys').single.columnAt(0),
+      operation: 'verify foreign keys',
+    );
+    if (foreignKeysEnabled != 1) {
+      throw const SqlException(
+        SqlErrorCode.driver,
+        'SQLite foreign key enforcement could not be enabled.',
+      );
+    }
+    _runSqlite(
       () => database.execute('PRAGMA busy_timeout = 5000'),
       operation: 'configure busy timeout',
     );
     return database;
-  } on Object {
-    database.close();
-    rethrow;
+  } on Object catch (error, stackTrace) {
+    try {
+      database.close();
+    } on Object {
+      // Preserve the configuration failure that made the connection unsafe.
+    }
+    Error.throwWithStackTrace(error, stackTrace);
   }
 }
 
@@ -900,10 +925,69 @@ String _firstSqlWord(String sql) {
   return '';
 }
 
-Iterable<String> _sqlWords(String sql) sync* {
-  var index = 0;
+bool _changesForeignKeysPragma(String sql) {
+  var start = _skipSqlTrivia(sql, 0);
+  while (start < sql.length && sql.codeUnitAt(start) == 0x3b) {
+    start = _skipSqlTrivia(sql, start + 1);
+  }
+  final pragma = _readSqlIdentifier(sql, start);
+  if (pragma == null || pragma.value != 'pragma') return false;
+  var name = _readSqlIdentifier(sql, pragma.next);
+  if (name == null) return false;
+  final afterName = _skipSqlTrivia(sql, name.next);
+  if (afterName < sql.length && sql.codeUnitAt(afterName) == 0x2e) {
+    name = _readSqlIdentifier(sql, afterName + 1);
+    if (name == null) return false;
+  }
+  if (name.value != 'foreign_keys') return false;
+  final operation = _skipSqlTrivia(sql, name.next);
+  if (operation >= sql.length) return false;
+  final code = sql.codeUnitAt(operation);
+  return code == 0x28 || code == 0x3d;
+}
+
+({String value, int next})? _readSqlIdentifier(String sql, int start) {
+  var index = _skipSqlTrivia(sql, start);
+  if (index >= sql.length) return null;
+  final opening = sql.codeUnitAt(index);
+  if (opening == 0x27 ||
+      opening == 0x22 ||
+      opening == 0x60 ||
+      opening == 0x5b) {
+    final closing = opening == 0x5b ? 0x5d : opening;
+    final value = StringBuffer();
+    index++;
+    while (index < sql.length) {
+      final code = sql.codeUnitAt(index++);
+      if (code != closing) {
+        value.writeCharCode(code);
+        continue;
+      }
+      if (index < sql.length && sql.codeUnitAt(index) == closing) {
+        value.writeCharCode(closing);
+        index++;
+        continue;
+      }
+      return (value: value.toString().toLowerCase(), next: index);
+    }
+    return null;
+  }
+  if (!_isSqlWordCode(opening)) return null;
+  final wordStart = index++;
+  while (index < sql.length && _isSqlWordCode(sql.codeUnitAt(index))) {
+    index++;
+  }
+  return (value: sql.substring(wordStart, index).toLowerCase(), next: index);
+}
+
+int _skipSqlTrivia(String sql, int start) {
+  var index = start;
   while (index < sql.length) {
     final code = sql.codeUnitAt(index);
+    if (code == 0x20 || code >= 0x09 && code <= 0x0d) {
+      index++;
+      continue;
+    }
     if (code == 0x2d &&
         index + 1 < sql.length &&
         sql.codeUnitAt(index + 1) == 0x2d) {
@@ -926,6 +1010,20 @@ Iterable<String> _sqlWords(String sql) sync* {
       index = index + 1 < sql.length ? index + 2 : sql.length;
       continue;
     }
+    return index;
+  }
+  return index;
+}
+
+Iterable<String> _sqlWords(String sql) sync* {
+  var index = 0;
+  while (index < sql.length) {
+    final next = _skipSqlTrivia(sql, index);
+    if (next != index) {
+      index = next;
+      continue;
+    }
+    final code = sql.codeUnitAt(index);
     if (code == 0x27) {
       index = _skipQuotedSql(sql, index, 0x27);
       continue;

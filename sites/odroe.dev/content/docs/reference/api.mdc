@@ -82,13 +82,21 @@ imports `rpc.dart`; Fetch and IO imports stay at their host entrypoints.
 | Entrypoint | Owns |
 | --- | --- |
 | `database.dart` | Typed SQL contracts, codecs, rows, statements, modules, relational queries |
-| `database_sqlite.dart` | Native `SqliteDatabase`, `SqliteMigration`, loader, and runner |
+| `database_sqlite.dart` | Native `SqliteDatabase` with open-time enforcement-setting verification, plus `SqliteMigration`, loader, and runner |
 | `database_postgres.dart` | `PostgresDatabase` plus public connection/pool constructor types |
 | `database_mysql.dart` | Preview native `MysqlDatabase.open` and owned bounded `pool` for MySQL/MariaDB |
 | `database_d1.dart` | Preview Cloudflare `D1SqlDatabase` with portable transient-error classification |
 
 Do not import native drivers into shared route or Worker code. Put the driver in
 the runtime-specific server entry and expose only `DatabaseModule` to handlers.
+
+`SqliteDatabase.open` and `openInMemory` enable and read back
+`PRAGMA foreign_keys = ON` before returning a native connection. Setup failure
+closes the connection; later violations surface as `SqlErrorCode.constraint`.
+Opening does not run `PRAGMA foreign_key_check`, scan, reject, or repair
+historical orphan rows. Caller-authored raw `PRAGMA` can still change this
+trusted connection setting; do not turn it off. This native guarantee does not
+make a claim about D1 runtime configuration.
 
 `MysqlDatabase.pool` defaults to four physical connections, 32 operations
 waiting for capacity, and a ten-second queue timeout. A full or expired queue
@@ -111,7 +119,8 @@ lock, revalidates the complete exact history under that lock, and returns the
 number newly committed. SQLite parses each statement, while Odroe keeps the
 file and its ledger row in one runner-owned transaction. It rejects edited,
 renamed, missing, and backfilled applied files; transaction or connection
-control; `writable_schema`; and any use or schema change of the reserved
+control, including changes to `PRAGMA foreign_keys`; `writable_schema`; and any
+use or schema change of the reserved
 `main._odroe_migrations` ledger through `SqliteMigrationException`. Driver
 failures remain available as `cause` without placing the SQL in the exception
 string.
