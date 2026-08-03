@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:mysql_dart/exception.dart' as mysql_error;
@@ -40,6 +41,142 @@ void main() {
       open(timeout: const Duration(microseconds: 1)),
       throwsArgumentError,
     );
+
+    MysqlDatabase pool({
+      int port = 3306,
+      int maxConnections = 4,
+      int maxPendingOperations = 32,
+      Duration queueTimeout = const Duration(seconds: 10),
+      String collation = 'utf8mb4_general_ci',
+      int cacheSize = 32,
+      Duration timeout = const Duration(seconds: 1),
+    }) {
+      return MysqlDatabase.pool(
+        host: '127.0.0.1',
+        port: port,
+        database: 'odroe',
+        username: 'odroe',
+        password: 'secret',
+        maxConnections: maxConnections,
+        maxPendingOperations: maxPendingOperations,
+        queueTimeout: queueTimeout,
+        collation: collation,
+        preparedStatementCacheSize: cacheSize,
+        connectTimeout: timeout,
+      );
+    }
+
+    expect(() => pool(port: 0), throwsArgumentError);
+    expect(() => pool(maxConnections: 0), throwsArgumentError);
+    expect(() => pool(maxPendingOperations: -1), throwsArgumentError);
+    expect(
+      () => pool(queueTimeout: const Duration(microseconds: 1)),
+      throwsArgumentError,
+    );
+    expect(
+      () => pool(collation: 'utf8mb4_general_ci; SELECT 1'),
+      throwsArgumentError,
+    );
+    expect(() => pool(cacheSize: 0), throwsArgumentError);
+    expect(
+      () => pool(timeout: const Duration(microseconds: 1)),
+      throwsArgumentError,
+    );
+  });
+
+  test('creates a lazy pool and closes it idempotently without I/O', () async {
+    final database = MysqlDatabase.pool(
+      host: 'not-resolved.invalid',
+      database: 'odroe',
+      username: 'odroe',
+      password: 'secret',
+    );
+
+    final firstClose = database.close();
+    final secondClose = database.close();
+    expect(identical(firstClose, secondClose), isTrue);
+    await firstClose;
+    await expectLater(
+      database.query(BoundSql.raw('SELECT 1'), (row) => row),
+      _throwsSql(SqlErrorCode.closed),
+    );
+  });
+
+  test('failed pooled opens release capacity and advance waiters', () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final accepted = <Socket>[];
+    final subscription = server.listen(accepted.add);
+    addTearDown(() async {
+      for (final socket in accepted) {
+        socket.destroy();
+      }
+      await subscription.cancel();
+      await server.close();
+    });
+    final database = MysqlDatabase.pool(
+      host: InternetAddress.loopbackIPv4.address,
+      port: server.port,
+      database: 'odroe',
+      username: 'odroe',
+      password: 'secret',
+      maxConnections: 1,
+      useTls: false,
+      connectTimeout: const Duration(milliseconds: 50),
+    );
+    addTearDown(database.close);
+
+    final codes = await Future.wait(<Future<SqlErrorCode>>[
+      _readSqlCode(database.query(BoundSql.raw('SELECT 1'), (row) => row)),
+      _readSqlCode(database.query(BoundSql.raw('SELECT 2'), (row) => row)),
+    ]).timeout(const Duration(seconds: 2));
+
+    expect(codes, <SqlErrorCode>[
+      SqlErrorCode.unavailable,
+      SqlErrorCode.unavailable,
+    ]);
+  });
+
+  test('bounds the pending pool queue and times out acquisition', () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final accepted = <Socket>[];
+    final subscription = server.listen(accepted.add);
+    addTearDown(() async {
+      for (final socket in accepted) {
+        socket.destroy();
+      }
+      await subscription.cancel();
+      await server.close();
+    });
+    final database = MysqlDatabase.pool(
+      host: InternetAddress.loopbackIPv4.address,
+      port: server.port,
+      database: 'odroe',
+      username: 'odroe',
+      password: 'secret',
+      maxConnections: 1,
+      maxPendingOperations: 1,
+      queueTimeout: const Duration(milliseconds: 20),
+      useTls: false,
+      connectTimeout: const Duration(milliseconds: 100),
+    );
+    addTearDown(database.close);
+
+    final opening = _readSqlError(
+      database.query(BoundSql.raw('SELECT 1'), (row) => row),
+    );
+    final waiting = _readSqlError(
+      database.query(BoundSql.raw('SELECT 2'), (row) => row),
+    );
+    final rejected = _readSqlError(
+      database.query(BoundSql.raw('SELECT 3'), (row) => row),
+    );
+
+    expect((await rejected).message, 'The MySQL pool pending queue is full.');
+    expect(
+      (await waiting).message,
+      'Timed out waiting for a MySQL pool connection.',
+    );
+    expect((await opening).code, SqlErrorCode.unavailable);
   });
 
   group('MySQL binding', () {
@@ -308,4 +445,17 @@ Matcher _throwsSql(SqlErrorCode code) {
   return throwsA(
     isA<SqlException>().having((error) => error.code, 'code', code),
   );
+}
+
+Future<SqlErrorCode> _readSqlCode(Future<Object?> operation) async {
+  return (await _readSqlError(operation)).code;
+}
+
+Future<SqlException> _readSqlError(Future<Object?> operation) async {
+  try {
+    await operation;
+  } on SqlException catch (error) {
+    return error;
+  }
+  throw StateError('Expected a SqlException.');
 }

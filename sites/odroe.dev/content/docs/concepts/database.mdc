@@ -204,8 +204,8 @@ has no reliable process-shutdown hook, so D1 remains invocation-scoped.
 | --- | --- | --- |
 | `database_sqlite.dart` | Verified | Native CRUD, returning rows, batches, transactions, migrations |
 | `database_postgres.dart` | Verified | Single connection, bounded pool, transactions |
-| `database_mysql.dart` | Preview | MySQL and MariaDB, one serialized connection |
-| `database_d1.dart` | Preview | Local Workerd/D1 contract, atomic batches |
+| `database_mysql.dart` | Preview | MySQL and MariaDB, serialized connection or owned pool with bounded connections and waiters |
+| `database_d1.dart` | Preview | Local Workerd/D1 contract, atomic batches, transient-error classification |
 
 All drivers are in the same Dart package but use separate entrypoints so the
 wrong implementation is not reachable from a target. Package dependency

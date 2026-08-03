@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:odroe/database_mysql.dart';
 import 'package:test/test.dart';
 
+import 'pool_contract.dart';
+
 void main() {
   final config = _MysqlTestConfig.fromEnvironment();
   final skipReason = config == null
@@ -550,6 +552,21 @@ void main() {
       );
     });
   }, skip: skipReason);
+
+  group('MysqlDatabase real pool contract', () {
+    defineMysqlPoolContract(
+      ({
+        int? maxConnections,
+        int? maxPendingOperations,
+        Duration? queueTimeout,
+      }) => config!.pool(
+        maxConnections: maxConnections ?? 4,
+        maxPendingOperations: maxPendingOperations ?? 32,
+        queueTimeout: queueTimeout ?? const Duration(seconds: 10),
+      ),
+      () => config!.open(),
+    );
+  }, skip: skipReason);
 }
 
 typedef _MysqlBatchRecord = ({int id, String label});
@@ -628,6 +645,25 @@ final class _MysqlTestConfig {
       database: database,
       username: username,
       password: password,
+      useTls: useTls,
+      allowPublicKeyRetrieval: allowPublicKeyRetrieval,
+    );
+  }
+
+  MysqlDatabase pool({
+    int maxConnections = 4,
+    int maxPendingOperations = 32,
+    Duration queueTimeout = const Duration(seconds: 10),
+  }) {
+    return MysqlDatabase.pool(
+      host: host,
+      port: port,
+      database: database,
+      username: username,
+      password: password,
+      maxConnections: maxConnections,
+      maxPendingOperations: maxPendingOperations,
+      queueTimeout: queueTimeout,
       useTls: useTls,
       allowPublicKeyRetrieval: allowPublicKeyRetrieval,
     );

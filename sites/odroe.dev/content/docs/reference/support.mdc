@@ -20,8 +20,8 @@ but the deployment or provider boundary is still deliberately narrow.
 | Typed RPC named records | Verified | Generated four-way codecs, collections, nullable values, streams, malformed payloads |
 | SQLite | Verified | CRUD, returning rows, batches, transactions, append-only migrations |
 | PostgreSQL | Verified | Real single connection, pool concurrency, transactions |
-| MySQL/MariaDB | Preview | Real provider suites; one serialized connection |
-| Cloudflare Worker + D1 | Preview | Compiled Worker and optional local Workerd/D1 suite |
+| MySQL/MariaDB | Preview | Single connection verified on MySQL 8.4/MariaDB 11.8; bounded pool on MariaDB 11.8 |
+| Cloudflare Worker + D1 | Preview | Compiled Worker, local Workerd/D1 suite, transient-error classification |
 | Remote Cloudflare deploy | Not claimed | Deployment remains application-owned |
 
 ## Deliberate boundaries
@@ -31,8 +31,10 @@ but the deployment or provider boundary is still deliberately narrow.
   JavaScript interop out of the wrong reachable program;
 - Odroe's database layer is typed SQL with a focused native SQLite SQL runner,
   not a full ORM or cross-provider migration framework;
-- MySQL/MariaDB does not currently expose a pool and has no portable
-  `RETURNING` or conflict-target insert contract;
+- MySQL/MariaDB exposes an owned lazy pool with an explicit connection ceiling,
+  bounded pending queue, and queue timeout, but has no portable `RETURNING` or
+  conflict-target insert contract. Saturation is `SqlErrorCode.unavailable`;
+  the pool does not retry writes or promise one session across top-level calls;
 - multi-row inserts are one statement and are not auto-chunked; callers must
   respect provider bind limits. MySQL has no `RETURNING`, and other providers
   do not guarantee that returned rows follow input order;

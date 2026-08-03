@@ -84,11 +84,17 @@ imports `rpc.dart`; Fetch and IO imports stay at their host entrypoints.
 | `database.dart` | Typed SQL contracts, codecs, rows, statements, modules, relational queries |
 | `database_sqlite.dart` | Native `SqliteDatabase`, `SqliteMigration`, loader, and runner |
 | `database_postgres.dart` | `PostgresDatabase` plus public connection/pool constructor types |
-| `database_mysql.dart` | Native `MysqlDatabase` for MySQL/MariaDB |
-| `database_d1.dart` | Cloudflare `D1SqlDatabase` |
+| `database_mysql.dart` | Preview native `MysqlDatabase.open` and owned bounded `pool` for MySQL/MariaDB |
+| `database_d1.dart` | Preview Cloudflare `D1SqlDatabase` with portable transient-error classification |
 
 Do not import native drivers into shared route or Worker code. Put the driver in
 the runtime-specific server entry and expose only `DatabaseModule` to handlers.
+
+`MysqlDatabase.pool` defaults to four physical connections, 32 operations
+waiting for capacity, and a ten-second queue timeout. A full or expired queue
+fails with `SqlErrorCode.unavailable`; `connectTimeout` separately bounds a
+connection opening after capacity is assigned. The pool owns its connections,
+does not retry operations, and keeps each transaction on one connection.
 
 ### Native SQLite migrations
 

@@ -1,4 +1,6 @@
-/// Native MySQL and MariaDB support for Odroe database contracts.
+/// Preview native MySQL and MariaDB support for Odroe database contracts.
+///
+/// Includes an eager serialized connection and an owned lazy bounded pool.
 library;
 
 export 'database.dart';

@@ -432,25 +432,74 @@ are all exported from `package:odroe/database_postgres.dart`. Applications only
 need a direct `package:postgres` dependency for advanced APIs that are not part
 of Odroe's public constructor signatures.
 
+## MySQL and MariaDB connections
+
+`MysqlDatabase.open(...)` owns one eager, serialized connection. It is the
+lowest-cost choice for a small process or a workload that needs one stable
+session. A concurrent server can instead create an owned lazy pool:
+
+```dart
+import 'package:odroe/database_mysql.dart';
+
+final database = MysqlDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+  maxConnections: 4,
+  maxPendingOperations: 32,
+  queueTimeout: Duration(seconds: 10),
+);
+```
+
+The defaults allow four physical connections and 32 operations waiting for
+capacity. Treat `maxConnections` as the concurrency and database-cost ceiling;
+`maxPendingOperations` bounds in-process memory and shutdown backlog. Once the
+queue is full, another operation fails immediately with
+`SqlErrorCode.unavailable`. `queueTimeout` defaults to ten seconds and covers
+only time still waiting for capacity. After an opening starts, `connectTimeout`
+bounds its handshake and UTC session setup. Construction itself opens nothing.
+`transaction` and `atomicWrite` keep one connection for their complete
+lifetime. The pool does not retry operations, so a failed write is never
+silently replayed.
+
+`close()` first drains every operation accepted before closing, including pool
+waiters, and then closes all owned connections. A failed connection open frees
+capacity and advances the queue. If transaction start or rollback leaves the
+session state uncertain, Odroe destroys that physical connection instead of
+returning it to another request.
+
+Separate top-level calls can use different sessions. Do not send manual
+transaction control or rely on temporary tables and session-level `SET` across
+calls. Use `transaction(...)` for a multi-statement unit, or use `open(...)`
+when session identity itself is the application requirement.
+
 ## Runtime matrix
 
 | Entrypoint | Runtime | Status | Current boundary |
 | --- | --- | --- | --- |
 | `database_sqlite.dart` | Native SQLite | Verified | Real CRUD, `RETURNING`, batches, transactions, and append-only migrations |
 | `database_postgres.dart` | Dart VM + PostgreSQL | Verified | Real single-connection, pooled concurrency, and transaction suite |
-| `database_d1.dart` | Cloudflare D1 | Preview | Optional local Wrangler/Workerd contract; atomic batches, no interactive transaction |
-| `database_mysql.dart` | Dart VM + MySQL/MariaDB | Preview | Verified with real MySQL 8.4 and MariaDB 11.8 |
+| `database_d1.dart` | Cloudflare D1 | Preview | Local Wrangler/Workerd contract; atomic batches, no interactive transaction |
+| `database_mysql.dart` | Dart VM + MySQL/MariaDB | Preview | Single connection: MySQL 8.4 + MariaDB 11.8; bounded pool: MariaDB 11.8 |
 | RPC | Flutter Web | Available | Calls a server-owned database; no browser SQL driver |
 
-The MySQL/MariaDB driver uses one serialized connection. It does not support
-nested transactions, multiple result sets, portable `TIME` decoding, or
-`RETURNING` through `SqlDialect.mysql`.
+The MySQL/MariaDB driver does not support nested transactions, multiple result
+sets, portable `TIME` decoding, or `RETURNING` through `SqlDialect.mysql`.
 
 MySQL statements without bound values reject `;` before I/O so the driver's
 text protocol cannot execute multiple statements. Omit trailing semicolons.
 Statements with bound values use the prepared protocol.
 
-D1 has not been verified in a remote Cloudflare deployment.
+D1 maps Cloudflare's documented network loss, storage reset, code-update reset,
+and transient remote-node errors to `SqlErrorCode.unavailable`. Capacity,
+overload, resource-limit, and large-write timeout errors remain `driver` because
+they require application or schema changes rather than blind retries. The Odroe
+adapter adds no retries; the Cloudflare runtime may still retry read-only
+queries under its own contract. An application may add a retry only when its
+operation is idempotent. See Cloudflare's [retry guidance](https://developers.cloudflare.com/d1/best-practices/retry-queries/)
+for the provider signals and backoff requirements. D1 has not been verified in a
+remote Cloudflare deployment.
 
 All drivers live in the same Dart package. Entrypoints keep driver APIs and
 reachable Dart code separate, but pub still resolves the shared dependency

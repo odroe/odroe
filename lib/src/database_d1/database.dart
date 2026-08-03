@@ -400,24 +400,53 @@ Never _throwD1(Object error) {
   if (error is SqlException) {
     throw error;
   }
-  final description = error.toString().toLowerCase();
+  final description = error.toString().trim().toLowerCase();
+  final d1Error = _d1Detail(description, 'd1_error');
+  final d1Constraint = _d1Detail(description, 'd1_constraint');
+  final constraintDetail = d1Constraint ?? d1Error;
   final constraint =
-      description.contains('d1_constraint') ||
-      description.contains('constraint failed') ||
-      description.contains('unique constraint') ||
-      description.contains('foreign key constraint') ||
-      description.contains('not null constraint') ||
-      description.contains('check constraint');
+      constraintDetail != null &&
+      (constraintDetail.contains('constraint failed') ||
+          constraintDetail.contains('unique constraint') ||
+          constraintDetail.contains('foreign key constraint') ||
+          constraintDetail.contains('not null constraint') ||
+          constraintDetail.contains('check constraint'));
+  // Keep this narrow: these are Cloudflare's documented retryable signals.
+  // Generic timeout/reset text can instead mean an oversized or costly query.
+  final unavailable =
+      d1Error != null &&
+      (d1Error.startsWith('network connection lost') ||
+          d1Error.startsWith(
+            'internal error while starting up d1 db storage caused object to be reset',
+          ) ||
+          d1Error.startsWith(
+            'internal error in d1 db storage caused object to be reset',
+          ) ||
+          d1Error.startsWith('d1 db reset because its code was updated') ||
+          d1Error.startsWith(
+            'cannot resolve d1 db due to transient issue on remote node',
+          ));
   final mapped = constraint
       ? const SqlException(
           SqlErrorCode.constraint,
           'D1 rejected a database constraint.',
         )
+      : unavailable
+      ? const SqlException(SqlErrorCode.unavailable, 'D1 is unavailable.')
       : const SqlException(
           SqlErrorCode.driver,
           'D1 could not execute the SQL operation.',
         );
   throw mapped;
+}
+
+String? _d1Detail(String description, String code) {
+  for (final prefix in <String>['$code:', 'error: $code:']) {
+    if (description.startsWith(prefix)) {
+      return description.substring(prefix.length).trimLeft();
+    }
+  }
+  return null;
 }
 
 extension type _D1Database(JSObject _) implements JSObject {

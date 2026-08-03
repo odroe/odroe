@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add an owned, lazy, bounded `MysqlDatabase.pool` without new dependencies or
+  automatic retries. Bound physical connections, pending operations, and queue
+  wait time independently; reject saturation as `SqlErrorCode.unavailable`.
+  Keep transactions on one UTC connection, advance queued callers after failed
+  opens, drain accepted work before close, preserve user errors, and retire any
+  connection whose transaction state cannot be cleaned. Verify concurrency,
+  backpressure, rollback, connection retirement, and shutdown against MariaDB
+  11.8 while retaining the lower-cost serialized `open` path.
+- Classify Cloudflare's documented D1 network, storage-reset, code-update-reset,
+  and transient remote-node failures as `SqlErrorCode.unavailable` without
+  exposing raw errors or retrying writes. Keep capacity, overload, resource, and
+  large-write timeout failures classified as `driver` until a safer contract
+  exists.
 - Add type-safe atomic numeric updates through numeric
   `SqlTableColumn.incrementBy`, while keeping derived assignments out of
   INSERT APIs. Compile one bound `column = column + delta` statement across

@@ -30,14 +30,33 @@ class FakeD1Database {
     this.tags = [];
     this.instanceValues = [];
     this.batchCalls = 0;
+    this.transientAttempts = { prepare: 0, raw: 0, run: 0, batch: 0 };
   }
 
   prepare(sql) {
+    if (sql === "SELECT transient_prepare_private") {
+      this.transientAttempts.prepare++;
+      throw new Error(
+        `D1_ERROR: Cannot resolve D1 DB due to transient issue on remote node: ${sql}`,
+      );
+    }
+    if (sql === "SELECT marker_in_exec_error Network connection lost") {
+      throw new Error(`D1_EXEC_ERROR: syntax error in ${sql}`);
+    }
     return new FakeD1Statement(this, sql);
   }
 
   async batch(statements) {
     this.batchCalls++;
+    if (statements.some(({ sql }) => sql.startsWith("INSERT transient_code_update"))) {
+      this.transientAttempts.batch++;
+      const statement = statements.find(({ sql }) =>
+        sql.startsWith("INSERT transient_code_update"),
+      );
+      throw new Error(
+        `D1_ERROR: D1 DB reset because its code was updated: ${statement.values[0]}`,
+      );
+    }
     const snapshot = {
       records: [...this.records],
       tags: [...this.tags],
@@ -59,6 +78,40 @@ class FakeD1Database {
 
   async run(statement) {
     const { sql, values } = statement;
+    if (sql.startsWith("INSERT transient_storage")) {
+      this.transientAttempts.run++;
+      throw new Error(
+        `D1_ERROR: Internal error in D1 DB storage caused object to be reset: ${values[0]}`,
+      );
+    }
+    if (sql.startsWith("INSERT operation_timeout")) {
+      throw new Error(
+        `D1_ERROR: D1 DB storage operation exceeded timeout which caused object to be reset: ${values[0]}`,
+      );
+    }
+    if (sql.startsWith("INSERT account_capacity")) {
+      throw new Error(
+        `D1_ERROR: Your account has exceeded D1's maximum account storage limit: ${values[0]}`,
+      );
+    }
+    if (sql.startsWith("INSERT overloaded")) {
+      throw new Error(
+        `D1_ERROR: D1 DB is overloaded. Requests queued for too long: ${values[0]}`,
+      );
+    }
+    if (sql.startsWith("INSERT cpu_limit")) {
+      throw new Error(
+        `D1_ERROR: D1 DB exceeded its CPU time limit and was reset: ${values[0]}`,
+      );
+    }
+    if (sql.startsWith("INSERT memory_limit")) {
+      throw new Error(
+        `D1_ERROR: D1 DB's isolate exceeded its memory limit and was reset: ${values[0]}`,
+      );
+    }
+    if (sql.startsWith("INSERT marker_in_value")) {
+      throw new Error(`D1_ERROR: unsupported fake SQL; values=${values[0]}`);
+    }
     if (sql.startsWith("CREATE TABLE records ")) {
       assert.deepEqual(values, []);
       return result(0, 0);
@@ -122,6 +175,10 @@ class FakeD1Database {
 
   async raw(statement) {
     const { sql, values } = statement;
+    if (sql.startsWith("SELECT transient_network")) {
+      this.transientAttempts.raw++;
+      throw new Error(`D1_ERROR: Network connection lost: ${values[0]}`);
+    }
     if (
       sql ===
       "SELECT id, nullable, count, ratio, name, active, created_at, payload FROM records"
@@ -203,7 +260,13 @@ try {
   clearTimeout(timeout);
 }
 
-assert.equal(bindingA.batchCalls, 2, "empty atomicWrite reached D1");
+assert.equal(bindingA.batchCalls, 3, "unexpected D1 batch call count");
+assert.deepEqual(bindingA.transientAttempts, {
+  prepare: 1,
+  raw: 1,
+  run: 1,
+  batch: 1,
+});
 assert.equal(bindingB.batchCalls, 0);
 assert.deepEqual(bindingA.instanceValues, ["first"]);
 assert.deepEqual(bindingB.instanceValues, ["second"]);

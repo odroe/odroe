@@ -416,8 +416,27 @@ void main() {
     expect(source, contains('do not guarantee that returned rows'));
     expect(source, contains('same exact `QueryKey<T>` data type'));
     expect(source, contains('there is no streaming database query'));
+    expect(source, contains('bounded pending queue, and queue timeout'));
+    expect(source, contains('Saturation is `SqlErrorCode.unavailable`'));
     expect(source, isNot(contains('all major databases')));
     expect(source, isNot(contains('one-click deployment')));
+  });
+
+  test('database provider docs expose bounded MySQL backpressure', () async {
+    final readme = await File('../../README.md').readAsString();
+    final guide = await File(
+      'content/docs/guides/database-providers.mdc',
+    ).readAsString();
+    final api = await File('content/docs/reference/api.mdc').readAsString();
+
+    expect(readme, contains('maxPendingOperations: 32'));
+    expect(readme, contains('queueTimeout: Duration(seconds: 10)'));
+    expect(readme, contains('只计算尚未取得连接容量的等待'));
+    expect(guide, contains('maxPendingOperations: 32'));
+    expect(guide, contains('only time still waiting for capacity'));
+    expect(api, contains('32 operations'));
+    expect(api, contains('waiting for capacity'));
+    expect(api, contains('`connectTimeout` separately bounds'));
   });
 
   test('cross-platform RPC examples require a native HTTP origin', () async {

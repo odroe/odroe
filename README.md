@@ -27,7 +27,7 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 | `database.dart` | typed SQL transport、`SqlQueries`、row codec 与 transaction capability |
 | `database_sqlite.dart` | 已验证的 native SQLite driver 与 append-only SQL migration runner |
 | `database_postgres.dart` | 已验证的 PostgreSQL driver |
-| `database_mysql.dart` | Preview MySQL/MariaDB driver |
+| `database_mysql.dart` | Preview MySQL/MariaDB 单连接与惰性有界 pool |
 | `database_d1.dart` | Preview Cloudflare D1 binding adapter |
 | `rpc.dart` | 强类型 refs、client、transport、serialization 与 `RpcModule` |
 | `server.dart` | 平台中立应用 core、HTTP、server functions、serializer、middleware、route 与 `Server` |
@@ -841,6 +841,23 @@ final database = PostgresDatabase.pool(
 );
 ```
 
+MySQL/MariaDB 同样保留低成本的串行 `open(...)`，服务端并发可使用 Odroe
+自有的惰性有界 pool；它不增加依赖，也不会自动重试可能产生副作用的操作：
+
+```dart
+import 'package:odroe/database_mysql.dart';
+
+final database = MysqlDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+  maxConnections: 4,
+  maxPendingOperations: 32,
+  queueTimeout: Duration(seconds: 10),
+);
+```
+
 数据库所有权必须显式。Flutter 应用级 context 应使用应用解析出的绝对可写路径，
 例如 `DatabaseModule.owned(SqliteDatabase.open(appWritableDatabasePath))`；不要把
 移动端持久化绑定到相对工作目录。原生服务端的 `modules` 是 request-scoped，
@@ -857,13 +874,13 @@ Server createServer() => generated.createServer(
 handler、loader 与 server function 通过 `context.read(databaseKey)` 取得同一
 数据库。不要把 `DatabaseModule.owned(sharedDatabase)` 放入 `Server.modules`，
 否则首个请求结束就会关闭共享 pool。
-同一规则适用于 native SQLite 单连接与 MySQL/MariaDB：进程创建、request 借用、
+同一规则适用于 native SQLite 与 MySQL/MariaDB：进程创建、request 借用、
 `onClose` 关闭。生成的 native bootstrap 会等待异步 `createServer()`，因此可先
-`await MysqlDatabase.open(...)` 再开始监听。Cloudflare D1 则在
+`await MysqlDatabase.open(...)` 再开始监听，或同步创建惰性 pool。Cloudflare D1 则在
 `invocationModules` 中为每次请求创建 `DatabaseModule.owned` wrapper；runtime
 仍拥有底层 binding，Fetch 入口没有虚构的进程级 `onClose`。
 
-`pool(...)` 的默认 settings 是
+PostgreSQL `pool(...)` 的默认 settings 是
 `PoolSettings(maxConnectionCount: 4)`；这是控制数据库连接成本的旋钮，
 应按部署环境明确调整。若传入自定义 `PoolSettings`，也应显式设置该字段；
 字段为空时底层默认上限是 1。`poolUrl(...)` 同理使用
@@ -880,12 +897,29 @@ pool 由数据库拥有，`close()` 会释放它。`Connection`、`ConnectionSet
 `Pool` 与 `PoolSettings` 均由 `package:odroe/database_postgres.dart` 导出；只有
 使用 PostgreSQL 包未出现在 Odroe 公开签名中的高级 API 时，应用才需要直接依赖它。
 
+`MysqlDatabase.pool(...)` 默认最多创建 4 条连接，并最多接受 32 个等待容量的操作。
+`maxConnections` 是并发与数据库成本上限，`maxPendingOperations` 是进程内存和关停
+积压上限；队列已满时新操作立即以 `SqlErrorCode.unavailable` 失败。`queueTimeout`
+默认 10 秒，只计算尚未取得连接容量的等待；开始建连后改由 `connectTimeout` 限制
+握手和 session 初始化。构造时不连接，首次操作才按需打开。每条连接初始化为 UTC，
+`transaction` 与 `atomicWrite` 全程独占同一条连接。`close()` 先等待已经接收的活动
+和排队操作，再释放所有连接；关闭后不会重新打开。连接创建失败会释放容量并推进
+队列。MySQL pool 不自动 retry，也不暴露 `fromPool`、URL、状态统计或 idle tuning。
+不同顶层调用不保证落在同一 session；不要手写 transaction control，也不要依赖
+跨调用的临时表或 session-level `SET`，多语句工作单元必须使用 `transaction(...)`。
+
 driver 只在 fragments 之间插入 native placeholder，不解析或重写 SQL。SQLite 与
 PostgreSQL 已通过真实合同测试。D1 是 Preview，提供可选的本地
 Wrangler/Workerd 合同测试；它提供原子 batch，不提供交互式 transaction。
-MySQL/MariaDB 是 Preview，已通过真实 MySQL 8.4 与 MariaDB 11.8；当前为
-单连接串行 driver，不支持 nested transaction、multiple result sets、portable
-`TIME` 解码或 `SqlDialect.mysql` 的 `RETURNING`。
+MySQL/MariaDB 是 Preview：单连接已通过真实 MySQL 8.4 与 MariaDB 11.8，惰性
+有界 pool 已通过 MariaDB 11.8。它不支持 nested transaction、multiple result sets、
+portable `TIME` 解码或 `SqlDialect.mysql` 的 `RETURNING`。pool 在 transaction control 状态
+不确定时直接淘汰物理连接，避免把未清理的 session 交给下一次请求。
+
+D1 会把 Cloudflare 明确的网络丢失、storage reset、代码更新 reset 与远端节点瞬时
+解析故障映射为 `SqlErrorCode.unavailable`；其他容量、过载、CPU、内存或超大写入
+超时仍保持 `driver`。Odroe adapter 不增加重试；Cloudflare runtime 仍可能按其合同
+自动重试只读查询。应用只能在自己能证明操作幂等时增加重试。
 
 MySQL 的无绑定值语句会在 I/O 前拒绝 `;`，以阻止 text protocol 执行多条
 语句；不要给手写 MySQL SQL 添加尾分号。带绑定值的语句使用 prepared

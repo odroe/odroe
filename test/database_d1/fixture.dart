@@ -254,6 +254,107 @@ Future<void> _run() async {
   _expect(driverError.cause == null, 'driver cause redaction');
   _expect(!driverStack.toString().contains(secret), 'driver stack redaction');
 
+  await _expectSanitizedSqlCode(
+    () => first.query(
+      BoundSql.raw(
+        'SELECT transient_prepare_private',
+        kind: SqlStatementKind.rowReturning,
+      ),
+      (row) => row,
+    ),
+    SqlErrorCode.unavailable,
+    'transient prepare',
+    hidden: 'transient_prepare_private',
+  );
+  await _expectSanitizedSqlCode(
+    () => first.query(
+      BoundSql.parts(
+        <String>['SELECT transient_network ', ''],
+        <SqlValue>[const SqlValue.text(secret)],
+        kind: SqlStatementKind.rowReturning,
+      ),
+      (row) => row,
+    ),
+    SqlErrorCode.unavailable,
+    'transient raw',
+    hidden: secret,
+  );
+  await _expectSanitizedSqlCode(
+    () => first.execute(
+      BoundSql.parts(
+        <String>['INSERT transient_storage ', ''],
+        <SqlValue>[const SqlValue.text(secret)],
+      ),
+    ),
+    SqlErrorCode.unavailable,
+    'transient run',
+    hidden: secret,
+  );
+  await _expectSanitizedSqlCode(
+    () => first.atomicWrite(<BoundSql>[
+      BoundSql.parts(
+        <String>['INSERT transient_code_update ', ''],
+        <SqlValue>[const SqlValue.text(secret)],
+        kind: SqlStatementKind.write,
+      ),
+    ]),
+    SqlErrorCode.unavailable,
+    'transient batch',
+    hidden: secret,
+  );
+  await _expectSanitizedSqlCode(
+    () => first.execute(
+      BoundSql.parts(
+        <String>['INSERT operation_timeout ', ''],
+        <SqlValue>[const SqlValue.text(secret)],
+      ),
+    ),
+    SqlErrorCode.driver,
+    'non-retryable storage timeout',
+    hidden: secret,
+  );
+  for (final testCase in <({String sql, String label})>[
+    (sql: 'INSERT account_capacity ', label: 'account capacity'),
+    (sql: 'INSERT overloaded ', label: 'provider overload'),
+    (sql: 'INSERT cpu_limit ', label: 'CPU limit'),
+    (sql: 'INSERT memory_limit ', label: 'memory limit'),
+  ]) {
+    await _expectSanitizedSqlCode(
+      () => first.execute(
+        BoundSql.parts(
+          <String>[testCase.sql, ''],
+          <SqlValue>[const SqlValue.text(secret)],
+        ),
+      ),
+      SqlErrorCode.driver,
+      testCase.label,
+      hidden: secret,
+    );
+  }
+  await _expectSanitizedSqlCode(
+    () => first.query(
+      BoundSql.raw(
+        'SELECT marker_in_exec_error Network connection lost',
+        kind: SqlStatementKind.rowReturning,
+      ),
+      (row) => row,
+    ),
+    SqlErrorCode.driver,
+    'transient marker inside D1_EXEC_ERROR SQL',
+    hidden: 'Network connection lost',
+  );
+  await _expectSanitizedSqlCode(
+    () => first.execute(
+      BoundSql.parts(
+        <String>['INSERT marker_in_value ', ''],
+        <SqlValue>[const SqlValue.text('Network connection lost')],
+      ),
+    ),
+    SqlErrorCode.driver,
+    'transient marker inside D1_ERROR value',
+    hidden: 'Network connection lost',
+  );
+
   await _expectSqlCode(
     () => first.execute(
       BoundSql.parts(
@@ -352,6 +453,25 @@ Future<void> _expectSqlCode(
     if (hidden != null) {
       _expect(!error.message.contains(hidden), '$label hides statement text');
     }
+    return;
+  }
+  throw StateError('$label did not throw');
+}
+
+Future<void> _expectSanitizedSqlCode(
+  Future<Object?> Function() action,
+  SqlErrorCode code,
+  String label, {
+  required String hidden,
+}) async {
+  try {
+    await action();
+  } on SqlException catch (error, stackTrace) {
+    _expect(error.code == code, label);
+    _expect(error.cause == null, '$label drops raw cause');
+    _expect(!error.message.contains(hidden), '$label message redaction');
+    _expect(!error.toString().contains(hidden), '$label string redaction');
+    _expect(!stackTrace.toString().contains(hidden), '$label stack redaction');
     return;
   }
   throw StateError('$label did not throw');
