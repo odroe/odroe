@@ -224,34 +224,55 @@ final class AppPostsRoutes {
   final AppPostsPostIdRoutes postId = const AppPostsPostIdRoutes();
 
   static Object? _encodelistPosts(posts_models_type.ListPostsInput value) =>
-      <String, Object?>{"ids": value.ids, "sort": value.sort};
+      <String, Object?>{
+        "cursor": value.cursor,
+        "ids": value.ids,
+        "limit": value.limit,
+        "sort": value.sort,
+      };
 
-  static List<posts_models_type.Post> _decodelistPosts(Object? value) =>
-      (value as List)
-          .map(
-            (item) => ((Map<String, Object?> record) {
-              if (record.length != 2 ||
-                  !record.containsKey("id") ||
-                  !record.containsKey("title")) {
-                throw FormatException("Expected models.Post fields: id, title");
-              }
-              return (
-                id: record["id"] as int,
-                title: record["title"] as String,
-              );
-            })(item as Map<String, Object?>),
-          )
-          .toList(growable: false);
+  static posts_models_type.PostPage _decodelistPosts(Object? value) =>
+      ((Map<String, Object?> record) {
+        if (record.length != 2 ||
+            !record.containsKey("items") ||
+            !record.containsKey("nextCursor")) {
+          throw FormatException(
+            "Expected models.PostPage fields: items, nextCursor",
+          );
+        }
+        return (
+          items: (record["items"] as List)
+              .map(
+                (item) => ((Map<String, Object?> record) {
+                  if (record.length != 2 ||
+                      !record.containsKey("id") ||
+                      !record.containsKey("title")) {
+                    throw FormatException(
+                      "Expected models.Post fields: id, title",
+                    );
+                  }
+                  return (
+                    id: record["id"] as int,
+                    title: record["title"] as String,
+                  );
+                })(item as Map<String, Object?>),
+              )
+              .toList(growable: false),
+          nextCursor: (record["nextCursor"] == null
+              ? null
+              : record["nextCursor"] as int),
+        );
+      })(value as Map<String, Object?>);
 
   /// Calls `listPosts` on the application server.
   ServerFunctionRef<
     posts_models_type.ListPostsInput,
-    List<posts_models_type.Post>
+    posts_models_type.PostPage
   >
   get listPosts =>
       const ServerFunctionRef<
         posts_models_type.ListPostsInput,
-        List<posts_models_type.Post>
+        posts_models_type.PostPage
       >(
         id: "posts.list",
         method: HttpMethod.get,

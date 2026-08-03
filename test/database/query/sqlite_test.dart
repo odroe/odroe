@@ -84,6 +84,79 @@ void main() {
     ]);
   });
 
+  test(
+    'updates numeric columns atomically without a read-modify-write',
+    () async {
+      await database.execute(
+        BoundSql.raw('''
+        CREATE TABLE counters (
+          id INTEGER PRIMARY KEY,
+          value INTEGER NOT NULL,
+          ratio REAL NOT NULL
+        ) STRICT
+      '''),
+      );
+      final counters = _Counters();
+      await queries
+          .insertMany(counters, <List<SqlAssignment>>[
+            <SqlAssignment>[
+              counters.id.set(1),
+              counters.value.set(10),
+              counters.ratio.set(1.5),
+            ],
+            <SqlAssignment>[
+              counters.id.set(2),
+              counters.value.set(7),
+              counters.ratio.set(2.0),
+            ],
+          ])
+          .execute(database);
+
+      final updated = await queries
+          .updateWhere(counters, <SqlUpdateAssignment>[
+            counters.value.incrementBy(5),
+            counters.ratio.incrementBy(0.25),
+          ], where: counters.id.equals(1))
+          .returning(counters.projection)
+          .one(database);
+      expect(updated, (id: 1, value: 15, ratio: 1.75));
+
+      final decremented = await queries
+          .updateWhere(counters, <SqlUpdateAssignment>[
+            counters.value.incrementBy(-3),
+          ], where: counters.id.equals(1))
+          .execute(database);
+      expect(decremented.affectedRows, 1);
+
+      final guarded = await queries
+          .updateWhere(
+            counters,
+            <SqlUpdateAssignment>[counters.value.incrementBy(-13)],
+            where: counters.id
+                .equals(1)
+                .and(counters.value.greaterThanOrEqual(13)),
+          )
+          .execute(database);
+      expect(guarded.affectedRows, 0);
+
+      final all = await queries
+          .updateAll(counters, <SqlUpdateAssignment>[
+            counters.value.incrementBy(-1),
+          ], confirm: allRows)
+          .execute(database);
+      expect(all.affectedRows, 2);
+      expect(
+        await queries
+            .selectTable(counters, orderBy: <SqlOrder>[counters.id.ascending])
+            .all(database),
+        <({int id, int value, double ratio})>[
+          (id: 1, value: 11, ratio: 1.75),
+          (id: 2, value: 6, ratio: 2.0),
+        ],
+      );
+    },
+  );
+
   test('runs atomic multi-row INSERT with typed RETURNING', () async {
     final inserted = await queries
         .insertMany(users, <List<SqlAssignment>>[
@@ -591,6 +664,25 @@ final class _Posts extends SqlTable<_Post> {
       title: title.read(row, 2),
     ),
   );
+}
+
+final class _Counters extends SqlTable<({int id, int value, double ratio})> {
+  _Counters() : super('counters');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<int> value = column<int>('value', sqlInt);
+  late final SqlTableColumn<double> ratio = column<double>('ratio', sqlDouble);
+
+  @override
+  late final SqlProjection<({int id, int value, double ratio})> projection =
+      SqlProjection<({int id, int value, double ratio})>(
+        <SqlSelection<Object?>>[id, value, ratio],
+        (row) => (
+          id: id.read(row, 0),
+          value: value.read(row, 1),
+          ratio: ratio.read(row, 2),
+        ),
+      );
 }
 
 Matcher _throwsSql(SqlErrorCode code) {

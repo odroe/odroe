@@ -65,11 +65,19 @@ Batch reads and filters remain on the same typed predicate path:
 final selected = await queries
     .selectTable(
       posts,
-      where: posts.id.isIn(<int>[42, 44]),
-      orderBy: <SqlOrder>[posts.id.ascending],
+      where: posts.id.lessThan(cursor),
+      orderBy: <SqlOrder>[posts.id.descending],
+      limit: pageSize + 1,
     )
     .all(database);
 ```
+
+This is the complete database primitive behind the generated product's cursor
+pages. The server orders by the unique ID, uses a strict comparison after the
+cursor, and fetches one extra row only to decide whether to expose
+`nextCursor`. It returns at most `pageSize` records through RPC. `offset` remains
+available for products that need it, but Odroe does not invent a paginator or
+run an implicit count.
 
 `isIn` and `isNotIn` consume the iterable immediately and encode every non-null
 candidate through the column codec. Adding, removing, or reordering source
@@ -139,6 +147,31 @@ statements one atomic unit. SQLite, D1, and PostgreSQL support `RETURNING` on
 the multi-row insert; MySQL/MariaDB accepts the write but not `RETURNING`.
 Returned row order is database-defined, so correlate by a stable key as above,
 never by input index.
+
+## Update numeric state in one statement
+
+Use `incrementBy` when a non-null numeric column must change relative to its
+current database value. Here `counters.value` is a `SqlTableColumn<int>`:
+
+```dart
+await queries.updateWhere(
+  counters,
+  <SqlUpdateAssignment>[counters.value.incrementBy(1)],
+  where: counters.id.equals(42),
+).execute(database);
+```
+
+The generated SQL is `value = value + ?`; there is no application-side
+read-modify-write race. A negative delta subtracts. Zero, `0.0`, and `-0.0` are
+rejected before SQL construction so affected-row behavior cannot depend on a
+provider-specific no-op. The delta is encoded immediately by the receiving
+column's codec. Nullable and non-numeric columns do not expose the method.
+
+`SqlUpdateAssignment` is the public heterogeneous UPDATE input. A constant
+`column.set(value)` is still a `SqlAssignment` and therefore also an update
+assignment. `incrementBy` cannot be passed to INSERT, and mixing `set` and
+`incrementBy` for the same column is rejected before I/O. Integer overflow and
+floating-point rounding continue to follow the selected database provider.
 
 Column assignment and predicate types are checked by Dart. Joined reads qualify
 columns; left joins require an explicitly optional result selection. Updating

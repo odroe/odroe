@@ -17,7 +17,8 @@ This is the smallest useful domain model for the generated full-stack product:
 // lib/posts.dart
 typedef Post = ({int id, String title});
 typedef CreatePost = ({String title});
-typedef ListPostsInput = ({List<int> ids, String sort});
+typedef PostPage = ({List<Post> items, int? nextCursor});
+typedef ListPostsInput = ({int? cursor, List<int> ids, int limit, String sort});
 ```
 
 Keep that file client-safe. It must not import SQLite, D1, `dart:io`, a server
@@ -44,30 +45,10 @@ import 'route.dart' as definition;
 
 final route = definition.route.server();
 
-final listPosts = ServerFunction<models.ListPostsInput, List<models.Post>>(
+final listPosts = ServerFunction<models.ListPostsInput, models.PostPage>(
   id: 'posts.list',
   method: HttpMethod.get,
-  handler: (context) {
-    final input = context.data;
-    if (input.ids.length > 100) {
-      throw const HttpError(
-        400,
-        'Post ID filter cannot contain more than 100 values.',
-      );
-    }
-    final order = switch (input.sort) {
-      'newest' => posts.id.descending,
-      'oldest' => posts.id.ascending,
-      _ => throw const HttpError(400, 'Invalid post sort.'),
-    };
-    return postQueries
-        .selectTable(
-          posts,
-          where: input.ids.isEmpty ? null : posts.id.isIn(input.ids),
-          orderBy: <SqlOrder>[order],
-        )
-        .all(context.request.read(databaseKey));
-  },
+  handler: listPostPage,
 );
 
 final createPost = ServerFunction<models.CreatePost, models.Post>(
@@ -86,13 +67,15 @@ final createPost = ServerFunction<models.CreatePost, models.Post>(
 );
 ```
 
-The handler caps the product-level filter before SQL construction. Generated
-typing does not replace application validation or a database provider's bind
-parameter budget.
+`listPostPage` is the bounded database handler shown in
+[Full-stack vertical slice](/docs/tutorials/full-stack#add-page-and-create-functions):
+it validates `limit` as `1..50`, caps the ID filter, applies the strict ID
+cursor predicate, and reads `limit + 1`. Generated typing does not replace
+application validation or a database provider's bind parameter budget.
 
-`odroe generate` resolves `models.Post`, `models.CreatePost`, and
-`models.ListPostsInput`, reads their named fields, and emits the four
-transformations required by one typed call:
+`odroe generate` resolves `models.Post`, `models.PostPage`,
+`models.CreatePost`, and `models.ListPostsInput`, reads their named fields, and
+emits the four transformations required by one typed call:
 
 ```text
 Flutter record
@@ -108,9 +91,10 @@ handler record
   → Flutter record
 ```
 
-The same output codec is applied to each stream item. Collection codecs recurse,
-so `ListPostsInput.ids` and `List<Post>` preserve their element types instead of
-becoming `List<dynamic>` or failing as an unregistered `Record` at runtime.
+The same output codec is applied to each stream item. Collection codecs
+recurse, so `ListPostsInput.ids` and `PostPage.items` preserve their element
+types instead of becoming `List<dynamic>` or failing as an unregistered
+`Record` at runtime.
 
 ## Call records directly from Flutter
 
@@ -122,13 +106,19 @@ final created = await generated.routes.posts.createPost(
   (title: 'Typed from Flutter'),
 );
 
-final posts = await generated.routes.posts.listPosts(
+final page = await generated.routes.posts.listPosts(
   rpc,
-  (ids: <int>[42, 44], sort: 'newest'),
+  (
+    cursor: null,
+    ids: <int>[42, 44],
+    limit: 20,
+    sort: 'newest',
+  ),
 );
 
 print(created.id);
-print(posts.first.title);
+print(page.items.first.title);
+print(page.nextCursor);
 ```
 
 There is no application-owned map or cast in this path. A malformed object is
@@ -171,10 +161,10 @@ client/server release for a breaking shape change.
 The generated wire value is an object keyed by field name. Its key set must
 match the record exactly: missing fields and unknown fields are rejected, even
 when a missing field would otherwise be nullable. That fail-closed rule prevents
-two deployed shapes from drifting silently. Do not depend on field order and do
-not place secrets in a record merely because the type is shared. Payload and
-response-frame byte limits still apply after encoding; use pagination or
-streaming for large collections.
+two deployed shapes from drifting silently. Do not depend on field order and
+do not place secrets in a record merely because the type is shared. Payload and
+response-frame byte limits still apply after encoding; keep list RPCs bounded
+with a page record or use streaming when the product needs a stream.
 
 Run the compiler explicitly after changing a shared record:
 

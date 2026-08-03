@@ -41,7 +41,7 @@ only when the package cache is already complete.
 my_app/
 ├── lib/
 │   ├── main.dart              # one-import Flutter composition root
-│   ├── posts.dart             # client-safe Post and CreatePost records
+│   ├── posts.dart             # client-safe post, page, and input records
 │   ├── posts_database.dart    # shared schema and typed query builder
 │   ├── rpc_origin.dart        # browser/native origin policy
 │   ├── server.dart            # conditional server export
@@ -49,8 +49,8 @@ my_app/
 │   ├── server_cloudflare.dart # invocation-scoped D1
 │   ├── routes/
 │   │   ├── route.dart         # shared route and semantic document
-│   │   ├── page.dart          # list query and create mutation
-│   │   └── server.dart        # typed list/create RPC + typed SQL
+│   │   ├── page.dart          # infinite query and create mutation
+│   │   └── server.dart        # typed cursor-page/create RPC + SQL
 │   ├── routes.dart            # generated client references
 │   └── routes.server.dart     # generated server manifest
 ├── migrations/
@@ -61,7 +61,7 @@ my_app/
 └── wrangler.jsonc
 ```
 
-The root page lists posts and creates a new one. Native execution and local D1
+The root page loads bounded cursor pages and creates a new post. Native execution and local D1
 both reach `Odroe post 42` after applying the same two SQL files. `Post` and `CreatePost`
 remain Dart named records across Flutter, generated RPC, the server handler,
 and the complete SQL projection. Odroe generates the record wire codecs—there
@@ -100,8 +100,9 @@ Start both the Odroe development server and Flutter Web:
 dart run odroe dev -- -d chrome
 ```
 
-Open the reported Flutter URL. Query calls the generated `posts.list`
-reference and renders `Odroe post 42`. Enter a title and choose Create;
+Open the reported Flutter URL. Infinite Query calls the generated `posts.list`
+reference with a page size of 20 and renders `Odroe post 42`. When another page
+exists, Load more passes its typed `nextCursor` back to the same function. Enter a title and choose Create;
 Mutation calls `posts.create`, invalidates the post-list key, and renders the
 database-returned record. Stop the command with Ctrl-C; Odroe drains the
 listener before closing the process-owned database. Starting the command again
@@ -150,7 +151,7 @@ generation or compile leaves the last-known-good Worker serving requests until
 the source is fixed. An initial route generation or compile failure exits
 instead of running an old artifact.
 
-`/` serves the semantic handoff and the same typed list/create RPC uses the
+`/` serves the semantic handoff and the same typed cursor-page/create RPC uses the
 invocation's `DB` binding. Creating a post exercises D1 `INSERT ... RETURNING`
 and refreshes the same typed list. This server-only watch does not rebuild
 Flutter Web or static assets; run `build --no-server web` again after UI or

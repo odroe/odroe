@@ -431,6 +431,29 @@ void main() {
   });
 
   group('mutations', () {
+    for (final dialect in SqlDialect.values) {
+      test('${dialect.name} compiles a bound atomic numeric update', () {
+        final counters = _Counters();
+        final quote = dialect == SqlDialect.mysql ? '`' : '"';
+
+        final update = SqlQueries(dialect).updateWhere(
+          counters,
+          <SqlUpdateAssignment>[counters.value.incrementBy(-3)],
+          where: counters.id.equals(7),
+        );
+
+        expect(update.statement.fragments, <String>[
+          'UPDATE ${quote}counters$quote SET ${quote}value$quote = '
+              '${quote}value$quote + ',
+          ' WHERE ${quote}id$quote = ',
+          '',
+        ]);
+        expect(_values(update.statement), <Object?>[-3, 7]);
+        expect(update.statement.kind, SqlStatementKind.write);
+        expect(update.statement.dialect, dialect);
+      });
+    }
+
     test('compiles UPDATE, DELETE, and RETURNING without placeholders', () {
       final users = _Users();
       const queries = SqlQueries(SqlDialect.sqlite);
@@ -614,6 +637,8 @@ void main() {
 
     test('rejects duplicate and empty UPDATE assignments', () {
       final users = _Users();
+      final counters = _Counters();
+      final otherCounters = _Counters();
       const queries = SqlQueries(SqlDialect.sqlite);
 
       expect(
@@ -628,6 +653,21 @@ void main() {
             queries.updateAll(users, const <SqlAssignment>[], confirm: allRows),
         throwsArgumentError,
       );
+      expect(
+        () => queries.updateWhere(counters, <SqlUpdateAssignment>[
+          counters.value.set(4),
+          counters.value.incrementBy(1),
+        ], where: counters.id.equals(1)),
+        throwsArgumentError,
+      );
+      expect(
+        () => queries.updateWhere(counters, <SqlUpdateAssignment>[
+          otherCounters.value.incrementBy(1),
+        ], where: counters.id.equals(1)),
+        throwsArgumentError,
+      );
+      expect(() => counters.value.incrementBy(0), throwsArgumentError);
+      expect(() => counters.ratio.incrementBy(-0.0), throwsArgumentError);
     });
 
     test('validates targeted conflict inserts', () {
@@ -824,6 +864,25 @@ final class _Posts extends SqlTable<_Post> {
       title: title.read(row, 2),
     ),
   );
+}
+
+final class _Counters extends SqlTable<({int id, int value, double ratio})> {
+  _Counters() : super('counters');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<int> value = column<int>('value', sqlInt);
+  late final SqlTableColumn<double> ratio = column<double>('ratio', sqlDouble);
+
+  @override
+  late final SqlProjection<({int id, int value, double ratio})> projection =
+      SqlProjection<({int id, int value, double ratio})>(
+        <SqlSelection<Object?>>[id, value, ratio],
+        (row) => (
+          id: id.read(row, 0),
+          value: value.read(row, 1),
+          ratio: ratio.read(row, 2),
+        ),
+      );
 }
 
 final class _NamedTable extends SqlTable<String> {

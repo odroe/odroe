@@ -117,23 +117,33 @@ final serverFunctions = <String, ServerFunctionBinding>{
   "posts.list": ServerFunctionBinding(
     posts_server.listPosts,
     decodeInput: (value) => ((Map<String, Object?> record) {
-      if (record.length != 2 ||
+      if (record.length != 4 ||
+          !record.containsKey("cursor") ||
           !record.containsKey("ids") ||
+          !record.containsKey("limit") ||
           !record.containsKey("sort")) {
         throw FormatException(
-          "Expected models.ListPostsInput fields: ids, sort",
+          "Expected models.ListPostsInput fields: cursor, ids, limit, sort",
         );
       }
       return (
+        cursor: (record["cursor"] == null ? null : record["cursor"] as int),
         ids: (record["ids"] as List)
             .map((item) => item as int)
             .toList(growable: false),
+        limit: record["limit"] as int,
         sort: record["sort"] as String,
       );
     })(value as Map<String, Object?>),
-    encodeOutput: (value) => ((List<posts_models_type.Post> typed) => typed
-        .map((item) => <String, Object?>{"id": item.id, "title": item.title})
-        .toList(growable: false))(value as List<posts_models_type.Post>),
+    encodeOutput: (value) =>
+        ((posts_models_type.PostPage typed) => <String, Object?>{
+          "items": typed.items
+              .map(
+                (item) => <String, Object?>{"id": item.id, "title": item.title},
+              )
+              .toList(growable: false),
+          "nextCursor": typed.nextCursor,
+        })(value as posts_models_type.PostPage),
   ),
   "posts.create": ServerFunctionBinding(
     posts_server.createPost,

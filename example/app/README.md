@@ -2,8 +2,8 @@
 
 这是由 Flutter CLI 创建的标准 Odroe 应用，展示显式 modules、文件路由、强类型
 params/search、Server Function、typed SQL、语义 HTML、SSG 与 Flutter 首屏交接。
-`/posts` 的列表和创建、以及 `/posts/42` 的详情组成一条真实纵向产品：Flutter
-Query / Mutation → 生成的 named-record typed RPC → HTTP → Server →
+`/posts` 的有界游标分页和创建、以及 `/posts/42` 的详情组成一条真实纵向产品：Flutter
+Infinite Query / Mutation → 生成的 named-record typed RPC → HTTP → Server →
 `DatabaseModule` → typed SQL。页面离开或显式取消 Query 时，同一信号会终止
 读取请求；创建完成后只失效帖子列表并从服务端真值刷新。
 
@@ -33,10 +33,13 @@ parser 执行 statement，不按分号切割。首次启动应用两条 migratio
 runner 时返回 2，后续调用返回 0。已应用文件被编辑、删除、重命名或补插低版本
 时会拒绝启动，而不是猜测或修复历史。
 `Posts` projection 解码完整的
-`Post` 记录。`Post`、`CreatePost` 与 `ListPostsInput` 放在客户端安全的
+`Post` 记录。`Post`、`PostPage`、`CreatePost` 与 `ListPostsInput` 放在客户端安全的
 `lib/posts.dart`，route compiler 为输入、输出、列表和 stream item 生成对称
-codec，不需要手写 JSON adapter。列表可用 typed `ids` 经 `isIn` 限定数据库行；
-空列表表示不过滤，非空过滤最多接受 100 个 ID，并在 SQL 构造前拒绝超限输入。
+codec，不需要手写 JSON adapter。server 将 `limit` 限定在 `1..50`，按唯一
+ID 使用严格 keyset predicate，读取 `limit + 1` 行后只返回 `items` 与可选
+`nextCursor`。Flutter 的 `InfiniteQueryBuilder` 追加每一页，不会把整表一次
+放入 RPC frame。列表还可用 typed `ids` 经 `isIn` 限定数据库行；空列表
+表示不过滤，非空过滤最多接受 100 个 ID，并在 SQL 构造前拒绝超限输入。
 创建使用单条 typed `INSERT ... RETURNING`，由数据库生成 ID 并返回完整 `Post`。
 Native build 仅在传入 `--sqlite-migrations migrations` 时把这些文件原字节复制
 到 executable 同级的 `migrations/`；运行
@@ -70,9 +73,9 @@ npm run cloudflare:dev
 会退出。Flutter Web/static assets 不在这条 server-only watch 中，UI 变化后再次
 执行 `dart run odroe build --no-server --sqlite-migrations migrations web`。
 
-访问 `/posts?sort=newest`，创建一条记录，再进入返回 ID 对应的详情页。Native
+访问 `/posts?sort=newest`，加载下一个 typed cursor page，创建一条记录，再进入返回 ID 对应的详情页。Native
 与本地 D1 都从共享历史得到 `Odroe post 42`；两者都必须完成
-list → create → list → read，未知 ID 返回 typed RPC 404，空标题返回受控 400
+page → next page → create → refresh → read，未知 ID 返回 typed RPC 404，空标题返回受控 400
 且不能新增记录。远端 migration 与 deploy 会修改平台状态，不属于上述本地命令。
 
 显式选择 Web device 后，开发代理会让页面和 RPC 使用同一 origin。当前

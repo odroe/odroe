@@ -29,6 +29,10 @@ const _postsSource = '''
 typedef Post = ({int id, String title});
 
 typedef CreatePost = ({String title});
+
+typedef PostPage = ({List<Post> items, int? nextCursor});
+
+typedef ListPostsInput = ({int? cursor, int limit});
 ''';
 
 String _deploymentName(String packageName) {
@@ -78,7 +82,8 @@ import '../posts.dart';
 import '../routes.dart' as generated;
 import 'route.dart' as definition;
 
-final QueryKey<List<Post>> _postListsKey = QueryKey('posts.list');
+const _postPageSize = 20;
+final QueryKey<Object?> _postListsKey = QueryKey('posts.list');
 
 final route = definition.route.page(
   build: (context) => _PostsPage(rpc: context.read(rpcClientKey)),
@@ -96,7 +101,7 @@ final class _PostsPage extends StatefulWidget {
 final class _PostsPageState extends State<_PostsPage> {
   final _title = TextEditingController();
   late MutationOptions<Post, CreatePost, void> _createOptions;
-  late QueryOptions<List<Post>> _listOptions;
+  late InfiniteQueryOptions<PostPage, int?> _listOptions;
 
   @override
   void initState() {
@@ -125,12 +130,14 @@ final class _PostsPageState extends State<_PostsPage> {
   }
 
   void _configureList() {
-    _listOptions = QueryOptions<List<Post>>(
-      key: _postListsKey,
-      query: (query) => generated.routes.listPosts(
+    _listOptions = InfiniteQueryOptions<PostPage, int?>(
+      key: QueryKey<InfiniteData<PostPage, int?>>('posts.list'),
+      initialPageParam: null,
+      getNextPageParam: (lastPage, _, _, _) => lastPage.nextCursor,
+      query: (page) => generated.routes.listPosts(
         widget.rpc,
-        const NoServerInput(),
-        cancelled: query.cancelToken.whenCancelled.then<void>((_) {}),
+        (cursor: page.pageParam, limit: _postPageSize),
+        cancelled: page.query.cancelToken.whenCancelled.then<void>((_) {}),
       ),
     );
   }
@@ -219,13 +226,14 @@ final class _PostsPageState extends State<_PostsPage> {
                 ),
                 const SizedBox(height: 20),
                 Expanded(
-                  child: QueryBuilder<List<Post>>(
+                  child: InfiniteQueryBuilder<PostPage, int?>(
                     options: _listOptions,
-                    builder: (context, result) {
-                      if (!result.hasData && result.isFetching) {
+                    builder: (context, result, fetchNextPage, _) {
+                      final query = result.query;
+                      if (!query.hasData && query.isFetching) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      if (result.isError && !result.hasData) {
+                      if (query.isError && !query.hasData) {
                         return Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -246,13 +254,16 @@ final class _PostsPageState extends State<_PostsPage> {
                           ),
                         );
                       }
-                      if (!result.hasData) {
+                      if (!query.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      final posts = result.requireData;
+                      final posts = <Post>[
+                        for (final page in query.requireData.pages)
+                          ...page.items,
+                      ];
                       return Column(
                         children: <Widget>[
-                          if (result.isError)
+                          if (query.isError)
                             Material(
                               color: Theme.of(
                                 context,
@@ -302,6 +313,22 @@ final class _PostsPageState extends State<_PostsPage> {
                                     },
                                   ),
                           ),
+                          if (result.hasNextPage) ...<Widget>[
+                            const SizedBox(height: 12),
+                            FilledButton.tonal(
+                              onPressed: result.isFetchingNextPage
+                                  ? null
+                                  : fetchNextPage,
+                              child: result.isFetchingNextPage
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text('Load more'),
+                            ),
+                          ],
                         ],
                       );
                     },
@@ -339,12 +366,31 @@ import 'route.dart' as definition;
 
 final route = definition.route.server();
 
-final listPosts = ServerFunction<NoServerInput, List<models.Post>>(
+final listPosts = ServerFunction<models.ListPostsInput, models.PostPage>(
   id: 'posts.list',
   method: HttpMethod.get,
-  handler: (context) => postQueries
-      .selectTable(posts, orderBy: <SqlOrder>[posts.id.descending])
-      .all(context.request.read(databaseKey)),
+  handler: (context) async {
+    final input = context.data;
+    if (input.limit < 1 || input.limit > 50) {
+      throw const HttpError(400, 'Post page limit must be between 1 and 50.');
+    }
+    final rows = await postQueries
+        .selectTable(
+          posts,
+          where: input.cursor == null
+              ? null
+              : posts.id.lessThan(input.cursor!),
+          orderBy: <SqlOrder>[posts.id.descending],
+          limit: input.limit + 1,
+        )
+        .all(context.request.read(databaseKey));
+    final hasNextPage = rows.length > input.limit;
+    final items = rows.take(input.limit).toList(growable: false);
+    return (
+      items: items,
+      nextCursor: hasNextPage ? items.last.id : null,
+    );
+  },
 );
 
 final createPost = ServerFunction<models.CreatePost, models.Post>(

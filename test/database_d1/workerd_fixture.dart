@@ -53,7 +53,8 @@ Future<void> _run(_Environment environment) async {
       BoundSql.raw('''
         CREATE TABLE conflict_records (
           id INTEGER PRIMARY KEY,
-          value TEXT NOT NULL
+          value TEXT NOT NULL,
+          counter INTEGER NOT NULL DEFAULT 0
         ) STRICT
       '''),
     );
@@ -110,6 +111,31 @@ Future<void> _run(_Environment environment) async {
         .one(database);
     _expect(preservedConflict.id == 1, 'preserved conflict id');
     _expect(preservedConflict.value == 'Original', 'preserved conflict value');
+
+    final incremented = await queries
+        .updateWhere(conflictRecords, <SqlUpdateAssignment>[
+          conflictRecords.counter.incrementBy(3),
+        ], where: conflictRecords.id.equals(1))
+        .execute(database);
+    _expect(incremented.affectedRows == 1, 'atomic increment changes');
+    final guardedDecrement = await queries
+        .updateWhere(
+          conflictRecords,
+          <SqlUpdateAssignment>[conflictRecords.counter.incrementBy(-4)],
+          where: conflictRecords.id
+              .equals(1)
+              .and(conflictRecords.counter.greaterThanOrEqual(4)),
+        )
+        .execute(database);
+    _expect(guardedDecrement.affectedRows == 0, 'guarded decrement changes');
+    final counter = await queries
+        .select(
+          from: conflictRecords,
+          projection: SqlProjection.column(conflictRecords.counter),
+          where: conflictRecords.id.equals(1),
+        )
+        .one(database);
+    _expect(counter == 3, 'atomic increment value');
 
     final insertedMany = await queries
         .insertMany(conflictRecords, <List<SqlAssignment>>[
@@ -386,6 +412,7 @@ final class _ConflictRecords extends SqlTable<_ConflictRecord> {
 
   late final SqlTableColumn<int> id = column<int>('id', sqlInt);
   late final SqlTableColumn<String> value = column<String>('value', sqlText);
+  late final SqlTableColumn<int> counter = column<int>('counter', sqlInt);
 
   @override
   late final SqlProjection<_ConflictRecord> projection =

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add type-safe atomic numeric updates through numeric
+  `SqlTableColumn.incrementBy`, while keeping derived assignments out of
+  INSERT APIs. Compile one bound `column = column + delta` statement across
+  SQLite, PostgreSQL, MySQL/MariaDB, and D1, with negative deltas for decrement
+  and explicit rejection of provider-dependent zero-delta no-ops.
+- Replace the full-stack starter and reference app's unbounded post list with a
+  typed ID-cursor page from SQL through generated RPC to Flutter
+  `InfiniteQueryBuilder`. Enforce a 1–50 row request budget and use
+  `limit + 1` to report the next cursor without an implicit count query.
 - Add an append-only native SQLite migration runner with strict numbered SQL
   loading, exact applied-source verification, per-file atomic execution, and
   concurrent-startup locking. Let Native and Wrangler D1 consume the same

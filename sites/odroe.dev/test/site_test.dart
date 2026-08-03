@@ -243,6 +243,12 @@ void main() {
     final tutorial = await File(
       'content/docs/tutorials/full-stack.mdc',
     ).readAsString();
+    final typedRpc = await File(
+      'content/docs/guides/typed-rpc-records.mdc',
+    ).readAsString();
+    final queryWorkflow = await File(
+      'content/docs/guides/query-workflows.mdc',
+    ).readAsString();
     final deployment = await File(
       'content/docs/guides/deployment.mdc',
     ).readAsString();
@@ -330,25 +336,61 @@ void main() {
       ]);
     }
 
-    expect(tutorial, contains('Post, CreatePost, and ListPostsInput records'));
+    expect(
+      tutorial,
+      contains('Post, PostPage, CreatePost, and ListPostsInput records'),
+    );
     expect(
       tutorial,
       contains('ServerFunction<models.CreatePost, models.Post>'),
     );
     expect(
       tutorial,
-      contains('ServerFunction<models.ListPostsInput, List<models.Post>>'),
+      contains('ServerFunction<models.ListPostsInput, models.PostPage>'),
     );
     expect(tutorial, contains('posts.id.isIn(input.ids)'));
     expect(tutorial, contains('input.ids.length > 100'));
+    expect(tutorial, contains('input.limit < 1 || input.limit > 50'));
+    expect(tutorial, contains('posts.id.lessThan(cursor)'));
+    expect(tutorial, contains('posts.id.greaterThan(cursor)'));
+    expect(tutorial, contains('limit: input.limit + 1'));
+    expect(tutorial, contains('nextCursor: hasNextPage'));
     expect(tutorial, contains('before SQL construction'));
     expect(tutorial, contains('DatabaseModule.borrowed(database)'));
     expect(tutorial, contains('D1SqlDatabase'));
     expect(tutorial, contains('generated.routes.posts.createPost'));
-    expect(tutorial, contains('final QueryKey<List<Post>> listKey'));
+    expect(
+      tutorial,
+      contains('final QueryKey<InfiniteData<PostPage, int?>> listKey'),
+    );
+    expect(tutorial, contains('InfiniteQueryBuilder<PostPage, int?>'));
+    expect(
+      tutorial,
+      contains('page.query.cancelToken.whenCancelled.then<void>((_) {})'),
+    );
     expect(
       tutorial,
       contains("QueryFilter(key: QueryKey<Object?>('posts.list'))"),
+    );
+    expect(
+      typedRpc,
+      contains('typedef PostPage = ({List<Post> items, int? nextCursor});'),
+    );
+    expect(
+      typedRpc,
+      contains(
+        'typedef ListPostsInput = ({int? cursor, List<int> ids, int limit, String sort});',
+      ),
+    );
+    expect(
+      typedRpc,
+      contains('ServerFunction<models.ListPostsInput, models.PostPage>'),
+    );
+    expect(queryWorkflow, contains('InfiniteQueryOptions<PostPage, int?>'));
+    expect(queryWorkflow, contains('InfiniteQueryBuilder<PostPage, int?>'));
+    expect(
+      queryWorkflow,
+      contains('for (final page in query.requireData.pages)'),
     );
   });
 
@@ -778,12 +820,20 @@ void main() {
     expect(source, contains('Completed data is validated before'));
     expect(source, contains('Pending options may adopt immediately'));
     expect(source, contains('leaves the typed query in error'));
+    expect(source, contains('reads one extra row'));
+    expect(source, contains('PostPage, int?'));
+    expect(source, contains('lastPage.nextCursor'));
+    expect(source, contains('result.hasNextPage'));
   });
 
   test('Database docs preserve the typed dialect boundary', () async {
     final document = await File(
       'content/docs/guides/database-providers.mdc',
     ).readAsString();
+    final concept = await File(
+      'content/docs/concepts/database.mdc',
+    ).readAsString();
+    final api = await File('content/docs/reference/api.mdc').readAsString();
     final source = document.replaceAll(RegExp(r'\s+'), ' ');
     final fullStack = _shellBlockContaining(
       document,
@@ -817,6 +867,15 @@ void main() {
     expect(source, contains("retain SQL's three-valued behavior"));
     expect(source, contains("callers own every provider's parameter limit"));
     expect(source, contains('`updateAll` / `deleteAll` plus `allRows`'));
+    for (final incrementDocs in <String>[document, concept, api]) {
+      expect(incrementDocs, contains('SqlUpdateAssignment'));
+      expect(incrementDocs, contains('incrementBy'));
+      expect(incrementDocs, contains('-0.0'));
+      expect(incrementDocs, contains('INSERT'));
+    }
+    expect(document, contains('column = column + ?'));
+    expect(concept, contains('value = value + ?'));
+    expect(api, contains('column = column + ?'));
     expect(source, contains('Future<void> close()'));
     expect(source, contains('DatabaseModule.owned'));
     expect(source, contains('DatabaseModule.borrowed'));
@@ -920,7 +979,7 @@ void main() {
     expect(config['compatibility_flags'], contains('enable_request_signal'));
     expect(database['binding'], 'DB');
     expect(database['migrations_dir'], 'migrations');
-    expect(exampleReadme, contains('Flutter\nQuery / Mutation'));
+    expect(exampleReadme, contains('Flutter\nInfinite Query / Mutation'));
     expect(exampleReadme, contains('Odroe post 42'));
     expect(exampleReadme, contains('readSqliteMigrations(path)'));
     expect(package['private'], isTrue);

@@ -1359,7 +1359,9 @@ Server createServer() {
           queryParameters: <String, String>{
             'payload': jsonEncode(<String, Object?>{
               'data': <String, Object?>{
+                'cursor': null,
                 'ids': <int>[42, 43, 404],
+                'limit': 1,
                 'sort': 'newest',
               },
             }),
@@ -1373,10 +1375,42 @@ Server createServer() {
       expect(jsonDecode(list.body), <String, Object?>{
         'version': 1,
         'type': 'data',
-        'data': <Object?>[
-          <String, Object?>{'id': 43, 'title': 'Existing D1 post'},
-          <String, Object?>{'id': 42, 'title': 'Odroe post 42'},
-        ],
+        'data': <String, Object?>{
+          'items': <Object?>[
+            <String, Object?>{'id': 43, 'title': 'Existing D1 post'},
+          ],
+          'nextCursor': 43,
+        },
+      });
+
+      final nextList = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{
+                'cursor': 43,
+                'ids': <int>[42, 43, 404],
+                'limit': 1,
+                'sort': 'newest',
+              },
+            }),
+          },
+        ),
+        headers: rpcHeaders,
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(nextList.statusCode, 200, reason: '${nextList.body}\n$logs');
+      expect(jsonDecode(nextList.body), <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <String, Object?>{
+          'items': <Object?>[
+            <String, Object?>{'id': 42, 'title': 'Odroe post 42'},
+          ],
+          'nextCursor': null,
+        },
       });
 
       final oversizedList = await _waitForResponse(
@@ -1385,7 +1419,9 @@ Server createServer() {
           queryParameters: <String, String>{
             'payload': jsonEncode(<String, Object?>{
               'data': <String, Object?>{
+                'cursor': null,
                 'ids': List<int>.generate(101, (index) => index),
+                'limit': 20,
                 'sort': 'newest',
               },
             }),
@@ -1406,6 +1442,30 @@ Server createServer() {
           'message',
           'Post ID filter cannot contain more than 100 values.',
         ),
+      );
+
+      final invalidLimit = await _waitForResponse(
+        client,
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{
+                'cursor': null,
+                'ids': const <int>[],
+                'limit': 51,
+                'sort': 'newest',
+              },
+            }),
+          },
+        ),
+        headers: rpcHeaders,
+        processExitCode: () => processExitCode,
+        logs: logs,
+      );
+      expect(invalidLimit.statusCode, 400, reason: logs.toString());
+      expect(
+        jsonDecode(invalidLimit.body),
+        containsPair('message', 'Post page limit must be between 1 and 50.'),
       );
 
       final createFunction = Uri.encodeComponent('posts.create');
@@ -1456,7 +1516,12 @@ Server createServer() {
         Uri.parse('$origin/__odroe/functions/$listFunction').replace(
           queryParameters: <String, String>{
             'payload': jsonEncode(<String, Object?>{
-              'data': <String, Object?>{'ids': const <int>[], 'sort': 'newest'},
+              'data': <String, Object?>{
+                'cursor': null,
+                'ids': const <int>[],
+                'limit': 20,
+                'sort': 'newest',
+              },
             }),
           },
         ),
@@ -1466,7 +1531,8 @@ Server createServer() {
       );
       expect(refreshed.statusCode, 200, reason: '${refreshed.body}\n$logs');
       final refreshedFrame = jsonDecode(refreshed.body) as Map<String, Object?>;
-      final refreshedPosts = refreshedFrame['data']! as List<Object?>;
+      final refreshedData = refreshedFrame['data']! as Map<String, Object?>;
+      final refreshedPosts = refreshedData['items']! as List<Object?>;
       expect(refreshedPosts, contains(equals(createdPost)));
 
       final rejected = await _waitForResponse(
@@ -1516,7 +1582,12 @@ Server createServer() {
         Uri.parse('$origin/__odroe/functions/$listFunction').replace(
           queryParameters: <String, String>{
             'payload': jsonEncode(<String, Object?>{
-              'data': <String, Object?>{'ids': const <int>[], 'sort': 'newest'},
+              'data': <String, Object?>{
+                'cursor': null,
+                'ids': const <int>[],
+                'limit': 20,
+                'sort': 'newest',
+              },
             }),
           },
         ),
@@ -1526,8 +1597,9 @@ Server createServer() {
       );
       expect(afterRejected.statusCode, 200);
       expect(
-        (jsonDecode(afterRejected.body) as Map<String, Object?>)['data'],
-        refreshedPosts,
+        ((jsonDecode(afterRejected.body) as Map<String, Object?>)['data']!
+            as Map<String, Object?>)['items'],
+        refreshedData['items'],
       );
 
       final extraSegment = await _waitForResponse(

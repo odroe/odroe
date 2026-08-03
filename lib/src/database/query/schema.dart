@@ -203,6 +203,24 @@ final class SqlTableColumn<T> implements SqlSelection<T> {
   }
 }
 
+/// Atomic numeric updates for a non-nullable SQL column.
+extension SqlNumericColumnUpdates<T extends num> on SqlTableColumn<T> {
+  /// Adds [delta] to this column in the database.
+  ///
+  /// A negative delta subtracts from the current value. Zero is rejected so
+  /// callers cannot depend on provider-specific no-op affected-row behavior.
+  /// Overflow and floating-point rounding follow the database provider.
+  SqlUpdateAssignment incrementBy(T delta) {
+    if (delta == 0) {
+      throw ArgumentError.value(delta, 'delta', 'Must not be zero.');
+    }
+    return _SqlIncrementAssignment(
+      this as SqlTableColumn<Object?>,
+      resultColumn.bind(delta),
+    );
+  }
+}
+
 /// One typed column selected from a SQL result.
 ///
 /// A selection keeps its physical source column separate from its result
@@ -275,14 +293,32 @@ final class SqlProjection<R> {
   final R Function(SqlRow row) decode;
 }
 
-/// One heterogeneous, type-checked INSERT or UPDATE assignment.
+/// One type-checked assignment accepted by a SQL UPDATE.
+///
+/// Implementations can only be created through typed column methods.
+sealed class SqlUpdateAssignment {
+  const SqlUpdateAssignment._();
+
+  SqlTableColumn<Object?> get _column;
+}
+
+/// One heterogeneous, type-checked INSERT or constant UPDATE assignment.
 ///
 /// Instances can only be created through [SqlTableColumn.set].
-final class SqlAssignment {
-  const SqlAssignment._(this._column, this._value);
+final class SqlAssignment extends SqlUpdateAssignment {
+  const SqlAssignment._(this._column, this._value) : super._();
 
+  @override
   final SqlTableColumn<Object?> _column;
   final SqlValue _value;
+}
+
+final class _SqlIncrementAssignment extends SqlUpdateAssignment {
+  const _SqlIncrementAssignment(this._column, this._delta) : super._();
+
+  @override
+  final SqlTableColumn<Object?> _column;
+  final SqlValue _delta;
 }
 
 /// One composable, bound SQL predicate.

@@ -34,7 +34,10 @@ void main() {
         'argument_type_not_assignable',
         'argument_type_not_assignable',
         'argument_type_not_assignable',
-        'undefined_getter',
+        'undefined_method',
+        'undefined_method',
+        'undefined_method',
+        'argument_type_not_assignable',
       ],
     );
   });

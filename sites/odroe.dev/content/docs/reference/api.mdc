@@ -51,6 +51,20 @@ typed query in error. Mutation keys are operation identities and do not bind a
 mutation result type. Standalone query keys should declare `T`; standalone
 prefixes should use `QueryKey<Object?>`.
 
+Infinite Query keeps page transport explicit:
+
+| API | Contract |
+| --- | --- |
+| `InfiniteData<TPage, TPageParam>` | Immutable `pages` and matching `pageParams` in display order |
+| `InfiniteQueryOptions<TPage, TPageParam>` | One typed cache key, initial parameter, page function, next-page selector, and optional previous selector or retained-page limit |
+| `InfiniteQueryResult<TPage, TPageParam>` | Ordinary state in `query`, plus next/previous availability and fetch flags |
+| `InfiniteQueryBuilder<TPage, TPageParam>` | Flutter observer with forward and backward page actions |
+
+Returning `null` from `getNextPageParam` ends forward pagination. For the
+generated product, `PostPage.nextCursor` is that value; the RPC handler reads
+`limit + 1` rows but returns at most `limit` items. Cancellation is available
+inside the page function through `page.query.cancelToken`.
+
 ## Server hosts
 
 | Entrypoint | Owns |
@@ -128,6 +142,12 @@ candidate, nullable rows retain SQL's three-valued behavior. Rejecting empty
 | `SqlQueries.select(from:, projection:, ...)` | Reads a custom typed projection with optional joins |
 | `SqlQueries.countRows(table, joins:, where:)` | Returns typed `COUNT(*)` for relation rows produced by the table, joins, and predicate |
 
+Both select builders accept explicit `orderBy`, `limit`, and `offset`. The
+full-stack starter builds keyset pages without another abstraction: strict ID
+comparison, unique ID ordering, and `limit + 1` determine a nullable
+`nextCursor`. The RPC result contains at most the requested limit. Odroe does
+not attach a count query or infer a cursor from an arbitrary ordering.
+
 `countRows` returns `SqlRead<int>` and shares select's table scope, join
 validation, aliases, and bound predicates. Joined duplicates count separately;
 an empty relation returns `0`. It deliberately has no ordering, pagination,
@@ -167,6 +187,22 @@ remain observable.
 | `SqlQueries.insertOnConflictDoNothing(table, values, target: columns)` | Inserts one row or ignores the named unique/primary-key conflict |
 | `SqlQueries.updateWhere` / `deleteWhere` | Requires an explicit predicate |
 | `SqlQueries.updateAll` / `deleteAll` | Requires the visible `allRows` confirmation token |
+
+`updateWhere` and `updateAll` accept `Iterable<SqlUpdateAssignment>`. Two
+typed column operations create that sealed public input:
+
+| Assignment | Contract |
+| --- | --- |
+| `column.set(value)` | Constant INSERT or UPDATE assignment; returns `SqlAssignment` |
+| `numericColumn.incrementBy(delta)` | Atomic relative UPDATE; returns `SqlUpdateAssignment` |
+
+`incrementBy` exists only for non-null `SqlTableColumn<T extends num>` and
+compiles to `column = column + ?`. Negative deltas subtract. Numeric zero,
+including `-0.0`, is rejected before statement construction; other values are
+encoded immediately through the column codec. Its result cannot enter an
+INSERT. Duplicate updates to one column, including a `set` plus an increment,
+and assignments from another table are rejected before I/O. Integer overflow
+and floating-point rounding remain provider-defined.
 
 Conflict-target inserts require non-empty values and target columns owned by
 the same table. The database, not `SqlTable`, remains the authority for whether

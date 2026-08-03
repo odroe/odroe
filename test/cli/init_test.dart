@@ -198,23 +198,32 @@ void main() {
       expect(database, isNot(contains('INSERT INTO posts')));
       expect(models, contains('typedef Post = ({int id, String title});'));
       expect(models, contains('typedef CreatePost = ({String title});'));
-      expect(models, isNot(contains('ListPostsInput')));
-      expect(routeServer, contains('ServerFunction<NoServerInput'));
+      expect(models, contains('typedef PostPage ='));
+      expect(models, contains('typedef ListPostsInput ='));
+      expect(
+        routeServer,
+        contains('ServerFunction<models.ListPostsInput, models.PostPage>'),
+      );
       expect(routeServer, contains("id: 'posts.list'"));
       expect(routeServer, contains("id: 'posts.create'"));
+      expect(routeServer, contains('limit: input.limit + 1'));
+      expect(routeServer, contains('posts.id.lessThan'));
       expect(routeServer, contains('.all('));
       expect(routeServer, contains('.returning(posts.projection)'));
       expect(routePage, contains('MutationBuilder<Post, CreatePost, void>'));
-      expect(routePage, contains('QueryBuilder<List<Post>>'));
+      expect(routePage, contains('InfiniteQueryBuilder<PostPage, int?>'));
       expect(routePage, contains('late MutationOptions'));
       expect(routePage, isNot(contains('late final MutationOptions')));
       expect(routePage, contains('void _configureCreate()'));
       expect(routePage, contains('_configureCreate();'));
-      expect(routePage, contains('late QueryOptions<List<Post>> _listOptions'));
+      expect(
+        routePage,
+        contains('late InfiniteQueryOptions<PostPage, int?> _listOptions'),
+      );
       expect(routePage, contains('options: _createOptions'));
       expect(routePage, contains('options: _listOptions'));
       expect(routePage, isNot(contains('options: MutationOptions')));
-      expect(routePage, isNot(contains('options: QueryOptions')));
+      expect(routePage, isNot(contains('options: InfiniteQueryOptions')));
       final gitIgnore = File(p.join(project.path, '.gitignore'));
       expect(
         const LineSplitter().convert(gitIgnore.readAsStringSync()),

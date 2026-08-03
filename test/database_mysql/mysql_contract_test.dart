@@ -159,7 +159,8 @@ void main() {
         BoundSql.raw('''
           CREATE TABLE `$table` (
             id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            label VARCHAR(191) NOT NULL UNIQUE
+            label VARCHAR(191) NOT NULL UNIQUE,
+            counter BIGINT NOT NULL DEFAULT 0
           )
         '''),
       );
@@ -181,6 +182,22 @@ void main() {
           ])
           .execute(database);
       expect(inserted.affectedRows, 2);
+      final incremented = await queries
+          .updateWhere(records, <SqlUpdateAssignment>[
+            records.counter.incrementBy(4),
+          ], where: records.id.equals(2))
+          .execute(database);
+      expect(incremented.affectedRows, 1);
+      expect(
+        await queries
+            .select(
+              from: records,
+              projection: SqlProjection.column(records.counter),
+              where: records.id.equals(2),
+            )
+            .one(database),
+        4,
+      );
       expect(
         await queries
             .selectTable(
@@ -542,6 +559,7 @@ final class _MysqlBatchRecords extends SqlTable<_MysqlBatchRecord> {
 
   late final SqlTableColumn<int> id = column<int>('id', sqlInt);
   late final SqlTableColumn<String> label = column<String>('label', sqlText);
+  late final SqlTableColumn<int> counter = column<int>('counter', sqlInt);
 
   @override
   late final SqlProjection<_MysqlBatchRecord> projection =

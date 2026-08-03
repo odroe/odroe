@@ -118,7 +118,43 @@ that entry directly.
 Install `QueryModule` from `query_flutter.dart`, then use focused builders for
 query, infinite-query, or mutation state. The query function can call a
 generated RPC ref without coupling either subsystem. Keep the options object in
-the owning `State`; ordinary widget rebuilds should reuse its identity:
+the owning `State`; ordinary widget rebuilds should reuse its identity.
+
+### Keep page bounds across every layer
+
+The full-stack product returns `PostPage` with at most the requested `items`
+and a nullable `nextCursor`. Its SQL handler validates `limit`, applies a strict
+ID keyset predicate, and reads one extra row. Generated RPC preserves that
+record, and Infinite Query feeds only `nextCursor` into the next request:
+
+```dart
+final options = InfiniteQueryOptions<PostPage, int?>(
+  key: QueryKey<InfiniteData<PostPage, int?>>('posts.list'),
+  initialPageParam: null,
+  getNextPageParam: (lastPage, _, _, _) => lastPage.nextCursor,
+  query: (page) => routes.listPosts(
+    rpc,
+    (cursor: page.pageParam, ids: const <int>[], limit: 20, sort: 'newest'),
+    cancelled: page.query.cancelToken.whenCancelled.then<void>((_) {}),
+  ),
+);
+```
+
+`InfiniteQueryBuilder<PostPage, int?>` renders the ordinary state through
+`result.query`, flattens `query.requireData.pages`, and exposes Load more only
+when `result.hasNextPage`. A `null` cursor ends pagination without an implicit
+count or a client-side length guess. See
+[Query workflows](/docs/guides/query-workflows) for the widget lifecycle.
+
+The starter leaves `maxPages` unset so Load more never silently removes rows the
+user already loaded. Each database read and RPC frame is still bounded, but the
+client cache grows by one page per explicit action. Long-lived feeds should set
+`maxPages` only together with previous-page navigation or a deliberate windowed
+UI; independently virtualize rendering when retaining many loaded rows.
+
+### Observe one query
+
+The same ownership rule applies to an ordinary detail query:
 
 ```dart
 late QueryOptions<Post> _postOptions;
@@ -130,7 +166,7 @@ void initState() {
 }
 
 @override
-void didUpdateWidget(PostPage oldWidget) {
+void didUpdateWidget(PostDetailPage oldWidget) {
   super.didUpdateWidget(oldWidget);
   if (oldWidget.postId != widget.postId ||
       !identical(oldWidget.rpc, widget.rpc)) {

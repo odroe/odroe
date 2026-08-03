@@ -145,30 +145,73 @@ CREATE TABLE posts (
   testWidgets('generated RPC lists, creates, and reads typed posts', (
     tester,
   ) async {
-    final application = (await tester.runAsync(_startNativeApplication))!;
+    final application = (await tester.runAsync(
+      () => _startNativeApplication(extraPosts: 3),
+    ))!;
     final transport = _realHttpTransport();
     final client = RpcClient(baseUri: application.origin, transport: transport);
     try {
       final initial = (await tester.runAsync(
         () => routes.posts.listPosts(client, (
+          cursor: null,
           ids: const <int>[],
+          limit: 2,
           sort: 'newest',
         )),
       ))!;
-      expect(initial, <Post>[(id: 42, title: 'Odroe post 42')]);
+      expect(initial.items.map((post) => post.id), <int>[45, 44]);
+      expect(initial.nextCursor, 44);
+
+      final next = (await tester.runAsync(
+        () => routes.posts.listPosts(client, (
+          cursor: initial.nextCursor,
+          ids: const <int>[],
+          limit: 2,
+          sort: 'newest',
+        )),
+      ))!;
+      expect(next.items.map((post) => post.id), <int>[43, 42]);
+      expect(next.nextCursor, isNull);
+
+      final oldest = (await tester.runAsync(
+        () => routes.posts.listPosts(client, (
+          cursor: 42,
+          ids: const <int>[],
+          limit: 2,
+          sort: 'oldest',
+        )),
+      ))!;
+      expect(oldest.items.map((post) => post.id), <int>[43, 44]);
+      expect(oldest.nextCursor, 44);
+
+      final oldestTail = (await tester.runAsync(
+        () => routes.posts.listPosts(client, (
+          cursor: oldest.nextCursor,
+          ids: const <int>[],
+          limit: 2,
+          sort: 'oldest',
+        )),
+      ))!;
+      expect(oldestTail.items.map((post) => post.id), <int>[45]);
+      expect(oldestTail.nextCursor, isNull);
 
       final selected = (await tester.runAsync(
         () => routes.posts.listPosts(client, (
+          cursor: null,
           ids: <int>[42, 404],
+          limit: 2,
           sort: 'newest',
         )),
       ))!;
-      expect(selected, <Post>[(id: 42, title: 'Odroe post 42')]);
+      expect(selected.items, <Post>[(id: 42, title: 'Odroe post 42')]);
+      expect(selected.nextCursor, isNull);
 
       final oversizedError = await tester.runAsync<Object?>(() async {
         try {
           await routes.posts.listPosts(client, (
+            cursor: null,
             ids: List<int>.generate(101, (index) => index),
+            limit: 20,
             sort: 'newest',
           ));
           return null;
@@ -187,6 +230,52 @@ CREATE TABLE posts (
             ),
       );
 
+      for (final invalidLimit in <int>[0, 51]) {
+        final limitError = await tester.runAsync<Object?>(() async {
+          try {
+            await routes.posts.listPosts(client, (
+              cursor: null,
+              ids: const <int>[],
+              limit: invalidLimit,
+              sort: 'newest',
+            ));
+            return null;
+          } on Object catch (error) {
+            return error;
+          }
+        });
+        expect(
+          limitError,
+          isA<RemoteServerException>()
+              .having((error) => error.status, 'status', 400)
+              .having(
+                (error) => error.message,
+                'message',
+                'Post page limit must be between 1 and 50.',
+              ),
+        );
+      }
+
+      final sortError = await tester.runAsync<Object?>(() async {
+        try {
+          await routes.posts.listPosts(client, (
+            cursor: null,
+            ids: const <int>[],
+            limit: 20,
+            sort: 'popular',
+          ));
+          return null;
+        } on Object catch (error) {
+          return error;
+        }
+      });
+      expect(
+        sortError,
+        isA<RemoteServerException>()
+            .having((error) => error.status, 'status', 400)
+            .having((error) => error.message, 'message', 'Invalid post sort.'),
+      );
+
       final created = (await tester.runAsync(
         () => routes.posts.createPost(client, (title: '  Created post  ')),
       ))!;
@@ -200,11 +289,13 @@ CREATE TABLE posts (
 
       final ordered = (await tester.runAsync(
         () => routes.posts.listPosts(client, (
+          cursor: null,
           ids: const <int>[],
+          limit: 20,
           sort: 'newest',
         )),
       ))!;
-      expect(ordered.first, created);
+      expect(ordered.items.first, created);
     } finally {
       transport.close();
       await tester.runAsync(application.close);
@@ -354,7 +445,7 @@ CREATE TABLE posts (
         tester,
         find.text('Created from UI'),
         reason: () {
-          final state = query.getQueryState<List<Post>>(
+          final state = query.getQueryState<InfiniteData<PostPage, int?>>(
             QueryKey('posts.list', <Object?>['newest']),
           );
           return 'status=${state?.status}; fetch=${state?.fetchStatus}; '
@@ -437,6 +528,74 @@ CREATE TABLE posts (
       expect(transport.createRequests, 1);
       expect(transport.listRequests, 2);
       expect(find.text('Stable created'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      query.clear();
+    }
+  });
+
+  testWidgets('posts page appends and refreshes typed cursor pages', (
+    tester,
+  ) async {
+    final transport = _PagedPostsTransport();
+    final query = QueryClient(
+      options: const QueryClientOptions(
+        queries: QueryPolicy(
+          gcTime: Duration(minutes: 1),
+          retry: QueryRetry.never(),
+        ),
+      ),
+    );
+    try {
+      await tester.pumpWidget(
+        App(
+          modules: <Module>[
+            QueryModule(client: query),
+            RpcModule(
+              RpcClient(
+                baseUri: Uri.parse('https://api.example.com'),
+                transport: transport,
+              ),
+            ),
+            RouterModule(
+              routes: routeTree,
+              initialLocation: Uri.parse('/posts'),
+            ),
+          ],
+          builder: (app) =>
+              MaterialApp.router(routerConfig: app.read(routerKey)),
+        ),
+      );
+      await tester.pump();
+      await _pumpUntil(tester, find.text('New post'));
+
+      expect(find.text('Middle post'), findsOneWidget);
+      expect(find.text('Old post'), findsNothing);
+      expect(find.text('Load more'), findsOneWidget);
+      expect(transport.cursors, <int?>[null]);
+
+      await tester.tap(find.text('Load more'));
+      await tester.pump();
+      await _pumpUntil(tester, find.text('Old post'));
+
+      expect(find.text('New post'), findsOneWidget);
+      expect(find.text('Middle post'), findsOneWidget);
+      expect(find.text('Old post'), findsOneWidget);
+      expect(find.text('Load more'), findsNothing);
+      expect(transport.cursors, <int?>[null, 2]);
+
+      await tester.enterText(find.byType(TextField), 'Created paged post');
+      await tester.pump();
+      await tester.tap(find.text('Create'));
+      await tester.pump();
+      await _pumpUntil(tester, find.text('Created paged post'));
+
+      expect(find.text('New post'), findsOneWidget);
+      expect(find.text('Middle post'), findsOneWidget);
+      expect(find.text('Old post'), findsOneWidget);
+      expect(find.text('Load more'), findsNothing);
+      expect(transport.cursors, <int?>[null, 2, null, 3]);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
@@ -660,6 +819,72 @@ final class _FailingDetailRefreshTransport implements RpcTransport {
   }
 }
 
+final class _PagedPostsTransport implements RpcTransport {
+  final List<int?> cursors = <int?>[];
+  var _created = false;
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async {
+    if (request.uri.path.endsWith('/posts.create')) {
+      _created = true;
+      return ServerResponse.json(<String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <String, Object?>{'id': 4, 'title': 'Created paged post'},
+      });
+    }
+    if (!request.uri.path.endsWith('/posts.list')) {
+      throw StateError('Unexpected request: ${request.uri}');
+    }
+    final payload =
+        jsonDecode(request.uri.queryParameters['payload']!)
+            as Map<String, Object?>;
+    final input = payload['data']! as Map<String, Object?>;
+    expect(input['limit'], 20);
+    expect(input['sort'], 'newest');
+    final cursor = input['cursor'] as int?;
+    cursors.add(cursor);
+
+    final (items, nextCursor) = switch ((_created, cursor)) {
+      (false, null) => (
+        <Object?>[
+          <String, Object?>{'id': 3, 'title': 'New post'},
+          <String, Object?>{'id': 2, 'title': 'Middle post'},
+        ],
+        2,
+      ),
+      (false, 2) => (
+        <Object?>[
+          <String, Object?>{'id': 1, 'title': 'Old post'},
+        ],
+        null,
+      ),
+      (true, null) => (
+        <Object?>[
+          <String, Object?>{'id': 4, 'title': 'Created paged post'},
+          <String, Object?>{'id': 3, 'title': 'New post'},
+        ],
+        3,
+      ),
+      (true, 3) => (
+        <Object?>[
+          <String, Object?>{'id': 2, 'title': 'Middle post'},
+          <String, Object?>{'id': 1, 'title': 'Old post'},
+        ],
+        null,
+      ),
+      _ => throw StateError(
+        'Unexpected cursor state: created=$_created; cursor=$cursor',
+      ),
+    };
+    return ServerResponse.json(<String, Object?>{
+      'version': 1,
+      'type': 'data',
+      'data': <String, Object?>{'items': items, 'nextCursor': nextCursor},
+    });
+  }
+}
+
 final class _ControlledPostsTransport implements RpcTransport {
   final _create = Completer<void>();
   var listRequests = 0;
@@ -675,10 +900,13 @@ final class _ControlledPostsTransport implements RpcTransport {
       return ServerResponse.json(<String, Object?>{
         'version': 1,
         'type': 'data',
-        'data': <Object?>[
-          <String, Object?>{'id': 1, 'title': 'Existing post'},
-          if (_created) <String, Object?>{'id': 2, 'title': 'Stable created'},
-        ],
+        'data': <String, Object?>{
+          'items': <Object?>[
+            <String, Object?>{'id': 1, 'title': 'Existing post'},
+            if (_created) <String, Object?>{'id': 2, 'title': 'Stable created'},
+          ],
+          'nextCursor': null,
+        },
       });
     }
     if (request.uri.path.endsWith('/posts.create')) {
@@ -865,12 +1093,29 @@ final class _NativeApplication {
   }
 }
 
-Future<_NativeApplication> _startNativeApplication() async {
+Future<_NativeApplication> _startNativeApplication({int extraPosts = 0}) async {
   final state = await Directory.systemTemp.createTemp('odroe-example-state-');
   Server? server;
   try {
+    final databasePath = '${state.path}/app.sqlite3';
+    if (extraPosts > 0) {
+      final database = SqliteDatabase.open(databasePath);
+      try {
+        await database.applyMigrations(
+          readSqliteMigrations(Directory('migrations').absolute.path),
+        );
+        await postQueries
+            .insertMany(posts, <List<SqlAssignment>>[
+              for (var index = 0; index < extraPosts; index++)
+                <SqlAssignment>[posts.title.set('Seeded post ${index + 1}')],
+            ])
+            .execute(database);
+      } finally {
+        await database.close();
+      }
+    }
     server = await native_server.createNativeServer(
-      databasePath: '${state.path}/app.sqlite3',
+      databasePath: databasePath,
       migrationsPath: Directory('migrations').absolute.path,
     );
     final httpServer = await IoServer.bind(server.handler, port: 0);

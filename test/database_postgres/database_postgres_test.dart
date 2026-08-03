@@ -214,7 +214,8 @@ void main() {
         BoundSql.raw('''
           CREATE TEMP TABLE typed_many_posts (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            title TEXT NOT NULL UNIQUE
+            title TEXT NOT NULL UNIQUE,
+            counter BIGINT NOT NULL DEFAULT 0
           )
         '''),
       );
@@ -247,6 +248,22 @@ void main() {
       expect(inserted.map((post) => post.id), unorderedEquals(<int>[1, 2]));
 
       final secondId = insertedByTitle['Second']!.id;
+      final incremented = await queries
+          .updateWhere(posts, <SqlUpdateAssignment>[
+            posts.counter.incrementBy(4),
+          ], where: posts.id.equals(secondId))
+          .execute(database);
+      expect(incremented.affectedRows, 1);
+      expect(
+        await queries
+            .select(
+              from: posts,
+              projection: SqlProjection.column(posts.counter),
+              where: posts.id.equals(secondId),
+            )
+            .one(database),
+        4,
+      );
       expect(
         await queries
             .selectTable(posts, where: posts.id.isIn(<int>[secondId]))
@@ -786,6 +803,7 @@ final class _ConflictPosts extends SqlTable<_ConflictPost> {
 
   late final SqlTableColumn<int> id = column<int>('id', sqlInt);
   late final SqlTableColumn<String> title = column<String>('title', sqlText);
+  late final SqlTableColumn<int> counter = column<int>('counter', sqlInt);
 
   @override
   late final SqlProjection<_ConflictPost> projection =

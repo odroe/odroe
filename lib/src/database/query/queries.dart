@@ -272,7 +272,7 @@ final class SqlQueries {
   /// Creates an UPDATE constrained by [where].
   SqlWrite updateWhere(
     SqlTable<Object?> table,
-    Iterable<SqlAssignment> values, {
+    Iterable<SqlUpdateAssignment> values, {
     required SqlPredicate where,
   }) {
     return _update(table, values, where: where);
@@ -281,7 +281,7 @@ final class SqlQueries {
   /// Creates an intentional full-table UPDATE.
   SqlWrite updateAll(
     SqlTable<Object?> table,
-    Iterable<SqlAssignment> values, {
+    Iterable<SqlUpdateAssignment> values, {
     required SqlAllRows confirm,
   }) {
     return _update(table, values);
@@ -312,7 +312,7 @@ final class SqlQueries {
 
   SqlWrite _update(
     SqlTable<Object?> table,
-    Iterable<SqlAssignment> values, {
+    Iterable<SqlUpdateAssignment> values, {
     SqlPredicate? where,
   }) {
     final assignments = _validateAssignments(table, values);
@@ -328,7 +328,15 @@ final class SqlQueries {
       builder
         ..write(dialect.quoteIdentifier(assignment._column.name))
         ..write(' = ');
-      builder.bind(assignment._value);
+      switch (assignment) {
+        case SqlAssignment():
+          builder.bind(assignment._value);
+        case _SqlIncrementAssignment():
+          builder
+            ..write(dialect.quoteIdentifier(assignment._column.name))
+            ..write(' + ');
+          builder.bind(assignment._delta);
+      }
     }
     final predicate = where;
     if (predicate != null) {
@@ -343,11 +351,11 @@ final class SqlQueries {
     return SqlWrite._(builder.build(kind: SqlStatementKind.write), table);
   }
 
-  List<SqlAssignment> _validateAssignments(
+  List<A> _validateAssignments<A extends SqlUpdateAssignment>(
     SqlTable<Object?> table,
-    Iterable<SqlAssignment> values,
+    Iterable<A> values,
   ) {
-    final assignments = List<SqlAssignment>.unmodifiable(values);
+    final assignments = List<A>.unmodifiable(values);
     final names = <String>{};
     for (final assignment in assignments) {
       _requireColumn(table, assignment._column);

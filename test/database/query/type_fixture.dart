@@ -33,6 +33,20 @@ SqlRead<int> validCountFixture(TypeFixtureTable table) => const SqlQueries(
   SqlDialect.sqlite,
 ).countRows(table, where: table.active.equals(true));
 
+SqlWrite validNumericUpdateFixture(TypeFixtureTable table) =>
+    const SqlQueries(SqlDialect.sqlite).updateWhere(
+      table,
+      <SqlUpdateAssignment>[table.id.incrementBy(1), table.active.set(false)],
+      where: table.id.equals(42),
+    );
+
+SqlWrite insertAssignmentFixture(
+  TypeFixtureTable table,
+  SqlAssignment assignment,
+) => const SqlQueries(
+  SqlDialect.sqlite,
+).insert(table, <SqlAssignment>[assignment]);
+
 SqlRead<({String email, bool active})> validTypeFixture() {
   final table = TypeFixtureTable();
   final assignments = <SqlAssignment>[

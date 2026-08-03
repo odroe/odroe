@@ -7,7 +7,8 @@ import '../../posts.dart';
 import '../../routes.dart' as generated;
 import 'route.dart' as definition;
 
-final QueryKey<List<Post>> _postListsKey = QueryKey('posts.list');
+const _postPageSize = 20;
+final QueryKey<Object?> _postListsKey = QueryKey('posts.list');
 
 final route = definition.route.page(
   build: (context) => _PostsPage(
@@ -37,8 +38,8 @@ final class _PostsPage extends StatefulWidget {
 final class _PostsPageState extends State<_PostsPage> {
   final _title = TextEditingController();
   late MutationOptions<Post, CreatePost, void> _createOptions;
-  late QueryKey<List<Post>> _listKey;
-  late QueryOptions<List<Post>> _listOptions;
+  late QueryKey<InfiniteData<PostPage, int?>> _listKey;
+  late InfiniteQueryOptions<PostPage, int?> _listOptions;
 
   @override
   void initState() {
@@ -69,13 +70,23 @@ final class _PostsPageState extends State<_PostsPage> {
   }
 
   void _configureList() {
-    _listKey = QueryKey<List<Post>>('posts.list', <Object?>[widget.sort]);
-    _listOptions = QueryOptions<List<Post>>(
+    _listKey = QueryKey<InfiniteData<PostPage, int?>>('posts.list', <Object?>[
+      widget.sort,
+    ]);
+    _listOptions = InfiniteQueryOptions<PostPage, int?>(
       key: _listKey,
-      query: (query) => generated.routes.posts.listPosts(widget.rpc, (
-        ids: const <int>[],
-        sort: widget.sort,
-      ), cancelled: query.cancelToken.whenCancelled.then<void>((_) {})),
+      initialPageParam: null,
+      getNextPageParam: (lastPage, _, _, _) => lastPage.nextCursor,
+      query: (page) => generated.routes.posts.listPosts(
+        widget.rpc,
+        (
+          cursor: page.pageParam,
+          ids: const <int>[],
+          limit: _postPageSize,
+          sort: widget.sort,
+        ),
+        cancelled: page.query.cancelToken.whenCancelled.then<void>((_) {}),
+      ),
     );
   }
 
@@ -160,13 +171,14 @@ final class _PostsPageState extends State<_PostsPage> {
                 ),
                 const SizedBox(height: 20),
                 Expanded(
-                  child: QueryBuilder<List<Post>>(
+                  child: InfiniteQueryBuilder<PostPage, int?>(
                     options: _listOptions,
-                    builder: (context, result) {
-                      if (!result.hasData && result.isFetching) {
+                    builder: (context, result, fetchNextPage, _) {
+                      final query = result.query;
+                      if (!query.hasData && query.isFetching) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      if (result.isError && !result.hasData) {
+                      if (query.isError && !query.hasData) {
                         return Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -184,13 +196,16 @@ final class _PostsPageState extends State<_PostsPage> {
                           ),
                         );
                       }
-                      if (!result.hasData) {
+                      if (!query.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      final posts = result.requireData;
+                      final posts = <Post>[
+                        for (final page in query.requireData.pages)
+                          ...page.items,
+                      ];
                       return Column(
                         children: <Widget>[
-                          if (result.isError)
+                          if (query.isError)
                             Material(
                               color: Theme.of(
                                 context,
@@ -245,6 +260,22 @@ final class _PostsPageState extends State<_PostsPage> {
                                     },
                                   ),
                           ),
+                          if (result.hasNextPage) ...<Widget>[
+                            const SizedBox(height: 12),
+                            FilledButton.tonal(
+                              onPressed: result.isFetchingNextPage
+                                  ? null
+                                  : fetchNextPage,
+                              child: result.isFetchingNextPage
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text('Load more'),
+                            ),
+                          ],
                         ],
                       );
                     },

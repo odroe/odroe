@@ -1,3 +1,5 @@
+import 'package:odroe/database.dart';
+
 import 'type_fixture.dart';
 
 void invalidTypeFixture() {
@@ -11,4 +13,7 @@ void invalidTypeFixture() {
   table.email.isIn(<String?>['ada@example.com', null]);
   table.id.isNotIn(<String>['42']);
   table.email.optional.set('write');
+  table.email.incrementBy(1);
+  table.ownerId.incrementBy(1);
+  insertAssignmentFixture(table, table.id.incrementBy(1));
 }

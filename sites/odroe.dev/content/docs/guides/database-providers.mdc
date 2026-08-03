@@ -77,6 +77,7 @@ final selected = await sql
       posts,
       where: posts.id.isIn(<int>[42, 44]),
       orderBy: <SqlOrder>[posts.id.ascending],
+      limit: 20,
     )
     .all(database);
 
@@ -123,8 +124,14 @@ final insertedById = <int, Post>{
 
 await sql.updateAll(
   posts,
-  <SqlAssignment>[posts.title.set('Archived')],
+  <SqlUpdateAssignment>[posts.title.set('Archived')],
   confirm: allRows,
+).execute(database);
+
+await sql.updateWhere(
+  counters,
+  <SqlUpdateAssignment>[counters.value.incrementBy(1)],
+  where: counters.id.equals(42),
 ).execute(database);
 ```
 
@@ -133,6 +140,17 @@ The dialect is explicit. `posts.title.set(42)` is an analyzer error.
 Joined reads qualify every column automatically. For a `LEFT JOIN`, use the
 result-only `.optional` selection to decode a non-null schema column as
 nullable; it cannot be used for INSERT or UPDATE. Mutations remain single-table.
+In the final update, `counters.value` is a non-null `SqlTableColumn<int>`.
+
+`incrementBy` is available only on a non-null `SqlTableColumn<T extends num>`.
+It emits one bound `column = column + ?` assignment, so concurrent writers do
+not race through an application-side read-modify-write. Negative values
+subtract; numeric zero, including `-0.0`, is rejected before SQL construction.
+The column codec still validates and encodes the delta. UPDATE accepts
+`SqlUpdateAssignment`, which includes both constant `set` assignments and
+numeric increments; INSERT continues to accept only `SqlAssignment`. Duplicate
+assignments to one column and assignments owned by another table fail before
+database I/O.
 
 `isIn` and `isNotIn` bind each non-null candidate through the receiving
 column's codec and snapshot the iterable structure immediately. Empty `isIn`

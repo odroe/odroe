@@ -66,7 +66,7 @@ dart run odroe dev -- -d chrome
 my_app/
 ├── lib/
 │   ├── main.dart              # one-import Flutter composition root
-│   ├── posts.dart             # 客户端安全的 Post / CreatePost records
+│   ├── posts.dart             # 客户端安全的 Post / PostPage / input records
 │   ├── posts_database.dart    # shared typed schema and query
 │   ├── rpc_origin.dart
 │   ├── server.dart            # native / Cloudflare conditional export
@@ -74,8 +74,8 @@ my_app/
 │   ├── server_cloudflare.dart # invocation-scoped D1
 │   ├── routes/
 │   │   ├── route.dart
-│   │   ├── page.dart          # typed list query + create mutation
-│   │   └── server.dart        # typed list/create RPC + SQL
+│   │   ├── page.dart          # typed infinite query + create mutation
+│   │   └── server.dart        # typed cursor-page/create RPC + SQL
 │   ├── routes.dart            # generated client tree
 │   └── routes.server.dart     # generated server tree
 ├── migrations/
@@ -87,7 +87,7 @@ my_app/
 ```
 
 `init --full-stack` 只接受 Flutter `--empty` 应用，验证目标项目确实解析到正在
-运行的 Odroe，然后原子写入一条真实纵向产品：Flutter 的帖子列表与创建 → Query / Mutation →
+运行的 Odroe，然后原子写入一条真实纵向产品：Flutter 的有界游标分页与创建 → Infinite Query / Mutation →
 named-record typed RPC → Server → typed SQL → SQLite。它同时准备 D1 migration 与
 锁定的本地 Cloudflare 工具链，但默认开发路径不需要 Node。二次执行零改动；发现
 自定义源码、配置、目录冲突或符号链接会整体拒绝，不提供 `--force`，也不会修改
@@ -566,7 +566,7 @@ final class Authors extends SqlTable<String> {
   late final projection = SqlProjection.column(displayName);
 }
 
-typedef Post = ({int id, int? authorId, String title});
+typedef Post = ({int id, int? authorId, String title, int views});
 
 final class Posts extends SqlTable<Post> {
   Posts() : super('posts');
@@ -574,14 +574,16 @@ final class Posts extends SqlTable<Post> {
   late final id = column<int>('id', sqlInt);
   late final authorId = column<int?>('author_id', nullable(sqlInt));
   late final title = column<String>('title', sqlText);
+  late final views = column<int>('views', sqlInt);
 
   @override
   late final projection = SqlProjection<Post>(
-    <SqlSelection<Object?>>[id, authorId, title],
+    <SqlSelection<Object?>>[id, authorId, title, views],
     (row) => (
       id: id.read(row, 0),
       authorId: authorId.read(row, 1),
       title: title.read(row, 2),
+      views: views.read(row, 3),
     ),
   );
 }
@@ -599,6 +601,15 @@ final selected = await sql
       posts,
       where: posts.id.isIn(<int>[42, 44]),
       orderBy: <SqlOrder>[posts.id.ascending],
+    )
+    .all(database);
+
+final nextPage = await sql
+    .selectTable(
+      posts,
+      where: posts.id.lessThan(42),
+      orderBy: <SqlOrder>[posts.id.descending],
+      limit: 21,
     )
     .all(database);
 
@@ -629,6 +640,7 @@ await sql
       <SqlAssignment>[
         posts.id.set(42),
         posts.title.set('Hello'),
+        posts.views.set(0),
       ],
       target: [posts.id],
     )
@@ -639,10 +651,12 @@ final inserted = await sql
       <SqlAssignment>[
         posts.id.set(43),
         posts.title.set('First'),
+        posts.views.set(0),
       ],
       <SqlAssignment>[
         posts.id.set(44),
         posts.title.set('Second'),
+        posts.views.set(0),
       ],
     ])
     .returning(posts.projection)
@@ -653,8 +667,14 @@ final insertedById = <int, Post>{
 
 await sql.updateAll(
   posts,
-  <SqlAssignment>[posts.title.set('Archived')],
+  <SqlUpdateAssignment>[posts.title.set('Archived')],
   confirm: allRows,
+).execute(database);
+
+await sql.updateWhere(
+  posts,
+  <SqlUpdateAssignment>[posts.views.incrementBy(1)],
+  where: posts.id.equals(42),
 ).execute(database);
 ```
 
@@ -662,6 +682,14 @@ await sql.updateAll(
 与 `allRows` 两次确认。联表查询会自动限定列名；`LEFT JOIN` 右侧的非空
 schema column 通过结果专用的 `.optional` 解码，不能用于写入。
 mutation 仍严格保持单表。`BoundSql` 保留为手写 SQL 逃生口。
+
+`incrementBy` 只存在于非空 `SqlTableColumn<T extends num>`，编译为单条
+`column = column + ?` UPDATE，不会先读再写。正值增加，负值减少；`0`、
+`0.0` 与 `-0.0` 会在 SQL 构造前拒绝，其余值仍立即通过 column codec
+绑定。UPDATE 接收公开的 `SqlUpdateAssignment`；`set` 生成的
+`SqlAssignment` 也是其子类，但 `incrementBy` 的结果不能误用于 INSERT。同一
+column 的 `set` / `incrementBy` 重复赋值会在 I/O 前失败。整数溢出与浮点舍入
+仍遵循实际数据库 provider；Odroe 不用一层隐式数值模型掩盖它们。
 
 `countRows` 通过相同的 table、join 与 predicate 路径生成 typed `COUNT(*)`，并直接
 返回 `SqlRead<int>`。它计算 `FROM` / `JOIN` / `WHERE` 产生的关系行，因此 join
@@ -699,8 +727,8 @@ SQLite、D1 与 PostgreSQL 编译为同一条 target-aware
 接受 `SqlDialect.mysql`；显式错配会在该 statement 到达数据库前抛出
 `SqlException(SqlErrorCode.unsupported)`。
 
-`odroe init --full-stack` 把根页面跑成一条真实纵向链路：Flutter list/create UI →
-Query / Mutation → 生成的 named-record typed RPC → HTTP → Server →
+`odroe init --full-stack` 把根页面跑成一条真实纵向链路：Flutter cursor-page/create UI →
+Infinite Query / Mutation → 生成的 named-record typed RPC → HTTP → Server →
 `DatabaseModule` → typed SQL。它与仓库中的
 [`example/app`](https://github.com/odroe/odroe/tree/main/example/app) 沿用同一组已验证
 API、runtime contract 与锁定工具链。共享的产品 records 不依赖数据库：
@@ -708,7 +736,16 @@ API、runtime contract 与锁定工具链。共享的产品 records 不依赖数
 ```dart
 typedef Post = ({int id, String title});
 typedef CreatePost = ({String title});
+typedef PostPage = ({List<Post> items, int? nextCursor});
+typedef ListPostsInput = ({int? cursor, int limit});
 ```
+
+server 将 `limit` 限定在 `1..50`，按唯一 ID 倒序并读取 `limit + 1` 行。
+额外一行只用来决定 `nextCursor`；RPC 返回最多 `limit` 个 `items`。Flutter
+用 `InfiniteQueryOptions<PostPage, int?>` 将每页的 `nextCursor` 传给下一次
+`posts.list`，不会把整张表一次物化到 RPC 与 widget tree。仓库示例在
+同一契约上另加 `ids` 与 `sort`：`newest` 使用 `id < cursor`，`oldest`
+使用 `id > cursor`，两者都保持严格、可索引的 keyset 边界。
 
 创建操作直接返回数据库生成的完整记录：
 
