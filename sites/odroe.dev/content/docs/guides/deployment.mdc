@@ -29,6 +29,15 @@ Document routes are rendered through the real server. Pure document routes
 produce semantic HTML; Flutter routes also keep their bootstrap and handoff
 state. Files from `public/` are copied without a bundler.
 
+Odroe-managed Flutter Web output must resolve inside the project's `build/`
+tree. The CLI rewrites Flutter's `--output` to a clean hidden sibling during the
+build, then atomically swaps each requested directory as part of one grouped
+publication. If a later Web target or the final Native validation fails, Odroe
+restores every earlier directory before returning the failure. Removed routes
+and assets therefore do not survive from a previous successful build. Source
+directories, `public/`, and absolute external outputs are never managed
+replacement roots.
+
 Static file routes and locations returned from `lib/prerender.dart` are the
 default source of truth. Link discovery is opt-in with `--prerender-crawl`.
 Builds use 4 concurrent requests and stop at 1000 routes or 1 MiB of HTML per
@@ -44,7 +53,8 @@ route response.
 
 When a full-stack deployment also needs the default Native server, its
 `odroe.yaml` selection makes `dart run odroe build web` include the SQLite
-history. A Native product without SQLite migrations omits that config. For a
+history, Flutter client, and prerendered routes in one deployable bundle. A
+Native product without SQLite migrations omits that config. For a
 document-only product such as this website, no Flutter target is required:
 
 ```sh
@@ -77,10 +87,41 @@ build/odroe/server/
 Windows names the executable `bin/server.exe`; the bundle root and the rest of
 the layout stay the same.
 
+A full-stack build uses the same root and adds the complete Web application:
+
+```sh
+dart run odroe build web
+```
+
+```text
+build/odroe/server/
+├── bin/
+├── lib/
+├── migrations/  # when selected
+└── build/
+    └── web/
+        ├── flutter_bootstrap.js
+        ├── main.dart.js
+        └── posts/42/index.html  # example prerendered route
+```
+
+This is the deployment boundary: move the one bundle, not a server directory
+plus an unrelated static build.
+
 Migration files are copied byte-for-byte through a sibling staging directory;
-the complete `bin/`, `lib/`, and optional `migrations/` bundle replaces the
-previous root only after compilation and a final source recheck succeed. A
+the AOT server remains staged while Flutter and prerender run. Odroe layers the
+actual Flutter output and `--prerender-output` into `<bundle>/build/web`, checks
+the migration source again, and replaces the previous root once. A failed
+Flutter build, prerender, Web copy, or migration recheck leaves the previous
+server and client together. `--server-only` intentionally publishes no
+`build/web`, including when it replaces an earlier full-stack bundle, so stale
+client code cannot masquerade as the current release. Nested Flutter/prerender
+roots and symbolic links inside either Web tree fail closed instead of copying
+an ambiguous or external artifact. A
 hidden ownership marker keeps the CLI from overwriting an unrelated directory.
+One project build lock covers route generation, AOT and Flutter compilation,
+prerendering, Web assembly, migration validation, and publication, so concurrent
+Odroe build commands cannot cross-pair one server with another client's output.
 The generated bootstrap also uses that marker to identify an owned bundle. It
 derives the root from the resolved executable and changes the runtime working
 directory before application creation, so the entry may be invoked from any
@@ -104,9 +145,9 @@ whole root; copying only `bin/server` can omit required native libraries.
 the listener; platforms that provide `PORT` are supported by the generated
 bootstrap. In an owned bundle, static files default to `<bundle>/build/web`
 regardless of the caller working directory. Set `ODROE_WEB_ROOT` to an explicit
-directory, or to an empty string to disable the static root. A production image
-must place assets in the default location, set an explicit path, or disable
-static serving.
+directory, or to an empty string to disable the static root. `build web` already
+places assets in the default location. A server-only image must add an explicit
+static tree, set another path, or disable static serving.
 
 The generated full-stack starter defaults SQLite to `.odroe/app.sqlite3`
 relative to the effective runtime root. In an owned bundle that is the bundle

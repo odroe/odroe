@@ -176,6 +176,158 @@ void main() {
     expect(outsideSentinel.readAsStringSync(), 'outside');
   });
 
+  test('Flutter and prerender outputs cannot be nested', () async {
+    final temporaryProject = await Directory.systemTemp.createTemp(
+      'odroe_build_nested_web_outputs_',
+    );
+    final project = Directory(temporaryProject.resolveSymbolicLinksSync());
+    addTearDown(() => project.delete(recursive: true));
+    File(
+      p.join(project.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: nested_web_outputs_fixture\n');
+    Directory(
+      p.join(project.path, 'lib', 'routes'),
+    ).createSync(recursive: true);
+    final errors = StringBuffer();
+
+    final code = await runOdroe(
+      <String>[
+        'build',
+        '--project',
+        project.path,
+        '--no-server',
+        '--prerender-output',
+        'build/web/prerender',
+        '--',
+        'web',
+        '--output',
+        'build/web',
+      ],
+      output: StringBuffer(),
+      errors: errors,
+    );
+
+    expect(code, 64);
+    expect(
+      errors.toString(),
+      contains(
+        'Flutter build output and --prerender-output must either match or '
+        'not overlap.',
+      ),
+    );
+  });
+
+  test(
+    'managed Flutter Web output stays inside the project build tree',
+    () async {
+      final temporaryProject = await Directory.systemTemp.createTemp(
+        'odroe_build_flutter_output_',
+      );
+      final project = Directory(temporaryProject.resolveSymbolicLinksSync());
+      final outside = await Directory.systemTemp.createTemp(
+        'odroe_build_flutter_output_outside_',
+      );
+      addTearDown(() async {
+        await project.delete(recursive: true);
+        await outside.delete(recursive: true);
+      });
+      File(
+        p.join(project.path, 'pubspec.yaml'),
+      ).writeAsStringSync('name: flutter_output_fixture\n');
+      Directory(
+        p.join(project.path, 'lib', 'routes'),
+      ).createSync(recursive: true);
+      final publicSentinel =
+          File(p.join(project.path, 'public', 'sentinel.txt'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync('public');
+      final outsideSentinel = File(p.join(outside.path, 'sentinel.txt'))
+        ..writeAsStringSync('outside');
+
+      for (final unsafe in <String>['public', 'build', outside.path]) {
+        final errors = StringBuffer();
+        final code = await runOdroe(
+          <String>[
+            'build',
+            '--project',
+            project.path,
+            '--no-server',
+            '--no-prerender',
+            '--',
+            'web',
+            '--output',
+            unsafe,
+          ],
+          output: StringBuffer(),
+          errors: errors,
+        );
+
+        expect(code, 64, reason: unsafe);
+        expect(
+          errors.toString(),
+          contains('Flutter Web output must resolve inside build/.'),
+          reason: unsafe,
+        );
+        expect(publicSentinel.readAsStringSync(), 'public');
+        expect(outsideSentinel.readAsStringSync(), 'outside');
+      }
+
+      final blockedFlutter = File(p.join(project.path, 'build', 'blocked-web'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('keep');
+      final flutterErrors = StringBuffer();
+      final flutterCode = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          '--no-server',
+          '--no-prerender',
+          '--',
+          'web',
+          '--output',
+          'build/blocked-web',
+        ],
+        output: StringBuffer(),
+        errors: flutterErrors,
+      );
+      expect(flutterCode, 64);
+      expect(
+        flutterErrors.toString(),
+        contains(
+          'Flutter Web output must be a regular directory or not exist.',
+        ),
+      );
+      expect(blockedFlutter.readAsStringSync(), 'keep');
+
+      final blockedPrerender =
+          File(p.join(project.path, 'build', 'blocked-prerender'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync('keep');
+      final prerenderErrors = StringBuffer();
+      final prerenderCode = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          '--no-server',
+          '--prerender-output',
+          'build/blocked-prerender',
+        ],
+        output: StringBuffer(),
+        errors: prerenderErrors,
+      );
+      expect(prerenderCode, 64);
+      expect(
+        prerenderErrors.toString(),
+        contains(
+          '--prerender-output must be a regular directory or not exist.',
+        ),
+      );
+      expect(blockedPrerender.readAsStringSync(), 'keep');
+    },
+  );
+
   test(
     'build outputs cannot traverse an existing symbolic link',
     () async {

@@ -51,14 +51,21 @@ predicate，读取 `limit + 1` 行后只返回 `items` 与可选
 创建使用单条 typed `INSERT ... RETURNING`，由数据库生成 ID 并返回完整 `Post`。
 Native build 的 `--server-artifact` 指向完整 bundle root，默认是
 `build/odroe/server`。入口为 `bin/server`（Windows 为 `bin/server.exe`），
-运行所需的 native libraries 位于 `lib/`。本应用的 `odroe.yaml` 选择
+运行所需的 native libraries 位于 `lib/`。`dart run odroe build web` 还会把
+Flutter bootstrap、`main.dart.js` 与 prerender HTML 一起放入
+`<bundle>/build/web`，因此部署时只需移动这一份 bundle；
+`build --server-only` 不会继承上次构建的 Web tree。本应用的 `odroe.yaml` 选择
 `migrations`，因此 Native build 会验证这些文件并原字节复制到同一根目录的
 `migrations/`；`--sqlite-migrations <path>` 可覆盖本次命令。可从任意工作目录
 直接执行 `<bundle>/bin/server`；bootstrap 会在应用启动前自定位，部署时只需保留
 整个 bundle。若 history 外置，再用 `ODROE_MIGRATIONS_PATH` 指向其绝对路径。
 构建预渲染由 CLI 显式保留项目目录，使构建期源码资源仍按项目解析；同一选择固定
 migration source，并把数据库覆盖为一次性临时文件，结束后删除临时数据库，因而
-不会读取或改写开发数据库。初始 migration 使用幂等建表与 seed，只用于接纳此前
+不会读取或改写开发数据库。AOT server 会一直留在 staging；只有 Flutter、
+prerender、Web tree 装载和最终 migration snapshot 校验全部成功后，CLI 才原子
+替换正式 bundle，因此失败不会留下新 server 配旧客户端。Flutter Web 本身也从
+`build/` 内的空 staging 生成，已删除的 route 或 asset 不会从上次输出漏进 bundle；
+同一项目的构建锁会覆盖整条流水线。初始 migration 使用幂等建表与 seed，只用于接纳此前
 尚无 ledger 的未发布 Native starter；runner 不会为任意既有 schema 猜测
 baseline。
 

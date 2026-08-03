@@ -12,7 +12,7 @@ import '../support/process.dart';
 
 void main() {
   test(
-    'native bundle self-locates from an unrelated launch directory',
+    'native full-stack bundle is complete, atomic, and self-locating',
     () async {
       final project = Directory('example/app').absolute;
       final artifact = Directory(
@@ -23,6 +23,16 @@ void main() {
           'native-static-$pid-${DateTime.now().microsecondsSinceEpoch}',
         ),
       );
+      final webOutputs = Directory(
+        p.join(
+          project.path,
+          'build',
+          'odroe',
+          'native-web-$pid-${DateTime.now().microsecondsSinceEpoch}',
+        ),
+      );
+      final flutterOutput = Directory(p.join(webOutputs.path, 'flutter'));
+      final prerenderOutput = Directory(p.join(webOutputs.path, 'prerender'));
       final deployment = await Directory.systemTemp.createTemp(
         'odroe-native-static-',
       );
@@ -30,12 +40,30 @@ void main() {
         if (artifact.existsSync()) {
           await artifact.delete(recursive: true);
         }
+        if (webOutputs.existsSync()) {
+          await webOutputs.delete(recursive: true);
+        }
         if (deployment.existsSync()) {
           await deployment.delete(recursive: true);
         }
       });
 
       final artifactPath = p.relative(artifact.path, from: project.path);
+      final flutterOutputPath = p.relative(
+        flutterOutput.path,
+        from: project.path,
+      );
+      final prerenderOutputPath = p.relative(
+        prerenderOutput.path,
+        from: project.path,
+      );
+      final stalePrerender =
+          File(p.join(prerenderOutput.path, 'removed-route', 'index.html'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync('stale prerender');
+      final staleFlutter = File(p.join(flutterOutput.path, 'removed-client.js'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('stale client');
       final build = await withDartCommandLock(
         () => runTestProcess(dartExecutable, <String>[
           'run',
@@ -43,10 +71,15 @@ void main() {
           'build',
           '--project',
           project.path,
-          '--server-only',
           '--server-artifact',
           artifactPath,
-        ], timeout: const Duration(minutes: 2)),
+          '--prerender-output',
+          prerenderOutputPath,
+          '--',
+          'web',
+          '--output',
+          flutterOutputPath,
+        ], timeout: const Duration(minutes: 4)),
       );
       expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
       expect(build.stdout, contains('Bundled 2 SQLite migrations'));
@@ -66,26 +99,94 @@ void main() {
         final bundled = File(p.join(bundledMigrations.path, name));
         expect(bundled.readAsBytesSync(), source.readAsBytesSync());
       }
-      final rebuild = await withDartCommandLock(
+      final bundledWeb = Directory(p.join(artifact.path, 'build', 'web'));
+      final routeFile = File(
+        p.join(bundledWeb.path, 'posts', '42', 'index.html'),
+      );
+      final flutterBootstrap = File(
+        p.join(bundledWeb.path, 'flutter_bootstrap.js'),
+      );
+      final flutterMain = File(p.join(bundledWeb.path, 'main.dart.js'));
+      expect(routeFile.readAsStringSync(), contains('Odroe Router'));
+      expect(flutterBootstrap.lengthSync(), greaterThan(0));
+      expect(flutterMain.lengthSync(), greaterThan(0));
+      expect(stalePrerender.existsSync(), isFalse);
+      expect(staleFlutter.existsSync(), isFalse);
+      expect(
+        File(
+          p.join(bundledWeb.path, 'removed-route', 'index.html'),
+        ).existsSync(),
+        isFalse,
+      );
+
+      final sentinel = File(p.join(artifact.path, 'release-sentinel'))
+        ..writeAsStringSync('last known good');
+      final failedBuild = await withDartCommandLock(
         () => runTestProcess(dartExecutable, <String>[
           'run',
           'odroe',
           'build',
           '--project',
           project.path,
-          '--server-only',
           '--server-artifact',
           artifactPath,
-        ], timeout: const Duration(seconds: 30)),
+          '--prerender-output',
+          prerenderOutputPath,
+          '--',
+          'web',
+          '--output',
+          flutterOutputPath,
+          '--odroe-invalid-flutter-option',
+        ], timeout: const Duration(minutes: 2)),
       );
       expect(
-        rebuild.exitCode,
-        0,
-        reason: '${rebuild.stdout}\n${rebuild.stderr}',
+        failedBuild.exitCode,
+        isNot(0),
+        reason: '${failedBuild.stdout}\n${failedBuild.stderr}',
       );
-      expect(rebuild.stdout, contains('Bundled 2 SQLite migrations'));
+      expect(
+        '${failedBuild.stdout}\n${failedBuild.stderr}',
+        contains('odroe-invalid-flutter-option'),
+      );
       expect(artifact.existsSync(), isTrue);
       expect(owner.readAsStringSync(), 'odroe-native-bundle-v1\n');
+      expect(sentinel.readAsStringSync(), 'last known good');
+      expect(routeFile.readAsStringSync(), contains('Odroe Router'));
+      expect(flutterBootstrap.lengthSync(), greaterThan(0));
+      expect(flutterMain.lengthSync(), greaterThan(0));
+
+      final withoutPrerender = await withDartCommandLock(
+        () => runTestProcess(dartExecutable, <String>[
+          'run',
+          'odroe',
+          'build',
+          '--project',
+          project.path,
+          '--server-artifact',
+          artifactPath,
+          '--no-prerender',
+          '--prerender-output',
+          prerenderOutputPath,
+          '--',
+          'web',
+          '--output',
+          flutterOutputPath,
+        ], timeout: const Duration(minutes: 4)),
+      );
+      expect(
+        withoutPrerender.exitCode,
+        0,
+        reason: '${withoutPrerender.stdout}\n${withoutPrerender.stderr}',
+      );
+      expect(routeFile.existsSync(), isFalse);
+      expect(
+        File(
+          p.join(prerenderOutput.path, 'posts', '42', 'index.html'),
+        ).existsSync(),
+        isTrue,
+      );
+      expect(flutterBootstrap.lengthSync(), greaterThan(0));
+      expect(flutterMain.lengthSync(), greaterThan(0));
       final deployedBundle = Directory(p.join(deployment.path, 'server'));
       artifact.renameSync(deployedBundle.path);
       expect(artifact.existsSync(), isFalse);
@@ -98,18 +199,6 @@ void main() {
         p.join(deployedBundle.path, 'bin', _testNativeExecutableName),
       );
       expect(deployedArtifact.existsSync(), isTrue);
-      final routeFile = File(
-        p.join(
-          deployedBundle.path,
-          'build',
-          'web',
-          'posts',
-          '42',
-          'index.html',
-        ),
-      );
-      await routeFile.parent.create(recursive: true);
-      await routeFile.writeAsString('static native artifact');
 
       final databasePath = p.join(deployedBundle.path, '.odroe', 'app.sqlite3');
       final port = await _unusedPort();
@@ -131,8 +220,17 @@ void main() {
         logs: logs,
       );
       expect(html.status, HttpStatus.ok, reason: logs.toString());
-      expect(html.body, 'static native artifact');
+      expect(html.body, contains('Odroe Router'));
       expect(html.vary, 'Accept');
+      final bootstrap = await _get(
+        client,
+        Uri.parse('http://127.0.0.1:$port/flutter_bootstrap.js'),
+        accept: '*/*',
+        logs: logs,
+      );
+      expect(bootstrap.status, HttpStatus.ok, reason: logs.toString());
+      expect(bootstrap.body, isNotEmpty);
+      expect(bootstrap.contentType, contains('javascript'));
 
       final json = await _get(
         client,
@@ -429,6 +527,50 @@ void main() {
     timeout: const Timeout(Duration(minutes: 3)),
   );
 
+  test('shared Flutter and prerender output replaces stale files', () async {
+    final project = Directory('example/app').absolute;
+    final output = Directory(
+      p.join(
+        project.path,
+        'build',
+        'odroe',
+        'shared-web-$pid-${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    );
+    final stale = File(p.join(output.path, 'removed-route', 'index.html'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('stale');
+    addTearDown(() async {
+      if (output.existsSync()) await output.delete(recursive: true);
+    });
+    final relativeOutput = p.relative(output.path, from: project.path);
+
+    final build = await withDartCommandLock(
+      () => runTestProcess(dartExecutable, <String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--no-server',
+        '--prerender-output',
+        relativeOutput,
+        '--',
+        'web',
+        '--output',
+        relativeOutput,
+      ], timeout: const Duration(minutes: 3)),
+    );
+
+    expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
+    expect(stale.existsSync(), isFalse);
+    expect(File(p.join(output.path, 'main.dart.js')).existsSync(), isTrue);
+    expect(
+      File(p.join(output.path, 'posts', '42', 'index.html')).existsSync(),
+      isTrue,
+    );
+  });
+
   test(
     'native build rejects a linked bundle output without touching its target',
     () async {
@@ -526,6 +668,10 @@ void main() {
       File(
         p.join(fixture.migrationSource.path, '0001_override.sql'),
       ).writeAsStringSync('SELECT 1;');
+      _writeTestBundle(fixture.artifact, 'old server');
+      File(p.join(fixture.artifact.path, 'build', 'web', 'stale.html'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('stale client');
       addTearDown(() async {
         if (fixture.root.existsSync()) {
           await fixture.root.delete(recursive: true);
@@ -544,6 +690,10 @@ void main() {
           p.relative(fixture.artifact.path, from: project.path),
           '--sqlite-migrations',
           p.relative(fixture.migrationSource.path, from: project.path),
+          '--',
+          'web',
+          '--output',
+          'build/web',
         ], timeout: const Duration(minutes: 2)),
       );
 
@@ -554,6 +704,10 @@ void main() {
           p.join(fixture.artifact.path, 'migrations'),
         ).listSync().map((entry) => p.basename(entry.path)).toList(),
         <String>['0001_override.sql'],
+      );
+      expect(
+        Directory(p.join(fixture.artifact.path, 'build', 'web')).existsSync(),
+        isFalse,
       );
     },
     timeout: const Timeout(Duration(minutes: 3)),
@@ -693,6 +847,55 @@ void main() {
     expect(sentinel.readAsStringSync(), 'keep');
     expect(stagedBundle.existsSync(), isTrue);
   });
+
+  test(
+    'native bundle validates again while holding the publication lock',
+    () async {
+      final state = Directory.systemTemp.createTempSync(
+        'odroe-native-validation-',
+      );
+      addTearDown(() => state.deleteSync(recursive: true));
+      final bundle = Directory(p.join(state.path, 'output', 'server'));
+      final stagedBundle = Directory(p.join(state.path, 'staging'));
+      final lockFile = File(p.join(state.path, 'native-build.lock'));
+      _writeTestBundle(bundle, 'old server');
+      _writeTestBundle(stagedBundle, 'new server');
+      var validations = 0;
+
+      await expectLater(
+        replaceNativeBundle(
+          stagedBundle: stagedBundle,
+          bundle: bundle,
+          lockFile: lockFile,
+          validateBeforePublish: () {
+            validations++;
+            throw FileSystemException('migration snapshot changed');
+          },
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(validations, 1);
+      expect(
+        File(
+          p.join(bundle.path, 'bin', _testNativeExecutableName),
+        ).readAsStringSync(),
+        'old server',
+      );
+      expect(stagedBundle.existsSync(), isTrue);
+
+      await replaceNativeBundle(
+        stagedBundle: stagedBundle,
+        bundle: bundle,
+        lockFile: lockFile,
+      );
+      expect(
+        File(
+          p.join(bundle.path, 'bin', _testNativeExecutableName),
+        ).readAsStringSync(),
+        'new server',
+      );
+    },
+  );
 
   test('native bundle preserves a legacy executable', () async {
     final state = Directory.systemTemp.createTempSync('odroe-native-legacy-');

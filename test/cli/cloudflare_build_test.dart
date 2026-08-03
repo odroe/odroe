@@ -1179,7 +1179,7 @@ Server createServer() {
   });
 
   test(
-    'native prerender consumes the published bundle migrations',
+    'native prerender uses staged migrations and rejects source drift',
     () async {
       final project = await _createDocumentFixture();
       addTearDown(() => project.delete(recursive: true));
@@ -1200,7 +1200,9 @@ Server createServer() {
   if (selected == null || selected.isEmpty) {
     throw StateError('ODROE_MIGRATIONS_PATH is required during prerender.');
   }
-  File('migrations/0001_probe.sql').writeAsStringSync('SELECT 2;');
+  if (Platform.environment['ODROE_TEST_MUTATE_MIGRATION'] == 'true') {
+    File('migrations/0001_probe.sql').writeAsStringSync('SELECT 2;');
+  }
   final selectedSql = File(
     '$selected${Platform.pathSeparator}0001_probe.sql',
   ).readAsStringSync();
@@ -1227,12 +1229,49 @@ Server createServer() {
 
       expect(build.exitCode, 0, reason: logs);
       final selected = marker.readAsLinesSync();
-      expect(
-        p.normalize(selected.first),
-        p.normalize(p.join(artifact.path, 'migrations')),
-      );
+      expect(selected.first, contains('.odroe-native-'));
+      expect(p.basename(selected.first), 'migrations');
       expect(selected.skip(1).join('\n'), 'SELECT 1;');
+      expect(migration.readAsStringSync(), 'SELECT 1;');
+      expect(
+        File(
+          p.join(artifact.path, 'migrations', '0001_probe.sql'),
+        ).readAsStringSync(),
+        'SELECT 1;',
+      );
+      final sentinel = File(p.join(artifact.path, 'release-sentinel'))
+        ..writeAsStringSync('last known good');
+      final webSentinel = File(
+        p.join(project.path, 'build', 'web', 'release-sentinel'),
+      )..writeAsStringSync('last known client');
+
+      final changed = await _runDart(
+        <String>[
+          'run',
+          'odroe',
+          'build',
+          '--project',
+          project.path,
+          '--server-artifact',
+          p.relative(artifact.path, from: project.path),
+          '--sqlite-migrations',
+          'migrations',
+        ],
+        environment: <String, String>{
+          ...Platform.environment,
+          'ODROE_TEST_MUTATE_MIGRATION': 'true',
+        },
+      );
+      final changedLogs = '${changed.stdout}\n${changed.stderr}';
+
+      expect(changed.exitCode, 1, reason: changedLogs);
+      expect(
+        changedLogs,
+        contains('SQLite migrations changed while the native server'),
+      );
       expect(migration.readAsStringSync(), 'SELECT 2;');
+      expect(sentinel.readAsStringSync(), 'last known good');
+      expect(webSentinel.readAsStringSync(), 'last known client');
       expect(
         File(
           p.join(artifact.path, 'migrations', '0001_probe.sql'),

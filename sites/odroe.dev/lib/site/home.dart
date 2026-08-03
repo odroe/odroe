@@ -355,9 +355,7 @@ HtmlElement _output() => element(
             ),
             element(
               'code',
-              children: <HtmlNode>[
-                text(r'$ dart run odroe build --server-only'),
-              ],
+              children: <HtmlNode>[text(r'$ dart run odroe build web')],
             ),
           ],
         ),
@@ -378,8 +376,8 @@ HtmlElement _output() => element(
         _artifact(
           'Native',
           'Verified locally',
-          'Dart server executable',
-          'Run the same typed server on a VM or container.',
+          'AOT + Flutter Web bundle',
+          'Deploy one atomic full-stack root to a VM or container.',
           'server',
         ),
         _artifact(

@@ -36,6 +36,44 @@ Future<int> runBuild(
   required List<String> flutterArguments,
   required StringSink out,
   required StringSink err,
+}) => _withBuildLock(
+  project,
+  out,
+  () => _runBuildLocked(
+    project,
+    serverOnly: serverOnly,
+    buildServer: buildServer,
+    serverTarget: serverTarget,
+    serverArtifact: serverArtifact,
+    sqliteMigrations: sqliteMigrations,
+    prerender: prerender,
+    prerenderOutput: prerenderOutput,
+    prerenderConcurrency: prerenderConcurrency,
+    prerenderCrawl: prerenderCrawl,
+    prerenderMaxRoutes: prerenderMaxRoutes,
+    prerenderMaxResponseBytes: prerenderMaxResponseBytes,
+    flutterArguments: flutterArguments,
+    out: out,
+    err: err,
+  ),
+);
+
+Future<int> _runBuildLocked(
+  CliProject project, {
+  required bool serverOnly,
+  required bool buildServer,
+  required ServerBuildTarget serverTarget,
+  required String? serverArtifact,
+  required String? sqliteMigrations,
+  required bool prerender,
+  required String prerenderOutput,
+  required int prerenderConcurrency,
+  required bool prerenderCrawl,
+  required int prerenderMaxRoutes,
+  required int prerenderMaxResponseBytes,
+  required List<String> flutterArguments,
+  required StringSink out,
+  required StringSink err,
 }) async {
   if (serverOnly && !buildServer) {
     err.writeln('--server-only cannot be combined with --no-server.');
@@ -136,6 +174,21 @@ Future<int> runBuild(
   final flutterOutputs = serverOnly
       ? const <Directory>[]
       : _flutterBuildOutputs(project, flutterTarget, flutterArguments);
+  final flutterWebOutput = flutterTarget == 'web' && flutterOutputs.isNotEmpty
+      ? flutterOutputs.single
+      : null;
+  if (flutterWebOutput != null &&
+      !_pathIsWithin(
+        _realPathForOverlap(p.join(project.root.path, 'build')),
+        flutterWebOutput.path,
+      )) {
+    err.writeln('Flutter Web output must resolve inside build/.');
+    return 64;
+  }
+  if (flutterWebOutput != null && !_replaceableDirectory(flutterWebOutput)) {
+    err.writeln('Flutter Web output must be a regular directory or not exist.');
+    return 64;
+  }
   for (final flutterOutput in flutterOutputs) {
     if (migrationSource != null &&
         _pathsOverlap(flutterOutput.path, migrationSource.path)) {
@@ -176,6 +229,12 @@ Future<int> runBuild(
         option: '--prerender-output',
       ),
     );
+    if (!_replaceableDirectory(outputDirectory)) {
+      err.writeln(
+        '--prerender-output must be a regular directory or not exist.',
+      );
+      return 64;
+    }
     if (migrationSource != null &&
         _pathsOverlap(migrationSource.path, outputDirectory.path)) {
       err.writeln(
@@ -208,6 +267,16 @@ Future<int> runBuild(
         return 64;
       }
     }
+    for (final flutterOutput in flutterOutputs) {
+      if (_pathsOverlap(flutterOutput.path, outputDirectory.path) &&
+          !_pathsEqual(flutterOutput.path, outputDirectory.path)) {
+        err.writeln(
+          'Flutter build output and --prerender-output must either match or '
+          'not overlap.',
+        );
+        return 64;
+      }
+    }
   }
   final generated = generateRoutes(
     project,
@@ -229,71 +298,184 @@ Future<int> runBuild(
       return 1;
     }
   }
-  if (buildServer) {
-    final code = await _buildServer(
-      project,
-      target: serverTarget,
-      outputPath: artifactPath!,
-      migrationSource: migrationSource,
-      out: out,
-    );
-    if (code != 0) return code;
-  }
-  if (!serverOnly && flutterArguments.isNotEmpty) {
-    final flutter = await startProjectProcess('flutter', <String>[
-      'build',
-      ...flutterArguments,
-    ], project: project);
-    final code = await flutter.exitCode;
-    if (code != 0) return code;
-  }
-  if (!shouldPrerender) return 0;
-  final stagingDirectory = generated.hasFlutter
-      ? null
-      : _siblingTemporaryDirectory(outputDirectory, 'staging');
-  final renderDirectory = stagingDirectory ?? outputDirectory;
+  _NativeBundleStage? nativeStage;
+  Directory? flutterWebStage;
+  Directory? prerenderStage;
+  var prerenderSharesFlutterOutput = false;
   try {
-    renderDirectory.createSync(recursive: true);
-    final assets = await _copyPublicAssets(project, renderDirectory);
-    if (assets > 0) out.writeln('Copied $assets public assets.');
-    final prerenderFromSource =
-        !buildServer || serverTarget == ServerBuildTarget.cloudflare;
-    final prerenderExecutable = prerenderFromSource
-        ? Platform.resolvedExecutable
-        : p.join(artifactPath!, 'bin', _nativeServerExecutableName);
-    final prerenderArguments = prerenderFromSource
-        ? <String>['run', project.bootstrap.path]
-        : const <String>['--odroe-internal-prerender'];
-    final prerenderMigrationSource =
-        migrationSource != null && !prerenderFromSource
-        ? Directory(p.join(artifactPath!, 'migrations'))
-        : migrationSource;
-    final code = await _prerenderBuild(
-      project,
-      executable: prerenderExecutable,
-      arguments: prerenderArguments,
-      routes: routes,
-      outputDirectory: renderDirectory,
-      reportedOutputDirectory: outputDirectory,
-      concurrency: prerenderConcurrency,
-      crawlLinks: prerenderCrawl,
-      maxRoutes: prerenderMaxRoutes,
-      maxResponseBytes: prerenderMaxResponseBytes,
-      startupTimeout: prerenderFromSource
-          ? const Duration(minutes: 1)
-          : const Duration(seconds: 20),
-      migrationSource: prerenderMigrationSource,
-      out: out,
-      err: err,
-    );
-    if (code != 0) return code;
-    if (stagingDirectory != null) {
-      _replaceDirectory(stagingDirectory, outputDirectory);
+    if (buildServer) {
+      if (serverTarget == ServerBuildTarget.native) {
+        final result = await _stageNativeServer(
+          project,
+          Directory(artifactPath!),
+          migrationSource: migrationSource,
+          out: out,
+        );
+        if (result.code != 0) return result.code;
+        nativeStage = result.stage!;
+      } else {
+        final code = await buildCloudflareServer(
+          project,
+          artifact: File(artifactPath!),
+          out: out,
+        );
+        if (code != 0) return code;
+      }
     }
+    if (!serverOnly && flutterArguments.isNotEmpty) {
+      final effectiveFlutterArguments = flutterWebOutput == null
+          ? flutterArguments
+          : _flutterArgumentsWithOutput(
+              flutterArguments,
+              (flutterWebStage = _siblingTemporaryDirectory(
+                flutterWebOutput,
+                'staging',
+              )).path,
+            );
+      final flutter = await startProjectProcess('flutter', <String>[
+        'build',
+        ...effectiveFlutterArguments,
+      ], project: project);
+      final code = await flutter.exitCode;
+      if (code != 0) return code;
+    }
+    if (shouldPrerender) {
+      prerenderSharesFlutterOutput =
+          flutterWebOutput != null &&
+          flutterWebStage != null &&
+          sameBuildDirectory(flutterWebOutput, outputDirectory);
+      if (flutterWebOutput != null &&
+          !prerenderSharesFlutterOutput &&
+          _realPathsOverlap(flutterWebOutput.path, outputDirectory.path)) {
+        err.writeln(
+          'Flutter build output and --prerender-output must either match or '
+          'not overlap.',
+        );
+        return 64;
+      }
+      final renderDirectory = prerenderSharesFlutterOutput
+          ? flutterWebStage
+          : (prerenderStage = _siblingTemporaryDirectory(
+              outputDirectory,
+              'staging',
+            ));
+      renderDirectory.createSync(recursive: true);
+      final assets = await _copyPublicAssets(project, renderDirectory);
+      if (assets > 0) out.writeln('Copied $assets public assets.');
+      final prerenderFromSource = nativeStage == null;
+      final prerenderExecutable = prerenderFromSource
+          ? Platform.resolvedExecutable
+          : p.join(nativeStage.bundle.path, 'bin', _nativeServerExecutableName);
+      final prerenderArguments = prerenderFromSource
+          ? <String>['run', project.bootstrap.path]
+          : const <String>['--odroe-internal-prerender'];
+      final prerenderMigrationSource =
+          migrationSource != null && nativeStage != null
+          ? Directory(p.join(nativeStage.bundle.path, 'migrations'))
+          : migrationSource;
+      final code = await _prerenderBuild(
+        project,
+        executable: prerenderExecutable,
+        arguments: prerenderArguments,
+        routes: routes,
+        outputDirectory: renderDirectory,
+        reportedOutputDirectory: outputDirectory,
+        concurrency: prerenderConcurrency,
+        crawlLinks: prerenderCrawl,
+        maxRoutes: prerenderMaxRoutes,
+        maxResponseBytes: prerenderMaxResponseBytes,
+        startupTimeout: prerenderFromSource
+            ? const Duration(minutes: 1)
+            : const Duration(seconds: 20),
+        migrationSource: prerenderMigrationSource,
+        out: out,
+        err: err,
+      );
+      if (code != 0) return code;
+    }
+    if (nativeStage != null) {
+      final stagedPrerenderOutput = shouldPrerender
+          ? (prerenderSharesFlutterOutput ? flutterWebStage : prerenderStage)
+          : null;
+      if (flutterWebStage != null || stagedPrerenderOutput != null) {
+        installNativeWeb(
+          nativeStage.bundle,
+          flutterOutput: flutterWebStage,
+          prerenderOutput: stagedPrerenderOutput,
+        );
+      }
+    }
+    _publishBuildOutputs(
+      project,
+      webOutputs: <BuildDirectoryPublication>[
+        if (flutterWebStage != null)
+          (source: flutterWebStage, target: flutterWebOutput!),
+        if (prerenderStage != null)
+          (source: prerenderStage, target: outputDirectory),
+      ],
+      nativeStage: nativeStage,
+      nativeBundle: nativeStage == null ? null : Directory(artifactPath!),
+      out: out,
+    );
     return 0;
   } finally {
-    if (stagingDirectory?.existsSync() ?? false) {
-      stagingDirectory!.deleteSync(recursive: true);
+    final temporaryDirectory = nativeStage?.temporaryDirectory;
+    if (temporaryDirectory != null && temporaryDirectory.existsSync()) {
+      try {
+        temporaryDirectory.deleteSync(recursive: true);
+      } on FileSystemException catch (error) {
+        out.writeln(
+          'Warning: Native build staging remains at '
+          '${temporaryDirectory.path}: ${error.message}',
+        );
+      }
+    }
+    for (final stage in <Directory?>[flutterWebStage, prerenderStage]) {
+      if (stage != null && stage.existsSync()) {
+        try {
+          stage.deleteSync(recursive: true);
+        } on FileSystemException catch (error) {
+          out.writeln(
+            'Warning: Web build staging remains at '
+            '${stage.path}: ${error.message}',
+          );
+        }
+      }
+    }
+  }
+}
+
+Future<T> _withBuildLock<T>(
+  CliProject project,
+  StringSink out,
+  Future<T> Function() build,
+) async {
+  final lockFile = File(
+    p.join(project.root.path, '.dart_tool', 'odroe', 'build.lock'),
+  );
+  lockFile.parent.createSync(recursive: true);
+  final lock = await lockFile.open(mode: FileMode.append);
+  var locked = false;
+  try {
+    await lock.lock(FileLock.blockingExclusive);
+    locked = true;
+    return await build();
+  } finally {
+    if (locked) {
+      try {
+        await lock.unlock();
+      } on FileSystemException catch (error) {
+        out.writeln(
+          'Warning: Could not unlock ${lockFile.path}: ${error.message}',
+        );
+      }
+    }
+    try {
+      await lock.close();
+    } on FileSystemException catch (error) {
+      out.writeln(
+        'Warning: Could not close ${lockFile.path}: ${error.message}',
+      );
     }
   }
 }
@@ -416,6 +598,36 @@ String? _optionValue(List<String> arguments, List<String> options) {
   return value;
 }
 
+List<String> _flutterArgumentsWithOutput(
+  List<String> arguments,
+  String output,
+) {
+  const options = <String>['--output', '--output-dir', '-o'];
+  final rewritten = <String>[];
+  for (var index = 0; index < arguments.length; index++) {
+    final argument = arguments[index];
+    if (options.contains(argument)) {
+      if (index + 1 >= arguments.length ||
+          arguments[index + 1].startsWith('-')) {
+        throw FormatException('$argument requires a directory.');
+      }
+      index++;
+      continue;
+    }
+    final option = options
+        .where((option) => argument.startsWith('$option='))
+        .firstOrNull;
+    if (option != null) {
+      if (argument.length == option.length + 1) {
+        throw FormatException('$option requires a directory.');
+      }
+      continue;
+    }
+    rewritten.add(argument);
+  }
+  return <String>[...rewritten, '--output', output];
+}
+
 String _realPathForOverlap(String path) {
   var existing = p.normalize(Directory(path).absolute.path);
   final suffix = <String>[];
@@ -431,11 +643,96 @@ String _realPathForOverlap(String path) {
 }
 
 bool _pathsOverlap(String left, String right) {
-  final normalizedLeft = p.normalize(left).toLowerCase();
-  final normalizedRight = p.normalize(right).toLowerCase();
+  final ignoreCase = _usesCaseInsensitivePaths(left);
+  final normalizedLeft = _pathForComparison(left, ignoreCase: ignoreCase);
+  final normalizedRight = _pathForComparison(right, ignoreCase: ignoreCase);
   return p.equals(normalizedLeft, normalizedRight) ||
       p.isWithin(normalizedLeft, normalizedRight) ||
       p.isWithin(normalizedRight, normalizedLeft);
+}
+
+bool _pathsEqual(String left, String right) {
+  final ignoreCase = _usesCaseInsensitivePaths(left);
+  return p.equals(
+    _pathForComparison(left, ignoreCase: ignoreCase),
+    _pathForComparison(right, ignoreCase: ignoreCase),
+  );
+}
+
+String _pathForComparison(String path, {required bool ignoreCase}) {
+  final normalized = p.normalize(path);
+  return ignoreCase ? normalized.toLowerCase() : normalized;
+}
+
+bool _usesCaseInsensitivePaths(String path) {
+  if (Platform.isWindows) return true;
+
+  var directory = p.normalize(Directory(path).absolute.path);
+  while (FileSystemEntity.typeSync(directory) !=
+      FileSystemEntityType.directory) {
+    final parent = p.dirname(directory);
+    if (p.equals(parent, directory)) return true;
+    directory = parent;
+  }
+  while (true) {
+    final name = p.basename(directory);
+    final alternateName = _toggleAsciiCase(name);
+    if (alternateName != name) {
+      final alternate = p.join(p.dirname(directory), alternateName);
+      if (FileSystemEntity.typeSync(alternate) ==
+          FileSystemEntityType.notFound) {
+        return false;
+      }
+      try {
+        return FileSystemEntity.identicalSync(directory, alternate);
+      } on FileSystemException {
+        return true;
+      }
+    }
+    final parent = p.dirname(directory);
+    if (p.equals(parent, directory)) return true;
+    directory = parent;
+  }
+}
+
+String _toggleAsciiCase(String value) {
+  for (var index = 0; index < value.length; index++) {
+    final unit = value.codeUnitAt(index);
+    if (unit >= 0x41 && unit <= 0x5a) {
+      return '${value.substring(0, index)}'
+          '${String.fromCharCode(unit + 0x20)}${value.substring(index + 1)}';
+    }
+    if (unit >= 0x61 && unit <= 0x7a) {
+      return '${value.substring(0, index)}'
+          '${String.fromCharCode(unit - 0x20)}${value.substring(index + 1)}';
+    }
+  }
+  return value;
+}
+
+/// Reports whether two build directories denote the same filesystem location.
+bool sameBuildDirectory(Directory left, Directory right) {
+  if (_pathsEqual(left.absolute.path, right.absolute.path)) {
+    return true;
+  }
+  if (FileSystemEntity.typeSync(left.path, followLinks: false) !=
+          FileSystemEntityType.directory ||
+      FileSystemEntity.typeSync(right.path, followLinks: false) !=
+          FileSystemEntityType.directory) {
+    return false;
+  }
+  return FileSystemEntity.identicalSync(left.path, right.path);
+}
+
+bool _realPathsOverlap(String left, String right) =>
+    _pathsOverlap(_realPathForOverlap(left), _realPathForOverlap(right));
+
+bool _pathIsWithin(String parent, String child) {
+  final ignoreCase = _usesCaseInsensitivePaths(parent);
+  return p.isWithin(
+    _pathForComparison(parent, ignoreCase: ignoreCase),
+    _pathForComparison(child, ignoreCase: ignoreCase),
+  );
 }
 
 Directory _siblingTemporaryDirectory(Directory target, String suffix) {
@@ -445,11 +742,96 @@ Directory _siblingTemporaryDirectory(Directory target, String suffix) {
   );
 }
 
-void _replaceDirectory(Directory source, Directory target) {
+bool _replaceableDirectory(Directory target) {
+  final type = FileSystemEntity.typeSync(target.path, followLinks: false);
+  return type == FileSystemEntityType.notFound ||
+      type == FileSystemEntityType.directory;
+}
+
+/// One staged directory and its managed final build output.
+typedef BuildDirectoryPublication = ({Directory source, Directory target});
+typedef _DirectoryReplacement = ({
+  Directory target,
+  Directory backup,
+  bool hadPrevious,
+});
+
+void _publishBuildOutputs(
+  CliProject project, {
+  required List<BuildDirectoryPublication> webOutputs,
+  required _NativeBundleStage? nativeStage,
+  required Directory? nativeBundle,
+  required StringSink out,
+}) {
+  if (nativeStage != null) _validateNativeStage(nativeStage);
+  final nativeWarning = replaceBuildDirectories<String?>(
+    outputs: webOutputs,
+    commit: () => nativeStage == null
+        ? null
+        : _publishNativeServer(nativeStage, nativeBundle!),
+    out: out,
+  );
+  if (nativeWarning != null) out.writeln(nativeWarning);
+  if (nativeStage != null) {
+    _reportNativeServer(project, nativeStage, nativeBundle!, out);
+  }
+}
+
+/// Replaces related build directories and restores all of them if [commit]
+/// fails. This CLI helper is not exported from a product entrypoint.
+T replaceBuildDirectories<T>({
+  required List<BuildDirectoryPublication> outputs,
+  required T Function() commit,
+  required StringSink out,
+}) {
+  final replacements = <_DirectoryReplacement>[];
+  late T result;
+  try {
+    for (final output in outputs) {
+      replacements.add(_replaceDirectory(output.source, output.target));
+    }
+    result = commit();
+  } on Object catch (error, stackTrace) {
+    final rollbackErrors = <Object>[];
+    for (final replacement in replacements.reversed) {
+      try {
+        final warning = _restoreDirectory(replacement);
+        if (warning != null) out.writeln(warning);
+      } on Object catch (rollbackError) {
+        rollbackErrors.add(rollbackError);
+      }
+    }
+    if (rollbackErrors.isNotEmpty) {
+      throw FileSystemException(
+        'Build publication failed and one or more previous Web outputs could '
+        'not be restored. Publication failure: $error. Rollback failures: '
+        '${rollbackErrors.join('; ')}',
+        outputs.firstOrNull?.target.parent.path ?? Directory.current.path,
+      );
+    }
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+  for (final replacement in replacements) {
+    final warning = _discardDirectoryBackup(replacement);
+    if (warning != null) out.writeln(warning);
+  }
+  return result;
+}
+
+_DirectoryReplacement _replaceDirectory(Directory source, Directory target) {
+  final targetType = FileSystemEntity.typeSync(target.path, followLinks: false);
+  if (targetType != FileSystemEntityType.notFound &&
+      targetType != FileSystemEntityType.directory) {
+    throw FileSystemException(
+      'Web output must be a regular directory.',
+      target.path,
+    );
+  }
   final backup = _siblingTemporaryDirectory(target, 'backup');
+  final hadPrevious = targetType == FileSystemEntityType.directory;
   var movedTarget = false;
   try {
-    if (target.existsSync()) {
+    if (hadPrevious) {
       target.renameSync(backup.path);
       movedTarget = true;
     }
@@ -469,7 +851,57 @@ void _replaceDirectory(Directory source, Directory target) {
     }
     rethrow;
   }
-  if (backup.existsSync()) backup.deleteSync(recursive: true);
+  return (target: target, backup: backup, hadPrevious: hadPrevious);
+}
+
+String? _restoreDirectory(_DirectoryReplacement replacement) {
+  final published = _siblingTemporaryDirectory(replacement.target, 'rollback');
+  var movedPublished = false;
+  try {
+    if (replacement.target.existsSync()) {
+      replacement.target.renameSync(published.path);
+      movedPublished = true;
+    }
+    if (replacement.hadPrevious) {
+      replacement.backup.renameSync(replacement.target.path);
+    }
+  } on Object catch (error) {
+    Object? recoveryError;
+    if (!replacement.target.existsSync() &&
+        movedPublished &&
+        published.existsSync()) {
+      try {
+        published.renameSync(replacement.target.path);
+      } on Object catch (restorePublishedError) {
+        recoveryError = restorePublishedError;
+      }
+    }
+    throw FileSystemException(
+      'Could not restore the previous Web output; recover it from '
+      '${replacement.backup.path}. Rollback failure: $error'
+      '${recoveryError == null ? '' : '. Recovery failure: $recoveryError'}',
+      replacement.target.path,
+    );
+  }
+  if (published.existsSync()) {
+    try {
+      published.deleteSync(recursive: true);
+    } on Object catch (error) {
+      return 'Warning: Failed Web output remains at ${published.path}: $error';
+    }
+  }
+  return null;
+}
+
+String? _discardDirectoryBackup(_DirectoryReplacement replacement) {
+  if (!replacement.backup.existsSync()) return null;
+  try {
+    replacement.backup.deleteSync(recursive: true);
+  } on Object catch (error) {
+    return 'Warning: Web output was published, but the previous output '
+        'remains at ${replacement.backup.path}: $error';
+  }
+  return null;
 }
 
 /// Resolves one user-selected artifact path inside a project's real build tree.
@@ -504,25 +936,6 @@ String resolveBuildOutputPath(
     }
   }
   return resolved;
-}
-
-Future<int> _buildServer(
-  CliProject project, {
-  required ServerBuildTarget target,
-  required String outputPath,
-  required Directory? migrationSource,
-  required StringSink out,
-}) async {
-  Directory(p.dirname(outputPath)).createSync(recursive: true);
-  if (target == ServerBuildTarget.native) {
-    return _compileNativeServer(
-      project,
-      Directory(outputPath),
-      migrationSource: migrationSource,
-      out: out,
-    );
-  }
-  return buildCloudflareServer(project, artifact: File(outputPath), out: out);
 }
 
 /// Compiles and atomically replaces one Cloudflare Worker artifact.
@@ -610,7 +1023,21 @@ Future<void> _terminateProcess(Process process, Future<int> exitCode) async {
   }
 }
 
-Future<int> _compileNativeServer(
+final class _NativeBundleStage {
+  const _NativeBundleStage({
+    required this.temporaryDirectory,
+    required this.bundle,
+    required this.migrationSource,
+    required this.migrations,
+  });
+
+  final Directory temporaryDirectory;
+  final Directory bundle;
+  final Directory? migrationSource;
+  final List<SqliteMigration>? migrations;
+}
+
+Future<({int code, _NativeBundleStage? stage})> _stageNativeServer(
   CliProject project,
   Directory bundle, {
   required Directory? migrationSource,
@@ -629,6 +1056,7 @@ Future<int> _compileNativeServer(
   final stagedMigrations = migrationSource == null
       ? null
       : (Directory(p.join(staging.path, 'migrations'))..createSync());
+  var keepStaging = false;
   try {
     for (final migration in migrations ?? const <SqliteMigration>[]) {
       final stagedMigration = File(
@@ -657,7 +1085,7 @@ Future<int> _compileNativeServer(
       project: project,
     );
     final code = await process.exitCode;
-    if (code != 0) return code;
+    if (code != 0) return (code: code, stage: null);
     final stagedBundle = Directory(p.join(buildOutput.path, 'bundle'));
     final stagedExecutable = File(
       p.join(stagedBundle.path, 'bin', _nativeServerExecutableName),
@@ -676,34 +1104,181 @@ Future<int> _compileNativeServer(
     if (stagedMigrations != null) {
       stagedMigrations.renameSync(p.join(stagedBundle.path, 'migrations'));
     }
-    if (migrationSource != null) {
-      verifySqliteMigrationSnapshot(migrationSource, migrations!);
-    }
-    _validateNativeBundleOutput(
-      bundle,
-      selectedMigrations: migrationSource != null,
-    );
-    final publicationWarning = await replaceNativeBundle(
-      stagedBundle: stagedBundle,
-      bundle: bundle,
-      lockFile: File(
-        p.join(project.root.path, '.dart_tool', 'odroe', 'native-build.lock'),
+    keepStaging = true;
+    return (
+      code: 0,
+      stage: _NativeBundleStage(
+        temporaryDirectory: staging,
+        bundle: stagedBundle,
+        migrationSource: migrationSource,
+        migrations: migrations,
       ),
     );
-    if (publicationWarning != null) out.writeln(publicationWarning);
+  } finally {
+    if (!keepStaging && staging.existsSync()) {
+      try {
+        staging.deleteSync(recursive: true);
+      } on FileSystemException catch (error) {
+        out.writeln(
+          'Warning: Native build staging remains at ${staging.path}: '
+          '${error.message}',
+        );
+      }
+    }
+  }
+}
+
+void _validateNativeStage(_NativeBundleStage stage) {
+  if (stage.migrationSource != null) {
+    verifySqliteMigrationSnapshot(stage.migrationSource!, stage.migrations!);
+  }
+}
+
+String? _publishNativeServer(_NativeBundleStage stage, Directory bundle) {
+  _validateNativeStage(stage);
+  return _replaceNativeBundleLocked(stagedBundle: stage.bundle, bundle: bundle);
+}
+
+void _reportNativeServer(
+  CliProject project,
+  _NativeBundleStage stage,
+  Directory bundle,
+  StringSink out,
+) {
+  out.writeln(
+    'Built Native server bundle -> '
+    '${p.relative(bundle.path, from: project.root.path)}',
+  );
+  if (stage.migrations != null) {
     out.writeln(
-      'Built Native server bundle -> '
-      '${p.relative(bundle.path, from: project.root.path)}',
+      'Bundled ${stage.migrations!.length} SQLite migrations -> '
+      '${p.relative(p.join(bundle.path, 'migrations'), from: project.root.path)}',
     );
-    if (migrations != null) {
-      out.writeln(
-        'Bundled ${migrations.length} SQLite migrations -> '
-        '${p.relative(p.join(bundle.path, 'migrations'), from: project.root.path)}',
+  }
+}
+
+/// Layers verified Web outputs into an unpublished Native bundle.
+///
+/// This lives under `src/cli`; it is not a package product entrypoint.
+void installNativeWeb(
+  Directory bundle, {
+  required Directory? flutterOutput,
+  required Directory? prerenderOutput,
+}) {
+  final destination = Directory(p.join(bundle.path, 'build', 'web'));
+  if (FileSystemEntity.typeSync(destination.path, followLinks: false) !=
+      FileSystemEntityType.notFound) {
+    throw FileSystemException(
+      'Native Web staging output already exists.',
+      destination.path,
+    );
+  }
+  final sharesFlutterOutput =
+      flutterOutput != null &&
+      prerenderOutput != null &&
+      sameBuildDirectory(flutterOutput, prerenderOutput);
+  if (flutterOutput != null &&
+      prerenderOutput != null &&
+      !sharesFlutterOutput &&
+      _realPathsOverlap(flutterOutput.path, prerenderOutput.path)) {
+    throw FileSystemException(
+      'Flutter Web and prerender outputs must not overlap.',
+      prerenderOutput.path,
+    );
+  }
+  if (flutterOutput != null) {
+    _copyBuildTree(flutterOutput, destination, label: 'Flutter Web output');
+  }
+  if (prerenderOutput != null && !sharesFlutterOutput) {
+    _copyBuildTree(prerenderOutput, destination, label: 'prerender output');
+  }
+  if (FileSystemEntity.typeSync(destination.path, followLinks: false) !=
+      FileSystemEntityType.directory) {
+    throw FileSystemException(
+      'Native Web staging output is incomplete.',
+      destination.path,
+    );
+  }
+}
+
+void _copyBuildTree(
+  Directory source,
+  Directory destination, {
+  required String label,
+}) {
+  if (FileSystemEntity.typeSync(source.path, followLinks: false) !=
+      FileSystemEntityType.directory) {
+    throw FileSystemException('$label is missing.', source.path);
+  }
+  if (_pathsOverlap(source.absolute.path, destination.absolute.path)) {
+    throw FileSystemException(
+      '$label must not overlap Native Web staging output.',
+      source.path,
+    );
+  }
+  final entities = source.listSync(recursive: true, followLinks: false);
+  for (final entity in entities) {
+    final type = FileSystemEntity.typeSync(entity.path, followLinks: false);
+    if (type == FileSystemEntityType.link) {
+      throw FileSystemException(
+        '$label must not contain symbolic links.',
+        entity.path,
       );
     }
-    return 0;
-  } finally {
-    if (staging.existsSync()) staging.deleteSync(recursive: true);
+    if (type != FileSystemEntityType.file &&
+        type != FileSystemEntityType.directory) {
+      throw FileSystemException(
+        '$label contains an unsupported file type.',
+        entity.path,
+      );
+    }
+  }
+  final destinationType = FileSystemEntity.typeSync(
+    destination.path,
+    followLinks: false,
+  );
+  if (destinationType == FileSystemEntityType.notFound) {
+    destination.createSync(recursive: true);
+  } else if (destinationType != FileSystemEntityType.directory) {
+    throw FileSystemException(
+      'Native Web staging output must be a regular directory.',
+      destination.path,
+    );
+  }
+  for (final entity in entities) {
+    final relative = p.relative(entity.path, from: source.path);
+    final target = p.join(destination.path, relative);
+    switch (FileSystemEntity.typeSync(entity.path, followLinks: false)) {
+      case FileSystemEntityType.directory:
+        final targetType = FileSystemEntity.typeSync(
+          target,
+          followLinks: false,
+        );
+        if (targetType == FileSystemEntityType.notFound) {
+          Directory(target).createSync(recursive: true);
+        } else if (targetType != FileSystemEntityType.directory) {
+          throw FileSystemException(
+            '$label conflicts with another Web build layer.',
+            entity.path,
+          );
+        }
+      case FileSystemEntityType.file:
+        File(target).parent.createSync(recursive: true);
+        final targetType = FileSystemEntity.typeSync(
+          target,
+          followLinks: false,
+        );
+        if (targetType != FileSystemEntityType.notFound &&
+            targetType != FileSystemEntityType.file) {
+          throw FileSystemException(
+            '$label conflicts with another Web build layer.',
+            entity.path,
+          );
+        }
+        File(entity.path).copySync(target);
+      default:
+        throw StateError('Validated Web tree contains an unsupported type.');
+    }
   }
 }
 
@@ -746,6 +1321,7 @@ Future<String?> replaceNativeBundle({
   required Directory stagedBundle,
   required Directory bundle,
   required File lockFile,
+  void Function()? validateBeforePublish,
 }) async {
   _validateStagedNativeBundle(stagedBundle);
   lockFile.parent.createSync(recursive: true);
@@ -754,6 +1330,7 @@ Future<String?> replaceNativeBundle({
   try {
     await lock.lock(FileLock.blockingExclusive);
     try {
+      validateBeforePublish?.call();
       warning = _replaceNativeBundleLocked(
         stagedBundle: stagedBundle,
         bundle: bundle,

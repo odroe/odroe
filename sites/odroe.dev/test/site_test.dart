@@ -92,7 +92,7 @@ void main() {
           reason: location.path,
         );
       }
-      expect(body, isNot(contains('flutter_bootstrap.js')));
+      expect(body, isNot(contains('<script src="/flutter_bootstrap.js"')));
     }
   });
 
@@ -544,7 +544,9 @@ void main() {
     );
     expect(homepage, contains(r'$ dart run odroe dev -- -d chrome'));
     expect(homepage, contains(r'$ dart run odroe build --no-server web'));
-    expect(homepage, contains(r'$ dart run odroe build --server-only'));
+    expect(homepage, contains(r'$ dart run odroe build web'));
+    expect(homepage, contains('AOT + Flutter Web bundle'));
+    expect(homepage, contains('Deploy one atomic full-stack root'));
 
     for (final entry in <String, String>{
       'README': readme,
@@ -1117,6 +1119,12 @@ void main() {
     expect(deployment, contains('build-time source resources'));
     expect(deployment, contains('without a supervisor `cwd` setting'));
     expect(deployment, contains('complete append-only history'));
+    expect(deployment, contains('flutter_bootstrap.js'));
+    expect(deployment, contains('main.dart.js'));
+    expect(deployment, contains('This is the deployment boundary'));
+    expect(deployment, contains('replaces the previous root once'));
+    expect(deployment, contains('server and client together'));
+    expect(deployment, contains('`--server-only` intentionally publishes no'));
   });
 
   test('Constructor dependency types stay on product entrypoints', () async {

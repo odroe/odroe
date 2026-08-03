@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Publish Native full-stack builds as one complete, rollback-safe artifact.
+  Odroe now keeps the AOT server staged through Flutter Web compilation and
+  prerendering, layers the actual Flutter and static outputs into
+  `<bundle>/build/web`, then replaces the owned bundle once. A failed client
+  build or prerender leaves the previous server and client together;
+  `--server-only` deliberately omits Web output instead of carrying stale
+  assets forward. Flutter and prerender roots may match or remain disjoint,
+  but newly rejected nested roots no longer produce ambiguous artifact trees.
+  Odroe-managed Flutter Web output must now resolve inside the project
+  `build/` tree; each build uses a clean sibling stage and atomically replaces
+  that output so removed routes and assets cannot survive a rebuild.
 - Generate symmetric typed RPC codecs for project-local enums, including
   direct values, non-generic aliases, nullable values, collections, named
   records, and stream items. Enum cases cross the wire by declaration name;

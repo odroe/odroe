@@ -989,18 +989,25 @@ dart run odroe build --server-target cloudflare web
 Native target 的 `--server-artifact` 指向完整 bundle root，而不是可执行文件。
 默认目录是 `build/odroe/server`；类 Unix 入口为 `bin/server`，Windows 为
 `bin/server.exe`。运行所需的 native libraries 保留在 `lib/`；选择 SQLite
-history 时还包含 `migrations/`。可从任意工作目录直接执行该入口；bootstrap 会用
+history 时还包含 `migrations/`。`build web` 还会把 Flutter Web 与 prerender
+结果装入同一根目录的 `build/web/`；`build --server-only` 则明确不携带 Web
+产物。可从任意工作目录直接执行该入口；bootstrap 会用
 ownership marker 自定位到 bundle 根并在创建应用前切换运行目录。部署时不要单独
 复制可执行文件。编译后的 AOT 入口要求 bundle 根存在内容完全匹配的普通 marker
 文件；marker 缺失、是目录或符号链接、或内容损坏时，都会在创建应用前终止。
 Cloudflare target 的该选项仍指向编译后的 `server.js`。
 
 将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
-Web；`--` 后参数原样交给 Flutter CLI。包含 RPC 的原生运行与构建必须传入
+Web；`--` 后参数原样交给 Flutter CLI，但 Web build 的 `--output` 由 Odroe
+改写为同级隐藏 staging，再作为成组发布的一部分原子交换用户选择的最终目录；
+若后续输出或 Native 最终校验失败，先前已交换的目录会恢复。该最终目录必须位于
+项目 `build/` 内；`public/`、源码目录与绝对外部目录不会成为 CLI 管理的替换目标。
+包含 RPC 的原生运行与构建必须传入
 `ODROE_API_ORIGIN`，Web 继续使用同源。开发 server 直接挂载源码 `public/`，
 不读取旧 `build/web`。完整 starter 的 `build --no-server web` 只构建
-Flutter Web 与静态产物；`build web` 还会生成包含配置所选 SQLite history 的
-native server bundle。两者都会通过真实 server
+Flutter Web 与静态产物；`build web` 则生成一个可独立部署的 native bundle，
+其中同时包含 AOT server、Flutter/prerender Web tree 与配置所选 SQLite
+history。两者都会通过真实 server
 prerender 静态 route。纯 Document route 输出纯 HTML；
 带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样
 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
@@ -1020,12 +1027,22 @@ artifact 的构建也复用生成的 Dart server 源码完成 prerender，不再
 纯文档构建会先写入同级 staging 目录，全部成功后才替换既有静态产物。
 prerender 期间 server 明确禁用静态根，旧产物与 `public/` 中的同名 HTML
 不会替代本轮真实 route 响应。
+Native full-stack 构建不会提前发布 AOT server：CLI 先在同级临时目录保留 server，
+完成 Flutter 与 prerender 后，将两份实际输出依次装入 bundle，最后只替换一次
+正式目录。Flutter、prerender、复制或最终 migration snapshot 校验任一步失败，
+上一份 server/client 组合都保持不变。分离的 Flutter 与 prerender 输出可以作为
+两层合并，但两个目录不得互相嵌套；相同目录只复制一次。
+每次 Web build 都从空 staging 开始，成功后才替换最终 Web 输出，因此已经删除的
+route、public asset 或旧 prerender HTML 不会混入新 bundle。项目级构建锁覆盖
+route generation、AOT/Flutter 编译、prerender、复制与发布，避免同一项目的并发
+命令交叉组合产物。
 
 `build --server-only` 生成的 native bundle 与构建
 OS/architecture 绑定。CLI 通过隐藏 ownership marker 管理整个 bundle root，不会
 覆盖未标记路径；配置或 CLI 选中的 history 会随每次构建重新验证。发布会在
-进程锁内以完整目录替换 `bin/`、`lib/` 与可选
-`migrations/`，失败时恢复上一份 bundle。
+进程锁内以完整目录替换 `bin/`、`lib/`、可选 `migrations/`，以及 full-stack
+build 的 `build/web/`，失败时恢复上一份 bundle。server-only 重建会主动移除
+上一份 bundle 的 Web tree，避免把旧客户端伪装成本轮产物。
 旧版单文件产物不会被隐式升级；确认并保留旧 migration history 后，需显式移走或
 删除该构建产物再首次生成 bundle。
 请在目标平台或兼容 builder 中构建。有效 ownership marker 会让生成的 Native
@@ -1034,7 +1051,8 @@ bootstrap 在创建应用前把运行目录设为 bundle 根，因此默认从
 相对该根解析，无需依赖调用者 cwd。编译后的入口会 fail-closed：marker 缺失、不是
 普通文件或内容不匹配时不会创建应用。非 product 的源码与 dev 运行仍保留项目进程
 目录，不要求 bundle marker。`ODROE_WEB_ROOT` 可指定明确目录，空字符串会禁用
-静态根；部署时必须携带对应静态目录、设置显式路径，或禁用静态服务。
+静态根。`build web` 已携带默认静态目录，只需部署整个 bundle；server-only 构建
+若要提供 Web，则必须另行放置静态目录、设置显式路径，或禁用静态服务。
 Native `IoServer` 会为 `publicDirectory` 中的文件逐次验证真实路径，使用
 `no-cache` 配合 ETag/Last-Modified 避免重复传输，并对至少 1 KiB 的
 文本、JavaScript、JSON、SVG 与 Wasm 流式发送 gzip。文件名不会被猜测为
