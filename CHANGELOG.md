@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Build Native servers with `dart build cli` so dependency build and link hooks
+  run in clean consumer projects. Publish the complete `bin/`, `lib/`, and
+  optional `migrations/` bundle as one owned, rollback-safe directory, run
+  prerender from its executable, preserve previous outputs on failure, and
+  refuse to silently drop an already selected SQLite history. Preserve legacy
+  standalone outputs for explicit operator cleanup instead of guessing how to
+  migrate an adjacent history sidecar.
 - Add an owned, lazy, bounded `MysqlDatabase.pool` without new dependencies or
   automatic retries. Bound physical connections, pending operations, and queue
   wait time independently; reject saturation as `SqlErrorCode.unavailable`.
@@ -30,7 +37,7 @@
   application-owned history while keeping separate ledgers; explicitly select
   the SQLite source for Native bundles and prerender, watch it in development,
   and wire the contract through the full-stack starter and reference product.
-  Validate route, migration, artifact, sidecar, and prerender paths before any
+  Validate route, migration, bundle, and prerender paths before any
   generated write, and serialize Native bundle publication across processes.
 - Add provider-neutral `SqlQueries.countRows` for typed `COUNT(*)` over the
   existing table, join, and predicate path across SQLite, PostgreSQL,

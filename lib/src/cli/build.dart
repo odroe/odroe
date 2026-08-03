@@ -12,7 +12,7 @@ import 'project.dart';
 
 /// Server artifact selected by `odroe build`.
 enum ServerBuildTarget {
-  /// A standalone Dart VM executable.
+  /// A deployable Dart VM CLI bundle.
   native,
 
   /// A JavaScript module for Cloudflare Workers.
@@ -82,26 +82,22 @@ Future<int> runBuild(
     );
     return 64;
   }
-  File? artifact;
+  String? artifactPath;
   if (buildServer) {
-    artifact = File(
-      resolveBuildOutputPath(
-        project.root,
-        serverArtifact ?? _defaultServerArtifact(serverTarget),
-        option: '--server-artifact',
-      ),
+    artifactPath = resolveBuildOutputPath(
+      project.root,
+      serverArtifact ?? _defaultServerArtifact(serverTarget),
+      option: '--server-artifact',
     );
   }
-  final serverArtifactFile = artifact;
-  final serverOutputs = serverArtifactFile == null
+  final serverOutputPath = artifactPath;
+  final serverOutputs = serverOutputPath == null
       ? const <String>[]
       : <String>[
-          serverArtifactFile.path,
-          if (serverTarget == ServerBuildTarget.native)
-            p.join(serverArtifactFile.parent.path, 'migrations'),
+          serverOutputPath,
           if (serverTarget == ServerBuildTarget.cloudflare) ...<String>[
-            p.join(serverArtifactFile.parent.path, 'worker.mjs'),
-            '${serverArtifactFile.path}.deps',
+            p.join(p.dirname(serverOutputPath), 'worker.mjs'),
+            '$serverOutputPath.deps',
           ],
         ];
   if (migrationSource != null &&
@@ -192,7 +188,7 @@ Future<int> runBuild(
       err.writeln('Route source and --prerender-output must not overlap.');
       return 64;
     }
-    if (serverArtifactFile != null) {
+    if (serverOutputPath != null) {
       if (serverOutputs.any(
         (path) => _pathsOverlap(path, outputDirectory.path),
       )) {
@@ -227,7 +223,7 @@ Future<int> runBuild(
     final code = await _buildServer(
       project,
       target: serverTarget,
-      artifact: artifact!,
+      outputPath: artifactPath!,
       migrationSource: migrationSource,
       out: out,
     );
@@ -254,13 +250,13 @@ Future<int> runBuild(
         !buildServer || serverTarget == ServerBuildTarget.cloudflare;
     final prerenderExecutable = prerenderFromSource
         ? Platform.resolvedExecutable
-        : artifact!.path;
+        : p.join(artifactPath!, 'bin', _nativeServerExecutableName);
     final prerenderArguments = prerenderFromSource
         ? <String>['run', project.bootstrap.path]
         : const <String>[];
     final prerenderMigrationSource =
         migrationSource != null && !prerenderFromSource
-        ? Directory(p.join(artifact!.parent.path, 'migrations'))
+        ? Directory(p.join(artifactPath!, 'migrations'))
         : migrationSource;
     final code = await _prerenderBuild(
       project,
@@ -503,20 +499,20 @@ String resolveBuildOutputPath(
 Future<int> _buildServer(
   CliProject project, {
   required ServerBuildTarget target,
-  required File artifact,
+  required String outputPath,
   required Directory? migrationSource,
   required StringSink out,
 }) async {
-  artifact.parent.createSync(recursive: true);
+  Directory(p.dirname(outputPath)).createSync(recursive: true);
   if (target == ServerBuildTarget.native) {
     return _compileNativeServer(
       project,
-      artifact,
+      Directory(outputPath),
       migrationSource: migrationSource,
       out: out,
     );
   }
-  return buildCloudflareServer(project, artifact: artifact, out: out);
+  return buildCloudflareServer(project, artifact: File(outputPath), out: out);
 }
 
 /// Compiles and atomically replaces one Cloudflare Worker artifact.
@@ -606,37 +602,24 @@ Future<void> _terminateProcess(Process process, Future<int> exitCode) async {
 
 Future<int> _compileNativeServer(
   CliProject project,
-  File artifact, {
+  Directory bundle, {
   required Directory? migrationSource,
   required StringSink out,
 }) async {
-  artifact.parent.createSync(recursive: true);
-  final migrationOutput = Directory(p.join(artifact.parent.path, 'migrations'));
-  if (p.equals(artifact.path, migrationOutput.path)) {
-    throw const FormatException(
-      'Native server artifacts cannot use the name migrations.',
-    );
-  }
-  _validateNativeMigrationOutput(
-    artifact,
-    migrationOutput,
-    selected: migrationSource != null,
+  bundle.parent.createSync(recursive: true);
+  _validateNativeBundleOutput(
+    bundle,
+    selectedMigrations: migrationSource != null,
   );
-
   final migrations = migrationSource == null
       ? null
       : readSqliteMigrations(migrationSource.path);
-  final staging = artifact.parent.createTempSync('.odroe-native-');
-  final stagedArtifact = File(p.join(staging.path, p.basename(artifact.path)));
+  final staging = bundle.parent.createTempSync('.odroe-native-');
+  final buildOutput = Directory(p.join(staging.path, 'build'));
   final stagedMigrations = migrationSource == null
       ? null
       : (Directory(p.join(staging.path, 'migrations'))..createSync());
   try {
-    if (stagedMigrations != null) {
-      File(
-        p.join(stagedMigrations.path, _nativeMigrationOwnerFile),
-      ).writeAsStringSync(_nativeMigrationOwner(artifact));
-    }
     for (final migration in migrations ?? const <SqliteMigration>[]) {
       final stagedMigration = File(
         p.join(stagedMigrations!.path, migration.name),
@@ -654,44 +637,58 @@ Future<int> _compileNativeServer(
     final process = await startProjectProcess(
       Platform.resolvedExecutable,
       <String>[
-        'compile',
-        'exe',
+        'build',
+        'cli',
+        '--target',
         project.bootstrap.path,
-        '-o',
-        stagedArtifact.path,
+        '--output',
+        buildOutput.path,
       ],
       project: project,
     );
     final code = await process.exitCode;
     if (code != 0) return code;
+    final stagedBundle = Directory(p.join(buildOutput.path, 'bundle'));
+    final stagedExecutable = File(
+      p.join(stagedBundle.path, 'bin', _nativeServerExecutableName),
+    );
+    if (FileSystemEntity.typeSync(stagedExecutable.path, followLinks: false) !=
+        FileSystemEntityType.file) {
+      throw FileSystemException(
+        'Dart did not emit the expected Native server executable.',
+        stagedExecutable.path,
+      );
+    }
+    Directory(p.join(stagedBundle.path, 'lib')).createSync();
+    File(
+      p.join(stagedBundle.path, _nativeBundleOwnerFile),
+    ).writeAsStringSync(_nativeBundleOwner, flush: true);
+    if (stagedMigrations != null) {
+      stagedMigrations.renameSync(p.join(stagedBundle.path, 'migrations'));
+    }
     if (migrationSource != null) {
       verifySqliteMigrationSnapshot(migrationSource, migrations!);
     }
-    _validateNativeMigrationOutput(
-      artifact,
-      migrationOutput,
-      selected: migrationSource != null,
+    _validateNativeBundleOutput(
+      bundle,
+      selectedMigrations: migrationSource != null,
     );
-    await replaceNativeBundle(
-      stagedArtifact: stagedArtifact,
-      stagedMigrations: stagedMigrations,
-      artifact: artifact,
-      migrations: migrationOutput,
+    final publicationWarning = await replaceNativeBundle(
+      stagedBundle: stagedBundle,
+      bundle: bundle,
       lockFile: File(
         p.join(project.root.path, '.dart_tool', 'odroe', 'native-build.lock'),
       ),
-      expectedMigrationOwner: migrationSource == null
-          ? null
-          : _nativeMigrationOwner(artifact),
     );
+    if (publicationWarning != null) out.writeln(publicationWarning);
     out.writeln(
-      'Built native server -> '
-      '${p.relative(artifact.path, from: project.root.path)}',
+      'Built Native server bundle -> '
+      '${p.relative(bundle.path, from: project.root.path)}',
     );
     if (migrations != null) {
       out.writeln(
         'Bundled ${migrations.length} SQLite migrations -> '
-        '${p.relative(migrationOutput.path, from: project.root.path)}',
+        '${p.relative(p.join(bundle.path, 'migrations'), from: project.root.path)}',
       );
     }
     return 0;
@@ -700,60 +697,56 @@ Future<int> _compileNativeServer(
   }
 }
 
-const _nativeMigrationOwnerFile = '.odroe-native-migrations';
+const _nativeBundleOwnerFile = '.odroe-native-bundle';
+const _nativeBundleOwner = 'odroe-native-bundle-v1\n';
+String get _nativeServerExecutableName =>
+    Platform.isWindows ? 'server.exe' : 'server';
 
-String _nativeMigrationOwner(File artifact) => '${p.basename(artifact.path)}\n';
-
-void _validateNativeMigrationOutput(
-  File artifact,
-  Directory output, {
-  required bool selected,
+FileSystemEntityType _validateNativeBundleOutput(
+  Directory bundle, {
+  required bool selectedMigrations,
 }) {
-  final outputType = FileSystemEntity.typeSync(output.path, followLinks: false);
-  if (outputType == FileSystemEntityType.notFound) return;
-  if (outputType != FileSystemEntityType.directory) {
+  final outputType = FileSystemEntity.typeSync(bundle.path, followLinks: false);
+  if (outputType == FileSystemEntityType.notFound) return outputType;
+  if (outputType != FileSystemEntityType.directory ||
+      !_isOwnedNativeBundle(bundle)) {
     throw FileSystemException(
-      'Native migration output must be a regular directory.',
-      output.path,
+      'Native server output must be an Odroe-owned bundle directory. Move or '
+      'remove the existing output explicitly.',
+      bundle.path,
     );
   }
-
-  if (!_isOwnedNativeMigrationOutput(output, _nativeMigrationOwner(artifact))) {
-    throw FileSystemException(
-      'Native migration output already exists but is not owned by this '
-      'server artifact. Move or remove it explicitly.',
-      output.path,
-    );
-  }
-  if (!selected) {
+  if (!selectedMigrations &&
+      FileSystemEntity.typeSync(
+            p.join(bundle.path, 'migrations'),
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.notFound) {
     throw FileSystemException(
       'A previous Native build bundled SQLite migrations. Pass '
-      '--sqlite-migrations again or remove the sidecar explicitly.',
-      output.path,
+      '--sqlite-migrations again or remove the bundle explicitly.',
+      bundle.path,
     );
   }
+  return outputType;
 }
 
-/// Atomically publishes one staged Native executable and optional migrations.
-Future<void> replaceNativeBundle({
-  required File stagedArtifact,
-  required Directory? stagedMigrations,
-  required File artifact,
-  required Directory migrations,
+/// Serializes publication and restores the previous Native bundle on failure.
+Future<String?> replaceNativeBundle({
+  required Directory stagedBundle,
+  required Directory bundle,
   required File lockFile,
-  String? expectedMigrationOwner,
 }) async {
+  _validateStagedNativeBundle(stagedBundle);
   lockFile.parent.createSync(recursive: true);
   final lock = await lockFile.open(mode: FileMode.append);
+  String? warning;
   try {
     await lock.lock(FileLock.blockingExclusive);
     try {
-      _replaceNativeBundleLocked(
-        stagedArtifact: stagedArtifact,
-        stagedMigrations: stagedMigrations,
-        artifact: artifact,
-        migrations: migrations,
-        expectedMigrationOwner: expectedMigrationOwner,
+      warning = _replaceNativeBundleLocked(
+        stagedBundle: stagedBundle,
+        bundle: bundle,
       );
     } finally {
       await lock.unlock();
@@ -761,106 +754,101 @@ Future<void> replaceNativeBundle({
   } finally {
     await lock.close();
   }
+  return warning;
 }
 
-void _replaceNativeBundleLocked({
-  required File stagedArtifact,
-  required Directory? stagedMigrations,
-  required File artifact,
-  required Directory migrations,
-  required String? expectedMigrationOwner,
+String? _replaceNativeBundleLocked({
+  required Directory stagedBundle,
+  required Directory bundle,
 }) {
-  final backup = artifact.parent.createTempSync('.odroe-native-backup-');
-  final artifactBackup = File(p.join(backup.path, 'server'));
-  final migrationsBackup = Directory(p.join(backup.path, 'migrations'));
-  var artifactMoved = false;
-  var migrationsMoved = false;
-  var artifactPublished = false;
-  var migrationsPublished = false;
-  var keepBackup = false;
+  _validateStagedNativeBundle(stagedBundle);
+  final selectedMigrations =
+      FileSystemEntity.typeSync(
+        p.join(stagedBundle.path, 'migrations'),
+        followLinks: false,
+      ) ==
+      FileSystemEntityType.directory;
+  final previousType = _validateNativeBundleOutput(
+    bundle,
+    selectedMigrations: selectedMigrations,
+  );
+  final backup = bundle.parent.createTempSync('.odroe-native-backup-');
+  final previous = p.join(backup.path, 'previous');
+  var previousMoved = false;
   try {
-    if (artifact.existsSync()) {
-      artifact.renameSync(artifactBackup.path);
-      artifactMoved = true;
+    if (previousType == FileSystemEntityType.directory) {
+      bundle.renameSync(previous);
+      previousMoved = true;
     }
-    final migrationType = FileSystemEntity.typeSync(
-      migrations.path,
-      followLinks: false,
-    );
-    if (stagedMigrations == null &&
-        migrationType != FileSystemEntityType.notFound) {
-      throw FileSystemException(
-        'Native migration output appeared before publication. It was '
-        'preserved.',
-        migrations.path,
-      );
-    }
-    if (stagedMigrations != null &&
-        migrationType != FileSystemEntityType.notFound) {
-      if (migrationType != FileSystemEntityType.directory) {
-        throw FileSystemException(
-          'Native migration output changed before publication. It was '
-          'preserved.',
-          migrations.path,
-        );
-      }
-      migrations.renameSync(migrationsBackup.path);
-      migrationsMoved = true;
-      if (expectedMigrationOwner != null &&
-          !_isOwnedNativeMigrationOutput(
-            migrationsBackup,
-            expectedMigrationOwner,
-          )) {
-        throw FileSystemException(
-          'Native migration output changed before publication. Its contents '
-          'were preserved.',
-          migrations.path,
-        );
-      }
-    }
-    stagedArtifact.renameSync(artifact.path);
-    artifactPublished = true;
-    if (stagedMigrations != null) {
-      stagedMigrations.renameSync(migrations.path);
-      migrationsPublished = true;
-    } else if (FileSystemEntity.typeSync(migrations.path, followLinks: false) !=
-        FileSystemEntityType.notFound) {
-      throw FileSystemException(
-        'Native migration output appeared during publication. It was '
-        'preserved.',
-        migrations.path,
-      );
-    }
+    stagedBundle.renameSync(bundle.path);
   } on Object catch (error, stackTrace) {
     try {
-      if (artifactPublished && artifact.existsSync()) artifact.deleteSync();
-      if (migrationsPublished && migrations.existsSync()) {
-        migrations.deleteSync(recursive: true);
+      if (previousMoved) {
+        Directory(previous).renameSync(bundle.path);
       }
-      if (artifactMoved) artifactBackup.renameSync(artifact.path);
-      if (migrationsMoved) migrationsBackup.renameSync(migrations.path);
     } on Object catch (restoreError) {
-      keepBackup = true;
       throw FileSystemException(
         'Could not restore the previous native bundle; recover it from '
         '${backup.path}. Build failure: $error. Restore failure: '
         '$restoreError',
-        artifact.parent.path,
+        bundle.parent.path,
+      );
+    }
+    try {
+      backup.deleteSync(recursive: true);
+    } on Object catch (cleanupError) {
+      throw FileSystemException(
+        'Native bundle publication failed and the previous bundle was '
+        'restored, but temporary backup cleanup failed at ${backup.path}. '
+        'Publication failure: $error. Cleanup failure: $cleanupError',
+        backup.path,
       );
     }
     Error.throwWithStackTrace(error, stackTrace);
-  } finally {
-    if (!keepBackup && backup.existsSync()) {
+  }
+  if (backup.existsSync()) {
+    try {
       backup.deleteSync(recursive: true);
+    } on Object catch (error) {
+      return 'Warning: Native server bundle was published, but the previous '
+          'output remains at ${backup.path}: $error';
     }
+  }
+  return null;
+}
+
+void _validateStagedNativeBundle(Directory bundle) {
+  final migrationsType = FileSystemEntity.typeSync(
+    p.join(bundle.path, 'migrations'),
+    followLinks: false,
+  );
+  if (FileSystemEntity.typeSync(bundle.path, followLinks: false) !=
+          FileSystemEntityType.directory ||
+      !_isOwnedNativeBundle(bundle) ||
+      FileSystemEntity.typeSync(
+            p.join(bundle.path, 'bin', _nativeServerExecutableName),
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.file ||
+      FileSystemEntity.typeSync(
+            p.join(bundle.path, 'lib'),
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.directory ||
+      (migrationsType != FileSystemEntityType.notFound &&
+          migrationsType != FileSystemEntityType.directory)) {
+    throw FileSystemException(
+      'Native server staging output is incomplete.',
+      bundle.path,
+    );
   }
 }
 
-bool _isOwnedNativeMigrationOutput(Directory output, String expectedOwner) {
-  final owner = File(p.join(output.path, _nativeMigrationOwnerFile));
+bool _isOwnedNativeBundle(Directory bundle) {
+  final owner = File(p.join(bundle.path, _nativeBundleOwnerFile));
   return FileSystemEntity.typeSync(owner.path, followLinks: false) ==
           FileSystemEntityType.file &&
-      owner.readAsStringSync() == expectedOwner;
+      owner.readAsStringSync() == _nativeBundleOwner;
 }
 
 /// Rejects a Native bundle when its migration source changed during compile.

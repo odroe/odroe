@@ -292,9 +292,12 @@ no schema diff, down migration, or generated entity layer. Migration scripts
 must not contain transaction or connection control.
 
 `.odroe/app.sqlite3` is ignored local state; production should set
-`ODROE_SQLITE_PATH` to a persistent absolute path and
-`ODROE_MIGRATIONS_PATH` to the deployed immutable history when the process
-working directory is not the bundle root.
+`ODROE_SQLITE_PATH` to a persistent absolute path. A Native build publishes the
+complete bundle root at `build/odroe/server` by default, with `bin/server`,
+`lib/`, and optional `migrations/`; Windows names the entry `bin/server.exe`.
+Run the platform entry from that root and deploy
+it as one directory. Keep the immutable history in that root, or set
+`ODROE_MIGRATIONS_PATH` when it is mounted elsewhere.
 
 Cloudflare has a different lifetime. Each Fetch invocation wraps its `DB`
 binding in `D1SqlDatabase`. Before starting the Worker, explicitly run the

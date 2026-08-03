@@ -1054,7 +1054,10 @@ void main() {
       deployment,
       contains('ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3'),
     );
-    expect(deployment, contains('ODROE_MIGRATIONS_PATH=/app/migrations'));
+    expect(
+      deployment,
+      contains('ODROE_MIGRATIONS_PATH=/app/server/migrations'),
+    );
     expect(deployment, contains('complete append-only history'));
   });
 

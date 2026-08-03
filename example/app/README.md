@@ -41,13 +41,17 @@ ID 使用严格 keyset predicate，读取 `limit + 1` 行后只返回 `items` �
 放入 RPC frame。列表还可用 typed `ids` 经 `isIn` 限定数据库行；空列表
 表示不过滤，非空过滤最多接受 100 个 ID，并在 SQL 构造前拒绝超限输入。
 创建使用单条 typed `INSERT ... RETURNING`，由数据库生成 ID 并返回完整 `Post`。
-Native build 仅在传入 `--sqlite-migrations migrations` 时把这些文件原字节复制
-到 executable 同级的 `migrations/`；运行
-bundle 时从该目录启动，或用 `ODROE_MIGRATIONS_PATH` 指向绝对路径。构建预渲染
-时，同一选项固定 source，Odroe CLI 会把数据库覆盖为一次性临时文件，结束后
-删除临时数据库，因而不会读取或改写开发数据库。初始 migration 使用幂等建表与
-seed，只用于接纳此前尚无 ledger 的未发布 Native starter；runner 不会为任意
-既有 schema 猜测 baseline。
+Native build 的 `--server-artifact` 指向完整 bundle root，默认是
+`build/odroe/server`。入口为 `bin/server`（Windows 为 `bin/server.exe`），
+运行所需的 native libraries 位于 `lib/`；仅在传入
+`--sqlite-migrations migrations` 时，才把这些文件原字节复制到
+同一根目录的 `migrations/`。从 bundle 根运行 `./bin/server`，部署时必须保留整个
+目录；进程管理器也应把该根目录设为工作目录。若 history 外置，再用
+`ODROE_MIGRATIONS_PATH` 指向其绝对路径。
+构建预渲染时，同一选项固定 source，Odroe CLI 会把数据库覆盖为一次性临时文件，
+结束后删除临时数据库，因而不会读取或改写开发数据库。初始 migration 使用幂等
+建表与 seed，只用于接纳此前尚无 ledger 的未发布 Native starter；runner 不会为
+任意既有 schema 猜测 baseline。
 
 Cloudflare target 则为每次 Fetch invocation 包装 `DB` binding；表结构和种子数据
 来自同一组可审查的 `migrations/*.sql`。Native 与 D1 各自维护 ledger；共享的是

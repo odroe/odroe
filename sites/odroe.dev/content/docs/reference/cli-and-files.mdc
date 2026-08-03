@@ -171,7 +171,7 @@ explicit commands.
 | `--server-only` | off | Build no Flutter target or static output |
 | `--[no-]server` | on | Emit or skip a deployable server artifact |
 | `--server-target` | `native` | `native` or `cloudflare` |
-| `--server-artifact` | target-specific | Path inside the project build directory |
+| `--server-artifact` | target-specific | Native bundle root or Cloudflare JavaScript path inside the project build directory |
 | `--sqlite-migrations` | off | SQLite source directory inside the project |
 | `--[no-]prerender` | on | Generate static HTML where applicable |
 | `--prerender-output` | `build/web` | Static output inside the project |
@@ -180,38 +180,53 @@ explicit commands.
 | `--prerender-max-routes` | `1000` | Explicit plus discovered route ceiling |
 | `--prerender-max-response-bytes` | `1048576` | HTML bytes allowed per route |
 
-Native output defaults to `build/odroe/server`. Cloudflare writes
-`build/odroe/cloudflare/server.js` and `worker.mjs`. Static Document and Flutter
-output lives under `build/web` unless changed explicitly.
+For Native, `--server-artifact` names the complete bundle root, not the
+executable. It defaults to `build/odroe/server`:
+
+```text
+build/odroe/server/
+├── bin/
+│   └── server
+├── lib/
+└── migrations/  # only with --sqlite-migrations
+```
+
+Run it from that root with `./bin/server`, and deploy the whole directory so
+native libraries keep their relative location. Windows emits `bin/server.exe`
+instead and should run that file from the same root. Cloudflare keeps a file
+contract: it writes `build/odroe/cloudflare/server.js` and `worker.mjs`. Static
+Document and Flutter output lives under `build/web` unless changed explicitly.
 
 `--sqlite-migrations migrations` makes a Native build validate those
-`NNNN_snake_case.sql` files and emit a clean sibling
-`build/odroe/migrations/` directory. The opt-in avoids reserving a generic
-source path used by PostgreSQL or MySQL projects. The copy is byte-for-byte and
-nonrecursive; invalid names, duplicate versions, symbolic links, and a
-non-directory target fail the build. A hidden ownership marker binds the
-sidecar to its executable.
-Odroe refuses to replace an unmarked directory, and a later build that omits
-the option fails instead of leaving stale migrations beside a new executable.
-Cloudflare builds do not copy it because Wrangler reads the application
-directory directly.
+`NNNN_snake_case.sql` files and emit a clean `migrations/` directory inside the
+selected bundle root. The opt-in avoids reserving a generic source path used by
+PostgreSQL or MySQL projects. The copy is byte-for-byte and nonrecursive;
+invalid names, duplicate versions, symbolic links, and a non-directory target
+fail the build. A hidden ownership marker protects the complete bundle. Odroe
+refuses to replace an unmarked output, and a later build that omits the
+option fails instead of publishing a new bundle without its previously
+selected history. Cloudflare builds do not copy it because Wrangler reads the
+application directory directly. A legacy standalone executable is also
+preserved rather than guessed into this layout; after retaining its migration
+history, move or remove that build output explicitly before the first bundle
+build.
 
 Route source cannot overlap either generated target or any destructive build
-output. Migration source, generated route targets, server artifacts, sidecars,
-and prerender output also must not overlap. Odroe validates those paths before
-writing generated code or replacing build output, and serializes Native bundle
-publication across processes. The selected Flutter target output, including an
-explicit forwarded `--output`/`--output-dir` and the effective
-`flutter config --build-dir`, is reserved from those Odroe sources and server
-artifacts as well.
+output. Migration source, generated route targets, server bundle roots,
+Cloudflare artifacts, and prerender output also must not overlap. Odroe
+validates those paths before writing generated code or replacing build output,
+and serializes complete Native bundle publication across processes. The
+selected Flutter target output, including an explicit forwarded
+`--output`/`--output-dir` and the effective `flutter config --build-dir`, is
+reserved from those Odroe sources and server artifacts as well.
 
 For native prerender, `build` overrides the child server's
 `ODROE_SQLITE_PATH` with a temporary database path and removes that directory
 after shutdown. When `--sqlite-migrations` is present, it also pins
-`ODROE_MIGRATIONS_PATH` to the Native artifact's published sidecar, so the
-static output and deployable bundle consume the same validated snapshot. It
-does not pass the temporary database override when users run the deployable
-server artifact.
+`ODROE_MIGRATIONS_PATH` to the Native bundle's published `migrations/`
+directory, so the static output and deployable bundle consume the same
+validated snapshot. It does not pass the temporary database override when
+users run `bin/server` from the deployable bundle.
 
 The application owns `pubspec.yaml`, platform hosts, `public/`, migrations,
 secrets, `wrangler.jsonc`, container files, and provider deployment policy.

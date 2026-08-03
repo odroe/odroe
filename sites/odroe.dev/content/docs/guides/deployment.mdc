@@ -65,28 +65,36 @@ dart run odroe build --server-only --sqlite-migrations migrations
 The result is a native bundle rather than an isolated executable:
 
 ```text
-build/odroe/
-├── server
-└── migrations/
+build/odroe/server/
+├── bin/
+│   └── server
+├── lib/
+└── migrations/  # only with --sqlite-migrations
     ├── 0001_posts.sql
     └── 0002_unify_posts.sql
 ```
 
+Windows names the executable `bin/server.exe`; the bundle root and the rest of
+the layout stay the same.
+
 Migration files are copied byte-for-byte through a sibling staging directory;
-the executable and migration directory replace the previous bundle only after
-compilation and a final source recheck succeed. A hidden ownership marker keeps
-the CLI from overwriting an unrelated directory. After one build selects a
-history, a later build must select it again or fail before publication, so a
-new executable cannot silently retain a stale sidecar. Deploy both. The option
-is explicit: a PostgreSQL or MySQL application's generic migration directory
-is never interpreted as SQLite merely because it exists.
+the complete `bin/`, `lib/`, and optional `migrations/` bundle replaces the
+previous root only after compilation and a final source recheck succeed. A
+hidden ownership marker keeps the CLI from overwriting an unrelated directory.
+After one build selects a history, a later build must select it again or fail
+before publication, so a new bundle cannot silently omit or retain stale
+migrations. Deploy the whole root; copying only `bin/server` can omit required
+native libraries. The migration option remains explicit: a PostgreSQL or MySQL
+application's generic migration directory is never interpreted as SQLite
+merely because it exists.
 
 `ODROE_HOST` and `ODROE_PORT` configure
 the listener; platforms that provide `PORT` are supported by the generated
 bootstrap. Static files default to `build/web` relative to the process working
 directory. Set `ODROE_WEB_ROOT` to an explicit directory, or to an empty string
-to disable the static root. A production image must carry the matching static
-directory or disable it deliberately.
+to disable the static root. Because the supported launch directory is the
+bundle root, that default means `<bundle>/build/web`; a production image must
+place assets there, set an explicit path, or disable static serving.
 
 The generated full-stack starter defaults SQLite to `.odroe/app.sqlite3`
 relative to the process working directory. That location is local development
@@ -94,18 +102,20 @@ state, not durable production storage. Native production must use one process
 and an explicit absolute path on a writable persistent volume:
 
 ```sh
-cd build/odroe
-ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 ./server
+cd build/odroe/server
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 ./bin/server
 ```
 
 Starting from the bundle root makes the default `migrations/` path resolve to
-the validated sidecar. From another working directory, pass the deployed
-directory explicitly:
+the validated history. A process supervisor or container should set that root
+as its working directory. For example, when the bundle is copied to
+`/app/server`:
 
 ```sh
+cd /app/server
 ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 \
-ODROE_MIGRATIONS_PATH=/app/migrations \
-/app/server
+ODROE_MIGRATIONS_PATH=/app/server/migrations \
+./bin/server
 ```
 
 The server validates the complete append-only history and applies pending files
@@ -161,9 +171,10 @@ a forced socket close. Binding failures also close the application. Keep
 reporting bounded; delivery that must survive process shutdown belongs in an
 application-owned durable queue.
 
-Native output is OS- and architecture-specific. Build on the target OS and
+The Native bundle is OS- and architecture-specific. Build on the target OS and
 architecture, or in a compatible builder. For a Linux container, compile in a
-Linux build stage. Do not copy a macOS executable into the image.
+Linux build stage. Do not copy a macOS bundle into the image, and do not detach
+`bin/server` from its sibling `lib/` directory.
 
 ## Edge
 
@@ -194,7 +205,7 @@ Odroe writes `build/odroe/cloudflare/server.js` and a thin `worker.mjs`.
 Your application continues to own `wrangler.jsonc`; the build never overwrites
 platform configuration. A non-server-only Cloudflare build runs the generated
 Dart server source for prerendering instead of compiling a second temporary
-native executable. An assets-only Flutter SSG instead uses
+Native bundle. An assets-only Flutter SSG instead uses
 `build --no-server web` and deploys only `build/web`; a Document-only SSG can
 omit the Flutter target.
 

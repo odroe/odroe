@@ -123,7 +123,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
     final outputs = <Directory>[
       Directory(p.join(project.path, 'build', 'overlap-test')),
       Directory(p.join(project.path, 'build', 'overlap-case')),
-      Directory(p.join(project.path, 'build', 'native-sidecar')),
+      Directory(p.join(project.path, 'build', 'native-bundle')),
       Directory(
         p.join(project.path, 'build', 'cloudflare-sidecar', 'worker.mjs'),
       ),
@@ -152,8 +152,8 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
             migrations: false,
           ),
           (
-            artifact: 'build/native-sidecar/server',
-            output: 'build/native-sidecar/migrations',
+            artifact: 'build/native-bundle/server',
+            output: 'build/native-bundle/server/migrations',
             target: 'native',
             migrations: false,
           ),
@@ -287,8 +287,8 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         target: 'native',
       ),
       (
-        source: Directory(p.join(state.path, 'native-sidecar', 'migrations')),
-        artifact: p.join(state.path, 'native-sidecar', 'server'),
+        source: Directory(p.join(state.path, 'native-bundle', 'migrations')),
+        artifact: p.join(state.path, 'native-bundle'),
         target: 'native',
       ),
       (
@@ -1041,7 +1041,7 @@ Server createServer() {
   });
 
   test(
-    'native prerender consumes the published migration sidecar',
+    'native prerender consumes the published bundle migrations',
     () async {
       final project = await _createDocumentFixture();
       addTearDown(() => project.delete(recursive: true));
@@ -1070,7 +1070,7 @@ Server createServer() {
   return generated.createServer();
 }
 ''');
-      final artifact = File(
+      final artifact = Directory(
         p.join(project.path, 'build', 'odroe', 'snapshot', 'server'),
       );
 
@@ -1091,13 +1091,13 @@ Server createServer() {
       final selected = marker.readAsLinesSync();
       expect(
         p.normalize(selected.first),
-        p.normalize(p.join(artifact.parent.path, 'migrations')),
+        p.normalize(p.join(artifact.path, 'migrations')),
       );
       expect(selected.skip(1).join('\n'), 'SELECT 1;');
       expect(migration.readAsStringSync(), 'SELECT 2;');
       expect(
         File(
-          p.join(artifact.parent.path, 'migrations', '0001_probe.sql'),
+          p.join(artifact.path, 'migrations', '0001_probe.sql'),
         ).readAsStringSync(),
         'SELECT 1;',
       );

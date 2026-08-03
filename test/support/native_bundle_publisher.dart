@@ -10,18 +10,24 @@ Future<void> main(List<String> arguments) async {
   final ready = File(arguments[2]);
   final go = File(arguments[3]);
   final output = Directory(p.join(root.path, 'output'))..createSync();
-  final staging = Directory(p.join(root.path, 'staging-$mode'))..createSync();
-  final artifact = File(p.join(output.path, 'server'));
-  final stagedArtifact = File(p.join(staging.path, 'server'))
+  final bundle = Directory(p.join(output.path, 'server'));
+  final stagedBundle = Directory(p.join(root.path, 'staging-$mode'));
+  File(
+      p.join(
+        stagedBundle.path,
+        'bin',
+        Platform.isWindows ? 'server.exe' : 'server',
+      ),
+    )
+    ..createSync(recursive: true)
     ..writeAsStringSync(mode);
-  final migrations = Directory(p.join(output.path, 'migrations'));
-  final stagedMigrations = mode == 'selected'
-      ? (Directory(p.join(staging.path, 'migrations'))..createSync())
-      : null;
-  if (stagedMigrations != null) {
-    File(
-      p.join(stagedMigrations.path, '.odroe-native-migrations'),
-    ).writeAsStringSync('server\n');
+  Directory(p.join(stagedBundle.path, 'lib')).createSync();
+  File(
+    p.join(stagedBundle.path, '.odroe-native-bundle'),
+  ).writeAsStringSync('odroe-native-bundle-v1\n');
+  if (mode == 'selected') {
+    final stagedMigrations = Directory(p.join(stagedBundle.path, 'migrations'))
+      ..createSync();
     File(
       p.join(stagedMigrations.path, '0001_selected.sql'),
     ).writeAsStringSync('SELECT 1;');
@@ -38,15 +44,17 @@ Future<void> main(List<String> arguments) async {
 
   try {
     await replaceNativeBundle(
-      stagedArtifact: stagedArtifact,
-      stagedMigrations: stagedMigrations,
-      artifact: artifact,
-      migrations: migrations,
+      stagedBundle: stagedBundle,
+      bundle: bundle,
       lockFile: File(p.join(root.path, 'native-build.lock')),
-      expectedMigrationOwner: stagedMigrations == null ? null : 'server\n',
     );
-  } on FileSystemException {
-    if (mode == 'absent') return;
+  } on FileSystemException catch (error) {
+    if (mode == 'absent' &&
+        error.message.contains(
+          'A previous Native build bundled SQLite migrations.',
+        )) {
+      return;
+    }
     rethrow;
   }
 }

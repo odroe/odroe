@@ -15,7 +15,7 @@ void main() {
     'native artifact serves SQLite RPC and routes outside the source tree',
     () async {
       final project = Directory('example/app').absolute;
-      final artifactDirectory = Directory(
+      final artifact = Directory(
         p.join(
           project.path,
           'build',
@@ -23,23 +23,17 @@ void main() {
           'native-static-$pid-${DateTime.now().microsecondsSinceEpoch}',
         ),
       );
-      final artifact = File(p.join(artifactDirectory.path, 'server'));
       final deployment = await Directory.systemTemp.createTemp(
         'odroe-native-static-',
       );
       addTearDown(() async {
-        if (artifactDirectory.existsSync()) {
-          await artifactDirectory.delete(recursive: true);
+        if (artifact.existsSync()) {
+          await artifact.delete(recursive: true);
         }
         if (deployment.existsSync()) {
           await deployment.delete(recursive: true);
         }
       });
-      final routeFile = File(
-        p.join(deployment.path, 'build', 'web', 'posts', '42', 'index.html'),
-      );
-      await routeFile.parent.create(recursive: true);
-      await routeFile.writeAsString('static native artifact');
 
       final artifactPath = p.relative(artifact.path, from: project.path);
       final build = await withDartCommandLock(
@@ -59,20 +53,20 @@ void main() {
       expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
       expect(build.stdout, contains('Bundled 2 SQLite migrations'));
       expect(artifact.existsSync(), isTrue);
-      final bundledMigrations = Directory(
-        p.join(artifactDirectory.path, 'migrations'),
+      final executable = File(
+        p.join(artifact.path, 'bin', _testNativeExecutableName),
       );
-      final owner = File(
-        p.join(bundledMigrations.path, '.odroe-native-migrations'),
-      );
-      expect(owner.readAsStringSync(), 'server\n');
+      expect(executable.existsSync(), isTrue);
+      final nativeAssets = Directory(p.join(artifact.path, 'lib'));
+      expect(nativeAssets.existsSync(), isTrue);
+      expect(nativeAssets.listSync().whereType<File>(), isNotEmpty);
+      final bundledMigrations = Directory(p.join(artifact.path, 'migrations'));
+      final owner = File(p.join(artifact.path, '.odroe-native-bundle'));
+      expect(owner.readAsStringSync(), 'odroe-native-bundle-v1\n');
       for (final name in <String>['0001_posts.sql', '0002_unify_posts.sql']) {
         final source = File(p.join(project.path, 'migrations', name));
         final bundled = File(p.join(bundledMigrations.path, name));
         expect(bundled.readAsBytesSync(), source.readAsBytesSync());
-        final deployed = File(p.join(deployment.path, 'migrations', name));
-        deployed.parent.createSync(recursive: true);
-        bundled.copySync(deployed.path);
       }
       final staleBuild = await withDartCommandLock(
         () => runTestProcess(dartExecutable, <String>[
@@ -93,20 +87,35 @@ void main() {
       );
       expect(
         staleBuild.stderr,
-        contains('Pass --sqlite-migrations again or remove the sidecar'),
+        contains('Pass --sqlite-migrations again or remove the bundle'),
       );
       expect(artifact.existsSync(), isTrue);
-      expect(owner.readAsStringSync(), 'server\n');
-      final deployedArtifact = File(p.join(deployment.path, 'server'));
-      artifact.renameSync(deployedArtifact.path);
+      expect(owner.readAsStringSync(), 'odroe-native-bundle-v1\n');
+      final deployedBundle = Directory(p.join(deployment.path, 'server'));
+      artifact.renameSync(deployedBundle.path);
       expect(artifact.existsSync(), isFalse);
+      final deployedArtifact = File(
+        p.join(deployedBundle.path, 'bin', _testNativeExecutableName),
+      );
       expect(deployedArtifact.existsSync(), isTrue);
+      final routeFile = File(
+        p.join(
+          deployedBundle.path,
+          'build',
+          'web',
+          'posts',
+          '42',
+          'index.html',
+        ),
+      );
+      await routeFile.parent.create(recursive: true);
+      await routeFile.writeAsString('static native artifact');
 
-      final databasePath = p.join(deployment.path, '.odroe', 'app.sqlite3');
+      final databasePath = p.join(deployedBundle.path, '.odroe', 'app.sqlite3');
       final port = await _unusedPort();
       final firstServer = await _startNativeServer(
         deployedArtifact,
-        deployment,
+        deployedBundle,
         port: port,
       );
       addTearDown(firstServer.close);
@@ -161,6 +170,12 @@ void main() {
         'type': 'data',
         'data': <String, Object?>{'id': 42, 'title': 'Odroe post 42'},
       });
+      if (Platform.isMacOS) {
+        final bundledSqlite = File(
+          p.join(deployedBundle.path, 'lib', 'libsqlite3.dylib'),
+        ).resolveSymbolicLinksSync();
+        expect(logs.toString(), contains(bundledSqlite));
+      }
 
       final missing = await _get(
         client,
@@ -217,7 +232,7 @@ void main() {
       final secondPort = await _unusedPort();
       final secondServer = await _startNativeServer(
         deployedArtifact,
-        deployment,
+        deployedBundle,
         port: secondPort,
       );
       addTearDown(secondServer.close);
@@ -252,17 +267,17 @@ void main() {
       secondClient.close(force: true);
       await secondServer.close();
       final overrideMigrations = Directory(
-        p.join(deployment.path, 'schema-history'),
+        p.join(deployedBundle.path, 'schema-history'),
       );
       Directory(
-        p.join(deployment.path, 'migrations'),
+        p.join(deployedBundle.path, 'migrations'),
       ).renameSync(overrideMigrations.path);
       final overridePort = await _unusedPort();
       final overrideServer = await _startNativeServer(
         deployedArtifact,
-        deployment,
+        deployedBundle,
         port: overridePort,
-        databasePath: p.join(deployment.path, '.odroe', 'override.sqlite3'),
+        databasePath: p.join(deployedBundle.path, '.odroe', 'override.sqlite3'),
         migrationsPath: overrideMigrations.path,
       );
       addTearDown(overrideServer.close);
@@ -298,29 +313,26 @@ void main() {
   );
 
   test(
-    'native build rejects a linked migration output without touching its target',
+    'native build rejects a linked bundle output without touching its target',
     () async {
       final project = Directory('example/app').absolute;
-      final artifactDirectory = Directory(
+      final artifact = Directory(
         p.join(
           project.path,
           'build',
           'odroe',
           'native-linked-$pid-${DateTime.now().microsecondsSinceEpoch}',
         ),
-      )..createSync(recursive: true);
+      );
+      artifact.parent.createSync(recursive: true);
       final outside = await Directory.systemTemp.createTemp(
         'odroe-native-linked-',
       );
       final sentinel = File(p.join(outside.path, 'sentinel'))
         ..writeAsStringSync('keep');
-      final migrationLink = Link(p.join(artifactDirectory.path, 'migrations'))
-        ..createSync(outside.path);
+      final bundleLink = Link(artifact.path)..createSync(outside.path);
       addTearDown(() async {
-        if (migrationLink.existsSync()) migrationLink.deleteSync();
-        if (artifactDirectory.existsSync()) {
-          await artifactDirectory.delete(recursive: true);
-        }
+        if (bundleLink.existsSync()) bundleLink.deleteSync();
         if (outside.existsSync()) await outside.delete(recursive: true);
       });
 
@@ -333,22 +345,16 @@ void main() {
           project.path,
           '--server-only',
           '--server-artifact',
-          p.relative(
-            p.join(artifactDirectory.path, 'server'),
-            from: project.path,
-          ),
+          p.relative(artifact.path, from: project.path),
           '--sqlite-migrations',
           'migrations',
         ], timeout: const Duration(seconds: 30)),
       );
 
-      expect(build.exitCode, 1, reason: '${build.stdout}\n${build.stderr}');
-      expect(build.stderr, contains('regular directory'));
+      expect(build.exitCode, 64, reason: '${build.stdout}\n${build.stderr}');
+      expect(build.stderr, contains('cannot traverse a symbolic link'));
       expect(sentinel.readAsStringSync(), 'keep');
-      expect(
-        File(p.join(artifactDirectory.path, 'server')).existsSync(),
-        isFalse,
-      );
+      expect(bundleLink.existsSync(), isTrue);
     },
     timeout: const Timeout(Duration(minutes: 3)),
     skip: Platform.isWindows
@@ -388,7 +394,7 @@ void main() {
       expect(fixture.artifact.existsSync(), isTrue);
       expect(providerMigration.readAsStringSync(), 'SELECT PostgreSQL syntax;');
       expect(
-        Directory(p.join(fixture.root.path, 'migrations')).existsSync(),
+        Directory(p.join(fixture.artifact.path, 'migrations')).existsSync(),
         isFalse,
       );
     },
@@ -396,16 +402,15 @@ void main() {
   );
 
   test(
-    'native build preserves an unowned migration output',
+    'native build preserves an unowned bundle output',
     () async {
       final project = Directory('example/app').absolute;
       final fixture = _nativeBuildFixture(project, 'unowned');
       File(
         p.join(fixture.migrationSource.path, '0001_records.sql'),
       ).writeAsStringSync('CREATE TABLE records (id INTEGER PRIMARY KEY);');
-      final output = Directory(p.join(fixture.root.path, 'migrations'))
-        ..createSync();
-      final sentinel = File(p.join(output.path, 'sentinel'))
+      fixture.artifact.createSync();
+      final sentinel = File(p.join(fixture.artifact.path, 'sentinel'))
         ..writeAsStringSync('keep');
       addTearDown(() async {
         if (fixture.root.existsSync()) {
@@ -429,48 +434,42 @@ void main() {
       );
 
       expect(build.exitCode, 1, reason: '${build.stdout}\n${build.stderr}');
-      expect(build.stderr, contains('is not owned by this server artifact'));
+      expect(build.stderr, contains('Odroe-owned bundle directory'));
       expect(sentinel.readAsStringSync(), 'keep');
-      expect(fixture.artifact.existsSync(), isFalse);
+      expect(fixture.artifact.existsSync(), isTrue);
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
 
-  test('native bundle replacement restores both previous outputs', () async {
+  test('native bundle replacement restores the previous bundle', () async {
     final state = await Directory.systemTemp.createTemp(
       'odroe-native-replace-',
     );
     addTearDown(() => state.delete(recursive: true));
     final output = Directory(p.join(state.path, 'output'))..createSync();
-    final staging = Directory(p.join(state.path, 'staging'))..createSync();
-    final artifact = File(p.join(output.path, 'server'))
-      ..writeAsStringSync('old server');
-    final migrations = Directory(p.join(output.path, 'migrations'))
-      ..createSync();
-    File(
-      p.join(migrations.path, '0001_old.sql'),
-    ).writeAsStringSync('old migration');
-    final stagedArtifact = File(p.join(staging.path, 'server'))
-      ..writeAsStringSync('new server');
-    final missingStagedMigrations = Directory(
-      p.join(staging.path, 'missing-migrations'),
-    );
+    final bundle = Directory(p.join(output.path, 'server'));
+    _writeTestBundle(bundle, 'old server');
+    final sentinel = File(p.join(bundle.path, 'sentinel'))
+      ..writeAsStringSync('keep');
+    final stagedBundle = Directory(p.join(bundle.path, 'staged'));
+    _writeTestBundle(stagedBundle, 'new server');
 
     await expectLater(
       replaceNativeBundle(
-        stagedArtifact: stagedArtifact,
-        stagedMigrations: missingStagedMigrations,
-        artifact: artifact,
-        migrations: migrations,
+        stagedBundle: stagedBundle,
+        bundle: bundle,
         lockFile: File(p.join(state.path, 'native-build.lock')),
       ),
       throwsA(isA<FileSystemException>()),
     );
-    expect(artifact.readAsStringSync(), 'old server');
     expect(
-      File(p.join(migrations.path, '0001_old.sql')).readAsStringSync(),
-      'old migration',
+      File(
+        p.join(bundle.path, 'bin', _testNativeExecutableName),
+      ).readAsStringSync(),
+      'old server',
     );
+    expect(sentinel.readAsStringSync(), 'keep');
+    expect(stagedBundle.existsSync(), isTrue);
     expect(
       output.listSync().where(
         (entity) => p.basename(entity.path).startsWith('.odroe-'),
@@ -479,79 +478,49 @@ void main() {
     );
   });
 
-  test(
-    'native bundle restores a sidecar replaced before publication',
-    () async {
-      final state = Directory.systemTemp.createTempSync(
-        'odroe-native-owner-race-',
-      );
-      addTearDown(() => state.deleteSync(recursive: true));
-      final output = Directory(p.join(state.path, 'output'))..createSync();
-      final staging = Directory(p.join(state.path, 'staging'))..createSync();
-      final artifact = File(p.join(output.path, 'server'))
-        ..writeAsStringSync('old server');
-      final migrations = Directory(p.join(output.path, 'migrations'))
-        ..createSync();
-      final sentinel = File(p.join(migrations.path, 'sentinel'))
-        ..writeAsStringSync('keep');
-      final stagedArtifact = File(p.join(staging.path, 'server'))
-        ..writeAsStringSync('new server');
-      final stagedMigrations = Directory(p.join(staging.path, 'migrations'))
-        ..createSync();
-      File(
-        p.join(stagedMigrations.path, '.odroe-native-migrations'),
-      ).writeAsStringSync('server\n');
+  test('native bundle preserves an unowned output', () async {
+    final state = Directory.systemTemp.createTempSync('odroe-native-unowned-');
+    addTearDown(() => state.deleteSync(recursive: true));
+    final output = Directory(p.join(state.path, 'output'))..createSync();
+    final bundle = Directory(p.join(output.path, 'server'))..createSync();
+    final sentinel = File(p.join(bundle.path, 'sentinel'))
+      ..writeAsStringSync('keep');
+    final stagedBundle = Directory(p.join(state.path, 'staging'));
+    _writeTestBundle(stagedBundle, 'new server');
 
-      await expectLater(
-        replaceNativeBundle(
-          stagedArtifact: stagedArtifact,
-          stagedMigrations: stagedMigrations,
-          artifact: artifact,
-          migrations: migrations,
-          lockFile: File(p.join(state.path, 'native-build.lock')),
-          expectedMigrationOwner: 'server\n',
-        ),
-        throwsA(isA<FileSystemException>()),
-      );
-      expect(artifact.readAsStringSync(), 'old server');
-      expect(sentinel.readAsStringSync(), 'keep');
-      expect(stagedArtifact.readAsStringSync(), 'new server');
-    },
-  );
+    await expectLater(
+      replaceNativeBundle(
+        stagedBundle: stagedBundle,
+        bundle: bundle,
+        lockFile: File(p.join(state.path, 'native-build.lock')),
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(sentinel.readAsStringSync(), 'keep');
+    expect(stagedBundle.existsSync(), isTrue);
+  });
 
-  test(
-    'native bundle rejects a sidecar appearing before publication',
-    () async {
-      final state = Directory.systemTemp.createTempSync(
-        'odroe-native-absent-race-',
-      );
-      addTearDown(() => state.deleteSync(recursive: true));
-      final output = Directory(p.join(state.path, 'output'))..createSync();
-      final staging = Directory(p.join(state.path, 'staging'))..createSync();
-      final artifact = File(p.join(output.path, 'server'))
-        ..writeAsStringSync('old server');
-      final stagedArtifact = File(p.join(staging.path, 'server'))
-        ..writeAsStringSync('new server');
-      final migrations = Directory(p.join(output.path, 'migrations'))
-        ..createSync();
-      final sentinel = File(p.join(migrations.path, 'sentinel'))
-        ..writeAsStringSync('keep');
+  test('native bundle preserves a legacy executable', () async {
+    final state = Directory.systemTemp.createTempSync('odroe-native-legacy-');
+    addTearDown(() => state.deleteSync(recursive: true));
+    final output = Directory(p.join(state.path, 'output'))..createSync();
+    final legacy = File(p.join(output.path, 'server'))
+      ..writeAsStringSync('old server');
+    final stagedBundle = Directory(p.join(state.path, 'staging'));
+    _writeTestBundle(stagedBundle, 'new server');
 
-      await expectLater(
-        replaceNativeBundle(
-          stagedArtifact: stagedArtifact,
-          stagedMigrations: null,
-          artifact: artifact,
-          migrations: migrations,
-          lockFile: File(p.join(state.path, 'native-build.lock')),
-        ),
-        throwsA(isA<FileSystemException>()),
-      );
-      expect(artifact.readAsStringSync(), 'old server');
-      expect(stagedArtifact.readAsStringSync(), 'new server');
-      expect(sentinel.readAsStringSync(), 'keep');
-    },
-  );
+    await expectLater(
+      replaceNativeBundle(
+        stagedBundle: stagedBundle,
+        bundle: Directory(legacy.path),
+        lockFile: File(p.join(state.path, 'native-build.lock')),
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(legacy.readAsStringSync(), 'old server');
+    expect(stagedBundle.existsSync(), isTrue);
+  });
 
   test(
     'native bundle serializes competing process publications',
@@ -561,7 +530,7 @@ void main() {
       );
       addTearDown(() => state.deleteSync(recursive: true));
       final output = Directory(p.join(state.path, 'output'))..createSync();
-      File(p.join(output.path, 'server')).writeAsStringSync('old');
+      _writeTestBundle(Directory(p.join(output.path, 'server')), 'old');
       final readyAbsent = File(p.join(state.path, 'ready-absent'));
       final readySelected = File(p.join(state.path, 'ready-selected'));
       final go = File(p.join(state.path, 'go'));
@@ -608,16 +577,12 @@ void main() {
         );
       }
       expect(
-        File(p.join(output.path, 'server')).readAsStringSync(),
+        File(
+          p.join(output.path, 'server', 'bin', _testNativeExecutableName),
+        ).readAsStringSync(),
         'selected',
       );
-      final migrations = Directory(p.join(output.path, 'migrations'));
-      expect(
-        File(
-          p.join(migrations.path, '.odroe-native-migrations'),
-        ).readAsStringSync(),
-        'server\n',
-      );
+      final migrations = Directory(p.join(output.path, 'server', 'migrations'));
       expect(
         File(p.join(migrations.path, '0001_selected.sql')).readAsStringSync(),
         'SELECT 1;',
@@ -643,7 +608,20 @@ void main() {
   });
 }
 
-({File artifact, Directory migrationSource, Directory root})
+void _writeTestBundle(Directory bundle, String executable) {
+  File(p.join(bundle.path, 'bin', _testNativeExecutableName))
+    ..createSync(recursive: true)
+    ..writeAsStringSync(executable);
+  Directory(p.join(bundle.path, 'lib')).createSync();
+  File(
+    p.join(bundle.path, '.odroe-native-bundle'),
+  ).writeAsStringSync('odroe-native-bundle-v1\n');
+}
+
+String get _testNativeExecutableName =>
+    Platform.isWindows ? 'server.exe' : 'server';
+
+({Directory artifact, Directory migrationSource, Directory root})
 _nativeBuildFixture(Directory project, String name) {
   final root = Directory(
     p.join(
@@ -656,7 +634,7 @@ _nativeBuildFixture(Directory project, String name) {
   final migrationSource = Directory(p.join(root.path, 'source-migrations'))
     ..createSync();
   return (
-    artifact: File(p.join(root.path, 'server')),
+    artifact: Directory(p.join(root.path, 'server')),
     migrationSource: migrationSource,
     root: root,
   );
@@ -683,6 +661,7 @@ Future<_NativeServerProcess> _startNativeServer(
         entry.key: entry.value,
     'ODROE_HOST': '127.0.0.1',
     'ODROE_PORT': '$port',
+    if (Platform.isMacOS) 'DYLD_PRINT_LIBRARIES': '1',
     'ODROE_SQLITE_PATH': ?databasePath,
     'ODROE_MIGRATIONS_PATH': ?migrationsPath,
   };

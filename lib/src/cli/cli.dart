@@ -83,7 +83,7 @@ Future<int> runOdroe(
     )
     ..addOption(
       'server-artifact',
-      help: 'Server artifact path inside the project build directory.',
+      help: 'Native bundle or Cloudflare JS path inside the build directory.',
     )
     ..addOption(
       'server-target',

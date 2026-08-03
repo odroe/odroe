@@ -38,8 +38,10 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 `*_io.dart`、`server_fetch.dart` 与各 `database_<driver>.dart`。
 
 入口与 module 控制公开 API、运行时装配和可达的 Dart 代码，但不把单包的 pub
-依赖变成可选依赖。应用仍会解析这一份共享依赖图，native build hook 也可能产生
-资产；应以目标平台的实际产物衡量成本。
+依赖变成可选依赖。应用仍会解析这一份共享依赖图；默认 SQLite 配置的 native
+build hook 即使在入口未导入该 driver 时也会生成动态库。Odroe 的 Native build
+因此使用 [`dart build cli`](https://dart.dev/tools/dart-build) 并发布完整 bundle；
+应以目标平台的实际产物衡量成本。
 
 ## 创建应用
 
@@ -785,8 +787,9 @@ Cloudflare 入口在 `invocationModules` 中包装 D1 binding。Wrangler 消费�
 `migrations/*.sql`，但维护自己的 `d1_migrations` ledger；Worker Fetch 不会自动
 迁移。`0002_unify_posts.sql` 同时把历史 seed 演进为 provider-neutral
 `Odroe post 42` 并创建索引，因此 Native 与本地 D1 会得到同一产品状态。Native
-构建把 migration 原字节放在 executable 同级的 `migrations/`；Worker、Flutter
-Web 与 Wasm 产物都不会触达 SQLite FFI。
+构建发布完整 bundle root：`bin/server`（Windows 为 `bin/server.exe`）是入口，
+`lib/` 保存运行所需的 native libraries；选择 SQLite history 时再把 migration 原字节放入同一根目录的
+`migrations/`。Worker、Flutter Web 与 Wasm 产物都不会触达 SQLite FFI。
 
 生成的应用在自己的 `package.json` 与 lockfile 中固定 Wrangler 4.118.0；Node 22+
 与 npm 10.9+ 只用于本地 Cloudflare 工具链，不进入 Dart 依赖图或部署产物。
@@ -955,6 +958,12 @@ dart run odroe build --server-only --server-target cloudflare
 dart run odroe build --server-target cloudflare web
 ```
 
+Native target 的 `--server-artifact` 指向完整 bundle root，而不是可执行文件。
+默认目录是 `build/odroe/server`；类 Unix 入口为 `bin/server`，Windows 为
+`bin/server.exe`。运行所需的 native libraries 保留在 `lib/`；选择 SQLite
+history 时还包含 `migrations/`。从 bundle 根运行入口，部署时不要单独复制该文件。
+Cloudflare target 的该选项仍指向编译后的 `server.js`。
+
 将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
 Web；`--` 后参数原样交给 Flutter CLI。包含 RPC 的原生运行与构建必须传入
 `ODROE_API_ORIGIN`，Web 继续使用同源。开发 server 直接挂载源码 `public/`，
@@ -975,18 +984,22 @@ prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 
 最多 1 MiB。`--prerender-concurrency`、`--prerender-max-routes` 与
 `--prerender-max-response-bytes` 可显式调整预算。需要 Cloudflare server
 artifact 的构建也复用生成的 Dart server 源码完成 prerender，不再额外编译
-临时 native executable。
+临时 Native bundle。
 纯文档构建会先写入同级 staging 目录，全部成功后才替换既有静态产物。
 prerender 期间 server 明确禁用静态根，旧产物与 `public/` 中的同名 HTML
 不会替代本轮真实 route 响应。
 
 `build --server-only --sqlite-migrations migrations` 生成的 native bundle 与构建
-OS/architecture 绑定。CLI 用隐藏 ownership marker 绑定 executable 与 migration
-sidecar；不会覆盖未标记目录，后续若漏传 migration 选项也会在发布新 executable
-前失败，避免留下旧 history。
+OS/architecture 绑定。CLI 通过隐藏 ownership marker 管理整个 bundle root，不会
+覆盖未标记路径；后续若漏传 migration 选项也会在发布新 bundle 前失败，避免留下
+旧 history。发布会在进程锁内以完整目录替换 `bin/`、`lib/` 与可选
+`migrations/`，失败时恢复上一份 bundle。
+旧版单文件产物不会被隐式升级；确认并保留旧 migration history 后，需显式移走或
+删除该构建产物再首次生成 bundle。
 请在目标平台或兼容 builder 中构建。生成的 bootstrap 默认从进程当前目录下的
 `build/web` 提供静态文件；`ODROE_WEB_ROOT` 可指定明确目录，空字符串会禁用
-静态根。部署时必须同时携带对应静态目录，或显式禁用。
+静态根。从 bundle root 运行时，默认位置就是 `<bundle>/build/web`。部署时必须
+同时携带对应静态目录、设置显式路径，或禁用静态服务。
 Native `IoServer` 会为 `publicDirectory` 中的文件逐次验证真实路径，使用
 `no-cache` 配合 ETag/Last-Modified 避免重复传输，并对至少 1 KiB 的
 文本、JavaScript、JSON、SVG 与 Wasm 流式发送 gzip。文件名不会被猜测为

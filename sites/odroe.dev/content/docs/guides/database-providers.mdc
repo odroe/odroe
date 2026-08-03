@@ -503,10 +503,12 @@ remote Cloudflare deployment.
 
 All drivers live in the same Dart package. Entrypoints keep driver APIs and
 reachable Dart code separate, but pub still resolves the shared dependency
-graph. Native hooks may contribute an asset such as SQLite even when an
-application does not import that driver; Dart tree shaking does not undo
-dependency resolution or every native build hook. Inspect each target's real
-artifact when binary size matters.
+graph. With SQLite's default configuration, its Native build hook contributes a
+dynamic library even when an application does not import that driver; Dart tree
+shaking does not undo dependency resolution or build hooks. Odroe therefore
+uses [`dart build cli`](https://dart.dev/tools/dart-build) and publishes the
+complete Native bundle instead of only its executable. Inspect each target's
+real artifact when binary size matters.
 
 ## Schema and migrations
 

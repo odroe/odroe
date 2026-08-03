@@ -174,6 +174,13 @@ dart run odroe build --server-only --sqlite-migrations migrations
 dart run odroe build --server-only --server-target cloudflare
 ```
 
+The Native command publishes the complete bundle root at
+`build/odroe/server`: run `./bin/server` (`bin/server.exe` on Windows) from that
+directory and keep its `lib/` directory beside `bin/`. With
+`--sqlite-migrations`, the same root also
+contains `migrations/`. A custom Native `--server-artifact` selects this root,
+not the `bin/server` file.
+
 `dev` and `build` regenerate route targets automatically. Use
 `dart run odroe generate` for a fast explicit compiler check.
 
