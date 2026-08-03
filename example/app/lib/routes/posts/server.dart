@@ -22,14 +22,13 @@ final listPosts = ServerFunction<models.ListPostsInput, models.PostPage>(
       throw const HttpError(400, 'Post page limit must be between 1 and 50.');
     }
     final order = switch (input.sort) {
-      'newest' => posts.id.descending,
-      'oldest' => posts.id.ascending,
-      _ => throw const HttpError(400, 'Invalid post sort.'),
+      models.PostSort.newest => posts.id.descending,
+      models.PostSort.oldest => posts.id.ascending,
     };
     final cursor = input.cursor;
     final cursorPredicate = cursor == null
         ? null
-        : input.sort == 'newest'
+        : input.sort == models.PostSort.newest
         ? posts.id.lessThan(cursor)
         : posts.id.greaterThan(cursor);
     final idPredicate = input.ids.isEmpty ? null : posts.id.isIn(input.ids);

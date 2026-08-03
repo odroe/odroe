@@ -434,6 +434,11 @@ WireShape _renameWireShape(
   required bool nullable,
 }) => switch (shape) {
   WireValueShape() => WireValueShape(source: source, nullable: nullable),
+  WireEnumShape(:final enumSource) => WireEnumShape(
+    source: source,
+    nullable: nullable,
+    enumSource: enumSource,
+  ),
   WireCollectionShape(:final kind, :final value) => WireCollectionShape(
     source: source,
     nullable: nullable,
@@ -683,6 +688,18 @@ final class _WireShapeResolver {
           're-exports are not inspected for wire types',
         );
       }
+      if (library.enumTypes.contains(type.name.lexeme)) {
+        if (type.typeArguments != null) {
+          throw _WireShapeException(
+            '${type.name.lexeme} at $label does not accept type arguments',
+          );
+        }
+        return WireEnumShape(
+          source: type.toSource(),
+          nullable: type.question != null,
+          enumSource: '$prefix.${type.name.lexeme}',
+        );
+      }
       _validateNominalTypeArguments(
         type,
         input: input,
@@ -752,6 +769,18 @@ final class _WireShapeResolver {
           topLevel: topLevel,
           label: label,
           stack: stack,
+        );
+      }
+      if (library.enumTypes.contains(name)) {
+        if (arguments.isNotEmpty) {
+          throw _WireShapeException(
+            '$name at $label does not accept type arguments',
+          );
+        }
+        return WireEnumShape(
+          source: '${library.prefix}.$name${nullable ? '?' : ''}',
+          nullable: nullable,
+          enumSource: '${library.prefix}.$name',
         );
       }
       if (library.nominalTypes.contains(name)) {
@@ -916,14 +945,14 @@ final class _WireShapeResolver {
     final typeParameters = alias.typeParameters?.typeParameters;
     if (typeParameters != null && typeParameters.isNotEmpty) {
       throw _WireShapeException(
-        '$label resolves to generic record typedef '
-        '${library.prefix}.${alias.name.lexeme}; generic record typedefs are '
+        '$label resolves to generic wire typedef '
+        '${library.prefix}.${alias.name.lexeme}; generic wire typedefs are '
         'not supported',
       );
     }
     if (reference.typeArguments != null) {
       throw _WireShapeException(
-        '$label supplies type arguments to non-generic record typedef '
+        '$label supplies type arguments to non-generic wire typedef '
         '${library.prefix}.${alias.name.lexeme}',
       );
     }
@@ -1059,6 +1088,11 @@ final class _WireShapeResolver {
               in result.unit.declarations.whereType<GenericTypeAlias>())
             declaration.name.lexeme: declaration,
         },
+        enumTypes: <String>{
+          for (final declaration
+              in result.unit.declarations.whereType<EnumDeclaration>())
+            declaration.namePart.typeName.lexeme,
+        },
         nominalTypes: result.unit.declarations
             .map(_nominalTypeName)
             .nonNulls
@@ -1140,6 +1174,7 @@ final class _WireLibrary {
     required this.file,
     required this.prefix,
     required this.aliases,
+    required this.enumTypes,
     required this.nominalTypes,
     required this.importedTypes,
   });
@@ -1147,6 +1182,7 @@ final class _WireLibrary {
   final File file;
   final String prefix;
   final Map<String, GenericTypeAlias> aliases;
+  final Set<String> enumTypes;
   final Set<String> nominalTypes;
   final Set<String> importedTypes;
 }

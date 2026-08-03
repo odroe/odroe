@@ -57,17 +57,97 @@ void main() {
         '''
 globalThis.self = globalThis;
 const worker = (await import(${Uri.file(worker.path).toString().quote()})).default;
+const prepared = [];
+const database = {
+  prepare(sql) {
+    const call = {sql, parameters: null, rawCalls: 0};
+    prepared.push(call);
+    const statement = {
+      bind(...parameters) {
+        call.parameters = parameters;
+        return statement;
+      },
+      raw(options) {
+        if (options?.columnNames !== true) {
+          throw new Error('expected D1 column names');
+        }
+        call.rawCalls++;
+        return Promise.resolve([
+          ['id', 'title'],
+          [42, 'D1 post 42'],
+        ]);
+      },
+    };
+    return statement;
+  },
+};
+const environment = {DB: database};
+const context = {waitUntil() {}};
 const response = await worker.fetch(
   new Request('https://example.test/posts/42?preview=true', {
     headers: {accept: 'application/json'},
   }),
-  {DB: {}},
-  {waitUntil() {}},
+  environment,
+  context,
 );
 if (response.status !== 200) throw new Error(`status \${response.status}`);
 const body = await response.text();
 if (!body.includes('"location":"/posts/42?preview=true"')) {
   throw new Error(body);
+}
+
+async function listPosts(sort) {
+  const url = new URL(
+    'https://example.test/__odroe/functions/' +
+      encodeURIComponent('posts.list'),
+  );
+  url.searchParams.set('payload', JSON.stringify({
+    data: {cursor: null, ids: [42], limit: 1, sort},
+  }));
+  return worker.fetch(
+    new Request(url, {
+      headers: {
+        origin: url.origin,
+        'x-odroe-server-function': 'true',
+      },
+    }),
+    environment,
+    context,
+  );
+}
+
+const valid = await listPosts('newest');
+if (valid.status !== 200) throw new Error(await valid.text());
+const validBody = await valid.json();
+if (
+  validBody.type !== 'data' ||
+  validBody.data.items.length !== 1 ||
+  validBody.data.items[0].id !== 42 ||
+  validBody.data.items[0].title !== 'D1 post 42' ||
+  validBody.data.nextCursor !== null
+) {
+  throw new Error(JSON.stringify(validBody));
+}
+if (
+  prepared.length !== 1 ||
+  prepared[0].parameters?.length !== 1 ||
+  prepared[0].parameters[0] !== 42 ||
+  prepared[0].rawCalls !== 1
+) {
+  throw new Error(JSON.stringify(prepared));
+}
+
+const prepareCount = prepared.length;
+const invalid = await listPosts('popular');
+const invalidBody = await invalid.text();
+if (
+  invalid.status !== 400 ||
+  !invalidBody.includes('Invalid server function payload.')
+) {
+  throw new Error(`status \${invalid.status}: \${invalidBody}`);
+}
+if (prepared.length !== prepareCount) {
+  throw new Error('invalid enum input reached D1');
 }
 ''',
       ], timeout: const Duration(seconds: 30));

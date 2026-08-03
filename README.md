@@ -489,13 +489,15 @@ client 和 server 共用的协议类型。
 `id` 时仍使用原有的 `server.dart` 路径加变量名，便于现有代码渐进迁移，但
 重命名文件或变量会改变该 fallback。
 
-项目内的 named-record typedef 可以直接成为函数输入或输出。把 record 放在
-客户端安全的共享文件，并在 `server.dart` 用前缀导入：
+项目内的 named-record typedef 与直接声明的 enum 可以直接成为函数输入或输出。
+把共享类型放在客户端安全的文件，并在 `server.dart` 用前缀导入：
 
 ```dart
 // lib/posts.dart
 typedef Post = ({int id, String title});
 typedef CreatePost = ({String title});
+enum PostSort { newest, oldest }
+typedef ListPostsInput = ({int limit, PostSort sort});
 
 // lib/routes/posts/server.dart
 import '../../posts.dart' as models;
@@ -504,17 +506,25 @@ final createPost = ServerFunction<models.CreatePost, models.Post>(
   id: 'posts.create',
   handler: (context) => create(context.data),
 );
+
+final listPosts = ServerFunction<models.ListPostsInput, List<models.Post>>(
+  id: 'posts.list',
+  handler: (context) => list(context.data),
+);
 ```
 
 `odroe generate` 会为 client input、server input、server output、client output
-生成对称 codec；`List<Post>`、nullable 与 stream item 会递归使用同一 record
-shape。应用代码仍操作 Dart record，wire 才使用字段名 JSON object，不需要
-annotation、`build_runner`、`toJson` 或手写 adapter。畸形输入在 handler 前返回
-400；成功响应若不符合输出合同，客户端得到 `RpcProtocolException`。
+生成对称 codec；`List<Post>`、nullable、collection、record fields 与 stream item
+会递归使用同一 shape。应用代码仍操作 Dart record 和 enum；wire 中 record 使用
+字段名 JSON object，enum 使用声明名字符串（如 `"newest"`），不需要 annotation、
+`build_runner`、`toJson` 或手写 adapter。未知 enum 或畸形 record 输入在 handler
+前返回 400；成功响应若不符合输出合同，客户端得到 `RpcProtocolException`。
 
-首期只自动解析项目内、带前缀导入、非泛型且只有 named fields 的 record typedef。
-positional、generic、recursive record 与非 `String` key 的 Map 会在生成期拒绝；
-nominal class 继续由应用通过 `SerializationAdapter` 明确编码。
+生成器只自动解析项目内、由 route server 带前缀导入并在该文件直接声明的 enum，
+以及非泛型且只有 named fields 的 record typedef。positional、generic、recursive
+record 与非 `String` key 的 Map 会在生成期拒绝；依赖包 enum、nominal class 与
+被 `Object`/`dynamic` 擦除的值继续由应用通过 `SerializationAdapter` 明确编码。
+已发布 enum case 可以重排，但重命名或删除是 wire breaking change。
 
 ## 服务端组合
 
@@ -757,7 +767,9 @@ server 将 `limit` 限定在 `1..50`，按唯一 ID 倒序并读取 `limit + 1` 
 用 `InfiniteQueryOptions<PostPage, int?>` 将每页的 `nextCursor` 传给下一次
 `posts.list`，不会把整张表一次物化到 RPC 与 widget tree。仓库示例在
 同一契约上另加 `ids` 与 `sort`：`newest` 使用 `id < cursor`，`oldest`
-使用 `id > cursor`，两者都保持严格、可索引的 keyset 边界。
+使用 `id > cursor`，两者都保持严格、可索引的 keyset 边界。示例中的 `sort`
+是 `PostSort` enum；Flutter 和 handler 都保持类型安全，生成的 RPC codec 只在
+wire 边界把它转换为 case name 字符串。
 
 创建操作直接返回数据库生成的完整记录：
 

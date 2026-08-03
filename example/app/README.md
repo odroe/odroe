@@ -40,8 +40,11 @@ runner 时返回 2，后续调用返回 0。已应用文件被编辑、删除、
 容易随列顺序漂移的数字下标。`Post`、`PostPage`、`CreatePost` 与
 `ListPostsInput` 放在客户端安全的
 `lib/posts.dart`，route compiler 为输入、输出、列表和 stream item 生成对称
-codec，不需要手写 JSON adapter。server 将 `limit` 限定在 `1..50`，按唯一
-ID 使用严格 keyset predicate，读取 `limit + 1` 行后只返回 `items` 与可选
+codec，不需要手写 JSON adapter。`PostSort` 在 Flutter 和 handler 中保持 enum，
+仅在 RPC wire 上使用 `"newest"` 或 `"oldest"`；未知 case 会在 handler 与 SQL
+之前返回 400。页面会先把 URL search 归一为 enum，未知值回退到默认 `newest`，
+不会在 widget 初始化期间抛出。server 将 `limit` 限定在 `1..50`，按唯一 ID 使用严格 keyset
+predicate，读取 `limit + 1` 行后只返回 `items` 与可选
 `nextCursor`。Flutter 的 `InfiniteQueryBuilder` 追加每一页，不会把整表一次
 放入 RPC frame。列表还可用 typed `ids` 经 `isIn` 限定数据库行；空列表
 表示不过滤，非空过滤最多接受 100 个 ID，并在 SQL 构造前拒绝超限输入。

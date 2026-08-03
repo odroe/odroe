@@ -38,16 +38,19 @@ final readPost = ServerFunction<int, models.Post>(
 
 The compiler scans `server.dart`, rejects duplicate explicit IDs, and emits a
 server manifest plus client-safe references. For a project-local, non-generic
-named-record typedef it also emits symmetric input and output codecs. A
-`({int id, String title})` value crosses the wire as an object with `id` and
-`title` fields, then returns to the same Dart record type. Collections,
-nullable values, and stream items recurse through the same shape.
+named-record typedef or directly declared enum it also emits symmetric input
+and output codecs. A `({int id, String title})` value crosses the wire as an
+object with `id` and `title` fields; `PostSort.newest` crosses as `"newest"`.
+Both return to their original Dart types. Collections, nullable values, record
+fields, aliases, and stream items recurse through the same shape.
 
 This code is generated with the route tree. It does not require annotations,
-`build_runner`, reflection, or a handwritten JSON adapter. Nominal application
-classes remain explicit `SerializationAdapter` values. See
-[Typed RPC records](/docs/guides/typed-rpc-records) for the complete supported
-shape and evolution rules.
+`build_runner`, reflection, or a handwritten JSON adapter. Unknown enum input
+fails before the handler, while an invalid typed output becomes
+`RpcProtocolException`. Nominal application classes and dependency enums remain
+explicit `SerializationAdapter` values. See
+[Typed RPC records and enums](/docs/guides/typed-rpc-records) for the complete
+supported shape and evolution rules.
 
 `package:odroe/server.dart` is the complete server product entrypoint; route
 server files do not need to import `rpc.dart` as well.

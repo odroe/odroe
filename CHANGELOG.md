@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Generate symmetric typed RPC codecs for project-local enums, including
+  direct values, non-generic aliases, nullable values, collections, named
+  records, and stream items. Enum cases cross the wire by declaration name;
+  unknown input fails with HTTP 400 before the handler, while invalid output is
+  normalized to `RpcProtocolException`. This generated path takes precedence
+  over `SerializationAdapter` for directly declared project enums; dependency
+  and otherwise opaque nominal values remain adapter-owned. Renaming or
+  removing a shipped enum case is a breaking wire change.
 - Make owned Native bundles resolve their runtime root from the compiled
   executable before application creation. A validated bundle marker now makes
   relative SQLite, migration, static, and application resource paths independent

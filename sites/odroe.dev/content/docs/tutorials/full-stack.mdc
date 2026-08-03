@@ -18,7 +18,7 @@ Both shapes keep the same owners visible instead of demonstrating each library
 in isolation:
 
 ```text
-Post, PostPage, CreatePost, and ListPostsInput records
+Post, PostPage, CreatePost, ListPostsInput records, and PostSort enum
   → generated typed RPC codecs
   → ServerFunction handlers
   → typed SQL
@@ -42,7 +42,13 @@ Put only cross-runtime data in `lib/posts.dart`:
 typedef Post = ({int id, String title});
 typedef CreatePost = ({String title});
 typedef PostPage = ({List<Post> items, int? nextCursor});
-typedef ListPostsInput = ({int? cursor, List<int> ids, int limit, String sort});
+enum PostSort { newest, oldest }
+typedef ListPostsInput = ({
+  int? cursor,
+  List<int> ids,
+  int limit,
+  PostSort sort,
+});
 ```
 
 This library can be imported by Flutter and by route server files. Keep SQL
@@ -116,14 +122,13 @@ final listPosts = ServerFunction<models.ListPostsInput, models.PostPage>(
       throw const HttpError(400, 'Post page limit must be between 1 and 50.');
     }
     final order = switch (input.sort) {
-      'newest' => posts.id.descending,
-      'oldest' => posts.id.ascending,
-      _ => throw const HttpError(400, 'Invalid post sort.'),
+      models.PostSort.newest => posts.id.descending,
+      models.PostSort.oldest => posts.id.ascending,
     };
     final cursor = input.cursor;
     final cursorPredicate = cursor == null
         ? null
-        : input.sort == 'newest'
+        : input.sort == models.PostSort.newest
         ? posts.id.lessThan(cursor)
         : posts.id.greaterThan(cursor);
     final idPredicate = input.ids.isEmpty ? null : posts.id.isIn(input.ids);
@@ -164,11 +169,12 @@ final createPost = ServerFunction<models.CreatePost, models.Post>(
 ```
 
 The product rejects a limit outside `1..50` and more than 100 filtered IDs
-before SQL construction. For newest-first pages it selects `id < cursor`; for
-oldest-first pages it selects `id > cursor`. Both directions order by the same
-unique ID and read one extra row. That row is never returned: it only proves
-whether `nextCursor` should contain the last returned ID. This is a small,
-indexable product query, not a generic paginator or an implicit count.
+before SQL construction. An unknown wire sort is rejected by the generated enum
+decoder before this handler can run. For newest-first pages it selects
+`id < cursor`; for oldest-first pages it selects `id > cursor`. Both directions
+order by the same unique ID and read one extra row. That row is never returned:
+it only proves whether `nextCursor` should contain the last returned ID. This is
+a small, indexable product query, not a generic paginator or an implicit count.
 
 Creation is one statement. The application does not guess the next ID and does
 not insert followed by an unrelated select. `one` requires exactly one returned
@@ -204,10 +210,11 @@ dart run odroe generate
 dart analyze --fatal-infos
 ```
 
-For `CreatePost`, `ListPostsInput`, `PostPage`, `Post`, and `List<Post>`, the
-compiler emits four symmetric operations: client input encoding, server input
-decoding, server output encoding, and client output decoding. Records use
-field-name objects on the wire. Collections such as `ListPostsInput.ids` and
+For `CreatePost`, `ListPostsInput`, `PostSort`, `PostPage`, `Post`, and
+`List<Post>`, the compiler emits four symmetric operations: client input
+encoding, server input decoding, server output encoding, and client output
+decoding. Records use field-name objects on the wire, while `PostSort.newest`
+uses the string `"newest"`. Collections such as `ListPostsInput.ids` and
 `PostPage.items` recurse into their element codec.
 
 The generated source remains ordinary Dart and is analyzed with the rest of
@@ -215,8 +222,8 @@ the application. Do not edit `lib/routes.dart` or `lib/routes.server.dart`.
 Malformed input fails with HTTP 400 before the handler starts. Malformed typed
 output becomes `RpcProtocolException` on the client.
 
-See [Typed RPC records](/docs/guides/typed-rpc-records) for supported nested
-shapes and compatibility rules.
+See [Typed RPC records and enums](/docs/guides/typed-rpc-records) for supported
+nested shapes and compatibility rules.
 
 ## Keep database ownership at the host
 
@@ -317,10 +324,18 @@ call receives the current page cursor, while cancellation continues through the
 underlying Query context:
 
 ```dart
+PostSort _parsePostSort(String value) {
+  for (final sort in PostSort.values) {
+    if (EnumName(sort).name == value) return sort;
+  }
+  return PostSort.newest;
+}
+
+final postSort = _parsePostSort(sort);
 final QueryKey<InfiniteData<PostPage, int?>> listKey =
     QueryKey<InfiniteData<PostPage, int?>>(
       'posts.list',
-      <Object?>[sort],
+      <Object?>[EnumName(postSort).name],
     );
 
 final listOptions = InfiniteQueryOptions<PostPage, int?>(
@@ -333,7 +348,7 @@ final listOptions = InfiniteQueryOptions<PostPage, int?>(
       cursor: page.pageParam,
       ids: const <int>[],
       limit: 20,
-      sort: sort,
+      sort: postSort,
     ),
     cancelled: page.query.cancelToken.whenCancelled.then<void>((_) {}),
   ),
@@ -376,6 +391,13 @@ InfiniteQueryBuilder<PostPage, int?>(
   },
 )
 ```
+
+The route search schema deliberately remains a URL string contract. The page
+normalizes that value to `PostSort` before constructing the widget; an unknown
+URL value falls back to `PostSort.newest`, matching the route default. The
+widget, Query callback, and server handler then stay exhaustive and string-free.
+Use `EnumName(sort).name` when a cache key or URL needs the declaration name so
+an enhanced enum field cannot silently replace the protocol identity.
 
 Initial loading, actionable failure, empty data, and loaded data are distinct
 states. `getNextPageParam` returns `null` when the server has no next cursor, so
@@ -458,7 +480,7 @@ The generated starter must read a bounded first page, create a post through D1
 second cursor page, filters through typed ID membership, and reads the created ID through
 `posts.read`. An empty title must return controlled HTTP
 400 without adding a row. These checks prove the Fetch host,
-invocation-scoped D1 adapter, generated record codecs, and typed SQL path. They
+invocation-scoped D1 adapter, generated RPC codecs, and typed SQL path. They
 do not prove a remote deployment.
 
 ## Evolve the feature without hiding ownership

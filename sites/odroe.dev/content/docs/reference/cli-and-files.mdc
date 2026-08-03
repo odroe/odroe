@@ -117,8 +117,10 @@ Public top-level `ServerFunction<Input, Output>` declarations in `server.dart`
 become generated client references. Give released functions an explicit,
 stable `id`. A project-local named-record typedef imported with a prefix also
 receives symmetric client-input, server-input, server-output, and client-output
-codecs. Unsupported positional, generic, or recursive records fail generation
-instead of failing on the first request.
+codecs. A directly declared project enum uses the same four boundaries and is
+transported by case name, including through aliases, supported collections,
+records, and streams. Unsupported positional, generic, recursive, indirect, or
+private shapes fail generation instead of failing on the first request.
 
 Cloudflare builds also own `.dart_tool/odroe/server_fetch.dart`. Applications
 may provide `lib/server.dart` with `createServer()` and `lib/prerender.dart`

@@ -1,21 +1,21 @@
 import 'dart_source.dart';
 import 'model.dart';
 
-/// Emits an encoder when [shape] contains a generated named-record contract.
+/// Emits an encoder when [shape] contains a generated wire contract.
 String? wireEncoder(
   WireShape shape,
   String value, {
   required String Function(String source) qualify,
   bool cast = false,
 }) {
-  if (!wireShapeContainsRecord(shape)) return null;
+  if (!wireShapeNeedsGeneratedEncoder(shape)) return null;
   if (!cast) return _encodeTypedWireValue(shape, value, qualify);
   final type = qualify(shape.source);
   return '(($type typed) => ${_encodeTypedWireValue(shape, 'typed', qualify)})'
       '($value as $type)';
 }
 
-/// Emits a decoder for container or generated named-record [shape].
+/// Emits a decoder for container or generated enum/record [shape].
 String? wireDecoder(
   WireShape shape,
   String value, {
@@ -25,11 +25,18 @@ String? wireDecoder(
   return _decodeWireValue(shape, value, qualify);
 }
 
+/// Whether [shape] requires a generated encoder before serialization.
+bool wireShapeNeedsGeneratedEncoder(WireShape shape) => switch (shape) {
+  WireEnumShape() || WireRecordShape() => true,
+  WireCollectionShape(:final value) => wireShapeNeedsGeneratedEncoder(value),
+  WireValueShape() => false,
+};
+
 /// Whether [shape] contains a generated named-record contract.
 bool wireShapeContainsRecord(WireShape shape) => switch (shape) {
   WireRecordShape() => true,
   WireCollectionShape(:final value) => wireShapeContainsRecord(value),
-  WireValueShape() => false,
+  WireEnumShape() || WireValueShape() => false,
 };
 
 String _encodeTypedWireValue(
@@ -51,11 +58,12 @@ String _encodeNonNullTypedWireValue(
   String Function(String source) qualify,
 ) => switch (shape) {
   WireValueShape() => value,
+  WireEnumShape() => 'EnumName($value).name',
   WireRecordShape(:final fields) =>
     '<String, Object?>{${fields.map((field) => '${dartStringLiteral(field.name)}: '
         '${_encodeTypedWireValue(field.shape, '$value.${field.name}', qualify)}').join(', ')}}',
   WireCollectionShape(value: final valueShape)
-      when !wireShapeContainsRecord(valueShape) =>
+      when !wireShapeNeedsGeneratedEncoder(valueShape) =>
     value,
   WireCollectionShape(kind: WireCollectionKind.list, value: final valueShape) ||
   WireCollectionShape(kind: WireCollectionKind.set, value: final valueShape) ||
@@ -88,6 +96,8 @@ String _decodeNonNullWireValue(
 ) => switch (shape) {
   WireValueShape(source: 'dynamic') => value,
   WireValueShape() => '$value as ${qualify(_nonNullableSource(shape))}',
+  WireEnumShape(:final enumSource) =>
+    'EnumByName(${qualify(enumSource)}.values).byName($value as String)',
   WireCollectionShape(kind: WireCollectionKind.list, value: final valueShape) =>
     '($value as List).map((item) => '
         '${_decodeWireValue(valueShape, 'item', qualify)})'

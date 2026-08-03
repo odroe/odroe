@@ -344,7 +344,9 @@ void main() {
 
     expect(
       tutorial,
-      contains('Post, PostPage, CreatePost, and ListPostsInput records'),
+      contains(
+        'Post, PostPage, CreatePost, ListPostsInput records, and PostSort enum',
+      ),
     );
     expect(
       tutorial,
@@ -384,8 +386,9 @@ void main() {
     );
     expect(
       typedRpc,
-      contains(
-        'typedef ListPostsInput = ({int? cursor, List<int> ids, int limit, String sort});',
+      allOf(
+        contains('enum PostSort { newest, oldest }'),
+        contains('PostSort sort,'),
       ),
     );
     expect(

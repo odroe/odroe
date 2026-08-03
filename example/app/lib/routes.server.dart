@@ -132,7 +132,9 @@ final serverFunctions = <String, ServerFunctionBinding>{
             .map((item) => item as int)
             .toList(growable: false),
         limit: record["limit"] as int,
-        sort: record["sort"] as String,
+        sort: EnumByName(
+          posts_models_type.PostSort.values,
+        ).byName(record["sort"] as String),
       );
     })(value as Map<String, Object?>),
     encodeOutput: (value) =>

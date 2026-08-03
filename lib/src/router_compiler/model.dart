@@ -470,6 +470,21 @@ final class WireValueShape extends WireShape {
   const WireValueShape({required super.source, required super.nullable});
 }
 
+/// A project-local enum transported by its stable declaration name.
+final class WireEnumShape extends WireShape {
+  /// Creates an enum wire shape.
+  const WireEnumShape({
+    required super.source,
+    required super.nullable,
+    required this.enumSource,
+  });
+
+  /// Concrete enum declaration used to access `values.byName`.
+  ///
+  /// This may differ from [source] when a non-generic typedef aliases the enum.
+  final String enumSource;
+}
+
 /// Supported JSON collection shapes.
 enum WireCollectionKind {
   /// A Dart `List` encoded as a JSON array.

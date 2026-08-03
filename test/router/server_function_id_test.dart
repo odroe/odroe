@@ -1,7 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:odroe/src/router_compiler/compiler.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import '../support/dart_command_lock.dart';
+import '../support/process.dart';
 
 void main() {
   group('ServerFunction wire id', () {
@@ -632,6 +637,183 @@ ${_serverFunction(name: 'watchPosts', input: 'NoServerInput', output: 'Stream<mo
       );
     });
 
+    test('generates symmetric codecs for project-local enums', () {
+      project.writeSharedModels(_enumModels);
+      project.writeFunctions(
+        _enumFunctions,
+        imports: "import 'dart:async';\nimport '../models.dart' as models;",
+      );
+
+      final output = project.compile();
+
+      expect(output.diagnostics, isEmpty);
+      for (final source in <String>[output.source, output.serverSource]) {
+        expect(source, contains('EnumName('));
+        expect(
+          source,
+          contains('EnumByName(root_models_type.PostStatus.values).byName('),
+        );
+        expect(
+          RegExp(
+            'import "models.dart" as root_models_type;',
+          ).allMatches(source),
+          hasLength(1),
+        );
+        expect(source, isNot(contains('.name.name')));
+      }
+      expect(
+        output.source,
+        contains(
+          'ServerFunctionRef<root_models_type.StatusAlias, '
+          'root_models_type.PostStatus>',
+        ),
+      );
+      expect(output.source, contains('EnumName(value).name'));
+      expect(output.source, contains('EnumName(item).name'));
+      expect(
+        output.source,
+        contains('for (final entry in value.indexed.entries)'),
+      );
+      expect(output.source, contains('EnumName(typed).name)(entry.value)'));
+      expect(output.source, contains('.toList(growable: false)'));
+      expect(output.source, contains('.toSet()'));
+      expect(
+        output.source,
+        contains(
+          'ServerStreamFunctionRef<NoServerInput, '
+          'root_models_type.StatusAlias>',
+        ),
+      );
+      expect(output.serverSource, contains('EnumName(typed).name'));
+      expect(output.serverSource, contains('decodeInput: (value) =>'));
+      expect(output.serverSource, contains('encodeOutput: (value) =>'));
+    });
+
+    test(
+      'runs generated enum codecs and normalizes invalid wire values',
+      () async {
+        project.writeSharedModels(_enumModels);
+        project.writeFunctions(
+          _enumFunctions,
+          imports: "import 'dart:async';\nimport '../models.dart' as models;",
+          routerImport: false,
+        );
+        project.prepareExecutableFixture();
+        final output = project.compile();
+        expect(output.diagnostics, isEmpty);
+        FileRouteCompiler(projectRoot: project.root).write(compiled: output);
+        project.writeRunner(_enumRunner);
+
+        final results = await withDartCommandLock(() async {
+          final analyze = await runTestProcess(
+            dartExecutable,
+            const <String>['analyze', '--fatal-infos'],
+            workingDirectory: project.root.path,
+            timeout: const Duration(minutes: 1),
+          );
+          if (analyze.exitCode != 0) return (analyze: analyze, run: null);
+          final run = await runTestProcess(
+            dartExecutable,
+            const <String>['run', 'bin/enum_round_trip.dart'],
+            workingDirectory: project.root.path,
+            timeout: const Duration(minutes: 1),
+          );
+          return (analyze: analyze, run: run);
+        });
+
+        expect(
+          results.analyze.exitCode,
+          0,
+          reason: '${results.analyze.stdout}\n${results.analyze.stderr}',
+        );
+        expect(
+          results.run?.exitCode,
+          0,
+          reason: '${results.run?.stdout}\n${results.run?.stderr}',
+        );
+        expect(results.run?.stdout, contains('enum codec round trip passed'));
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    test('keeps dependency nominal values adapter-owned', () {
+      project.writeFunctions(
+        _serverFunction(
+          name: 'echoStatus',
+          input: 'external.Status',
+          output: 'external.Status',
+        ),
+        imports: "import 'package:external/models.dart' as external;",
+      );
+
+      final output = project.compile();
+
+      expect(output.diagnostics, isEmpty);
+      expect(
+        output.source,
+        contains(
+          'ServerFunctionRef<root_external_type.Status, '
+          'root_external_type.Status>',
+        ),
+      );
+      expect(output.source, isNot(contains('encodeInput:')));
+      expect(output.source, isNot(contains('decodeOutput:')));
+      expect(output.source, isNot(contains('EnumName(')));
+      expect(output.serverSource, isNot(contains('external/models.dart')));
+    });
+
+    test('diagnoses unsupported generic enum aliases as wire typedefs', () {
+      project.writeSharedModels('''
+enum PostStatus { draft }
+typedef StatusBox<T> = PostStatus;
+''');
+      project.writeFunctions(
+        _serverFunction(
+          name: 'echoStatus',
+          input: 'models.StatusBox<int>',
+          output: 'models.PostStatus',
+        ),
+        imports: "import '../models.dart' as models;",
+      );
+
+      expect(
+        project.compile().diagnostics.single.message,
+        allOf(
+          contains('generic wire typedef models.StatusBox'),
+          isNot(contains('record typedef')),
+        ),
+      );
+    });
+
+    test('rejects indirect and private project enum fields', () {
+      project.writeModelFile('status.dart', 'enum PostStatus { draft }');
+      project.writeSharedModels('''
+import 'status.dart';
+typedef Payload = ({PostStatus status});
+''');
+      project.writeFunctions(
+        _serverFunction(name: 'readPayload', output: 'models.Payload'),
+        imports: "import '../models.dart' as models;",
+      );
+
+      expect(
+        project.compile().diagnostics.single.message,
+        allOf(
+          contains('imported type PostStatus'),
+          contains('same source file'),
+        ),
+      );
+
+      project.writeSharedModels('''
+enum _PrivateStatus { draft }
+typedef Payload = ({_PrivateStatus status});
+''');
+      expect(
+        project.compile().diagnostics.single.message,
+        allOf(contains('private type _PrivateStatus'), contains('models.dart')),
+      );
+    });
+
     test('keeps codec helper names injective', () {
       project.writeSharedModels('typedef Post = ({int id});');
       project.writeFunctions('''
@@ -1218,7 +1400,7 @@ typedef PrivateField = ({String _token});
       );
       expect(
         compile('models.Box<int>').diagnostics.single.message,
-        contains('generic record typedef models.Box'),
+        contains('generic wire typedef models.Box'),
       );
       expect(
         compile('models.RecursiveA').diagnostics.single.message,
@@ -1270,6 +1452,198 @@ final $name = ServerFunction<$input, $output>(
 );
 ''';
 
+const _enumModels = '''
+enum PostStatus {
+  draft('shadow-draft'),
+  published('shadow-published');
+
+  const PostStatus(this.name);
+  final String name;
+}
+
+typedef PublicStatus = PostStatus;
+typedef StatusAlias = PublicStatus;
+typedef StatusPayload = ({
+  PostStatus direct,
+  StatusAlias alias,
+  PostStatus? optional,
+  List<StatusAlias?> history,
+  Set<PostStatus> unique,
+  Iterable<PostStatus> sequence,
+  Map<String, PostStatus?> indexed,
+});
+''';
+
+const _enumFunctions = '''
+var echoInvocations = 0;
+
+final echoStatus = ServerFunction<models.StatusAlias, models.PostStatus>(
+  id: 'status.echo',
+  handler: (context) {
+    echoInvocations++;
+    return context.data;
+  },
+);
+
+final echoPayload =
+    ServerFunction<models.StatusPayload, models.StatusPayload>(
+      id: 'status.payload',
+      handler: (context) => context.data,
+    );
+
+final watchStatus =
+    ServerFunction<NoServerInput, Stream<models.StatusAlias>>(
+      id: 'status.watch',
+      handler: (_) => Stream<models.StatusAlias>.fromIterable(
+        const <models.StatusAlias>[
+          models.PostStatus.draft,
+          models.PostStatus.published,
+        ],
+      ),
+    );
+''';
+
+const _enumRunner = r'''
+import 'package:enum_fixture/models.dart';
+import 'package:enum_fixture/routes.dart' as client_routes;
+import 'package:enum_fixture/routes.server.dart' as server_routes;
+import 'package:enum_fixture/routes/server.dart' as implementation;
+import 'package:odroe/rpc.dart';
+import 'package:odroe/server.dart' show Server;
+
+Future<void> main() async {
+  _check(PostStatus.draft.name == 'shadow-draft', 'enhanced enum precondition');
+  final server = server_routes.createServer();
+  final client = RpcClient(
+    baseUri: Uri.parse('https://enum.test'),
+    transport: _ServerTransport(server),
+  );
+  try {
+    final direct = await client_routes.routes.echoStatus(
+      client,
+      PostStatus.draft,
+    );
+    _check(direct == PostStatus.draft, 'direct enum round trip');
+
+    final payload = (
+      direct: PostStatus.published,
+      alias: PostStatus.draft,
+      optional: null,
+      history: <StatusAlias?>[PostStatus.draft, null, PostStatus.published],
+      unique: <PostStatus>{PostStatus.published, PostStatus.draft},
+      sequence: <PostStatus>[PostStatus.draft, PostStatus.published],
+      indexed: <String, PostStatus?>{
+        'first': PostStatus.draft,
+        'none': null,
+      },
+    );
+    final echoed = await client_routes.routes.echoPayload(client, payload);
+    _check(echoed.direct == PostStatus.published, 'record direct enum');
+    _check(echoed.alias == PostStatus.draft, 'record alias enum');
+    _check(echoed.optional == null, 'record nullable enum');
+    _check(
+      _same(echoed.history, payload.history),
+      'record nullable enum list',
+    );
+    _check(echoed.unique.containsAll(payload.unique), 'record enum set');
+    _check(
+      _same(echoed.sequence.toList(), payload.sequence.toList()),
+      'record enum iterable',
+    );
+    _check(echoed.indexed['first'] == PostStatus.draft, 'record enum map');
+    _check(echoed.indexed['none'] == null, 'record nullable enum map');
+
+    final stream = await client_routes.routes.watchStatus(
+      client,
+      const NoServerInput(),
+    );
+    _check(
+      _same(await stream.toList(), const <PostStatus>[
+        PostStatus.draft,
+        PostStatus.published,
+      ]),
+      'enum stream items',
+    );
+
+    await _expectInvalidInput(client, 'retired');
+    await _expectInvalidInput(client, 1);
+    await _expectInvalidInput(client, null);
+
+    final invalidOutputClient = RpcClient(
+      baseUri: Uri.parse('https://enum.test'),
+      transport: const _InvalidOutputTransport(),
+    );
+    Object? outputFailure;
+    try {
+      await client_routes.routes.echoStatus(
+        invalidOutputClient,
+        PostStatus.draft,
+      );
+    } on Object catch (error) {
+      outputFailure = error;
+    }
+    _check(outputFailure is RpcProtocolException, 'unknown enum output');
+  } finally {
+    await server.close();
+  }
+  print('enum codec round trip passed');
+}
+
+Future<void> _expectInvalidInput(RpcClient client, Object? value) async {
+  const reference = ServerFunctionRef<Object?, Object?>(id: 'status.echo');
+  final before = implementation.echoInvocations;
+  Object? failure;
+  try {
+    await reference(client, value);
+  } on Object catch (error) {
+    failure = error;
+  }
+  _check(failure is RemoteServerException, 'invalid enum input type');
+  final remote = failure as RemoteServerException;
+  _check(remote.status == 400, 'invalid enum input status');
+  _check(
+    remote.message == 'Invalid server function payload.',
+    'invalid enum input message',
+  );
+  _check(implementation.echoInvocations == before, 'handler did not run');
+}
+
+bool _same<T>(Iterable<T> left, Iterable<T> right) {
+  final leftItems = left.toList(growable: false);
+  final rightItems = right.toList(growable: false);
+  if (leftItems.length != rightItems.length) return false;
+  for (var index = 0; index < leftItems.length; index++) {
+    if (leftItems[index] != rightItems[index]) return false;
+  }
+  return true;
+}
+
+void _check(bool condition, String message) {
+  if (!condition) throw StateError(message);
+}
+
+final class _ServerTransport implements RpcTransport {
+  const _ServerTransport(this.server);
+
+  final Server server;
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) => server.handle(request);
+}
+
+final class _InvalidOutputTransport implements RpcTransport {
+  const _InvalidOutputTransport();
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async =>
+      ServerResponse.json(const <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': 'retired',
+      });
+}
+''';
+
 final class _RouteProject {
   _RouteProject._(this.root, this.serverFile);
 
@@ -1294,9 +1668,10 @@ final route = AppRoute<NoParams, NoSearch, NoData>();
     String functions, {
     String imports = '',
     String serverImport = "import 'package:odroe/server.dart';",
+    bool routerImport = true,
   }) {
     serverFile.writeAsStringSync('''
-import 'package:odroe/router.dart';
+${routerImport ? "import 'package:odroe/router.dart';" : ''}
 $serverImport
 $imports
 
@@ -1328,6 +1703,47 @@ final route = definition.route.page();
 
   void writeModelFile(String name, String source) =>
       File('${root.path}/lib/$name').writeAsStringSync(source);
+
+  void prepareExecutableFixture() {
+    const packageName = 'enum_fixture';
+    final checkout = Directory.current.absolute;
+    File(p.join(root.path, 'pubspec.yaml')).writeAsStringSync('''
+name: $packageName
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dependencies:
+  odroe:
+    path: ${jsonEncode(checkout.path)}
+''');
+    final packageConfig =
+        jsonDecode(
+              File(
+                p.join(checkout.path, '.dart_tool', 'package_config.json'),
+              ).readAsStringSync(),
+            )
+            as Map<String, Object?>;
+    final packages = (packageConfig['packages']! as List<Object?>)
+        .cast<Map<String, Object?>>();
+    final odroe = packages.singleWhere((package) => package['name'] == 'odroe');
+    odroe['rootUri'] = checkout.uri.toString();
+    packages.removeWhere((package) => package['name'] == packageName);
+    packages.add(<String, Object?>{
+      'name': packageName,
+      'rootUri': root.uri.toString(),
+      'packageUri': 'lib/',
+      'languageVersion': '3.10',
+    });
+    final dartTool = Directory(p.join(root.path, '.dart_tool'))..createSync();
+    File(
+      p.join(dartTool.path, 'package_config.json'),
+    ).writeAsStringSync(jsonEncode(packageConfig));
+  }
+
+  void writeRunner(String source) {
+    final bin = Directory(p.join(root.path, 'bin'))..createSync();
+    File(p.join(bin.path, 'enum_round_trip.dart')).writeAsStringSync(source);
+  }
 
   void writeChildFunctions(String functions) {
     final routes = Directory('${root.path}/lib/routes/child')

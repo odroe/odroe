@@ -88,8 +88,8 @@ footnotes.
 - [First product](/docs/getting-started): create and run the complete starter.
 - [Full-stack vertical slice](/docs/tutorials/full-stack): trace one feature
   through every generated and runtime boundary.
-- [Typed RPC records](/docs/guides/typed-rpc-records): share domain records
-  without annotations or handwritten JSON adapters.
+- [Typed RPC records and enums](/docs/guides/typed-rpc-records): share domain
+  values without annotations or handwritten JSON adapters.
 - [Concepts](/docs/concepts/application): understand ownership before extending
   the framework.
 - [Support and limits](/docs/reference/support): distinguish verified,

@@ -13,12 +13,19 @@ final QueryKey<Object?> _postListsKey = QueryKey('posts.list');
 final route = definition.route.page(
   build: (context) => _PostsPage(
     rpc: context.read(rpcClientKey),
-    sort: context.search.sort,
+    sort: _parsePostSort(context.search.sort),
     openPost: (postId) => context.router.go(
       generated.routes.posts.postId.to(params: (postId: postId)),
     ),
   ),
 );
+
+PostSort _parsePostSort(String value) {
+  for (final sort in PostSort.values) {
+    if (EnumName(sort).name == value) return sort;
+  }
+  return PostSort.newest;
+}
 
 final class _PostsPage extends StatefulWidget {
   const _PostsPage({
@@ -28,7 +35,7 @@ final class _PostsPage extends StatefulWidget {
   });
 
   final RpcClient rpc;
-  final String sort;
+  final PostSort sort;
   final void Function(int postId) openPost;
 
   @override
@@ -71,7 +78,7 @@ final class _PostsPageState extends State<_PostsPage> {
 
   void _configureList() {
     _listKey = QueryKey<InfiniteData<PostPage, int?>>('posts.list', <Object?>[
-      widget.sort,
+      EnumName(widget.sort).name,
     ]);
     _listOptions = InfiniteQueryOptions<PostPage, int?>(
       key: _listKey,

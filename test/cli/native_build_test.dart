@@ -150,6 +150,70 @@ void main() {
       expect(json.vary, 'Accept');
 
       final origin = 'http://127.0.0.1:$port';
+      final rpcHeaders = <String, String>{
+        'origin': origin,
+        'x-odroe-server-function': 'true',
+      };
+      final listFunction = Uri.encodeComponent('posts.list');
+      final list = await _get(
+        client,
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{
+                'cursor': null,
+                'ids': <int>[42],
+                'limit': 20,
+                'sort': 'newest',
+              },
+            }),
+          },
+        ),
+        accept: 'application/json',
+        headers: rpcHeaders,
+        logs: logs,
+      );
+      expect(list.status, HttpStatus.ok, reason: '${list.body}\n$logs');
+      expect(jsonDecode(list.body), <String, Object?>{
+        'version': 1,
+        'type': 'data',
+        'data': <String, Object?>{
+          'items': <Object?>[
+            <String, Object?>{'id': 42, 'title': 'Odroe post 42'},
+          ],
+          'nextCursor': null,
+        },
+      });
+
+      final invalidSort = await _get(
+        client,
+        Uri.parse('$origin/__odroe/functions/$listFunction').replace(
+          queryParameters: <String, String>{
+            'payload': jsonEncode(<String, Object?>{
+              'data': <String, Object?>{
+                'cursor': null,
+                'ids': const <int>[],
+                'limit': 20,
+                'sort': 'popular',
+              },
+            }),
+          },
+        ),
+        accept: 'application/json',
+        headers: rpcHeaders,
+        logs: logs,
+      );
+      expect(
+        invalidSort.status,
+        HttpStatus.badRequest,
+        reason: '${invalidSort.body}\n$logs',
+      );
+      expect(jsonDecode(invalidSort.body), containsPair('type', 'error'));
+      expect(
+        jsonDecode(invalidSort.body),
+        containsPair('message', 'Invalid server function payload.'),
+      );
+
       final function = Uri.encodeComponent('posts.read');
       final post = await _get(
         client,
@@ -158,10 +222,7 @@ void main() {
           '?payload=%7B%22data%22%3A42%7D',
         ),
         accept: 'application/json',
-        headers: <String, String>{
-          'origin': origin,
-          'x-odroe-server-function': 'true',
-        },
+        headers: rpcHeaders,
         logs: logs,
       );
       expect(post.status, HttpStatus.ok, reason: '${post.body}\n$logs');
@@ -184,10 +245,7 @@ void main() {
           '?payload=%7B%22data%22%3A404%7D',
         ),
         accept: 'application/json',
-        headers: <String, String>{
-          'origin': origin,
-          'x-odroe-server-function': 'true',
-        },
+        headers: rpcHeaders,
         logs: logs,
       );
       expect(

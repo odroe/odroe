@@ -4,4 +4,11 @@ typedef CreatePost = ({String title});
 
 typedef PostPage = ({List<Post> items, int? nextCursor});
 
-typedef ListPostsInput = ({int? cursor, List<int> ids, int limit, String sort});
+enum PostSort { newest, oldest }
+
+typedef ListPostsInput = ({
+  int? cursor,
+  List<int> ids,
+  int limit,
+  PostSort sort,
+});

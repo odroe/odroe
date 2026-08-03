@@ -681,6 +681,8 @@ Iterable<String> _nestedDecoderTypeSources(WireShape shape) sync* {
   switch (shape) {
     case WireValueShape(:final source) when source != 'dynamic':
       yield source;
+    case WireEnumShape(:final enumSource):
+      yield enumSource;
     case WireCollectionShape(kind: WireCollectionKind.map, value: final value):
       yield value.source;
       yield* _nestedDecoderTypeSources(value);
@@ -698,7 +700,7 @@ Iterable<String> _encoderTypeSources(
   WireShape shape, {
   bool cast = false,
 }) sync* {
-  if (!_containsWireRecord(shape)) return;
+  if (!wireShapeNeedsGeneratedEncoder(shape)) return;
   if (cast) yield shape.source;
   yield* _nestedEncoderTypeSources(shape);
 }
@@ -710,17 +712,12 @@ Iterable<String> _nestedEncoderTypeSources(WireShape shape) sync* {
       for (final field in fields) {
         yield* _nestedEncoderTypeSources(field.shape);
       }
-    case WireCollectionShape(:final value) when _containsWireRecord(value):
+    case WireCollectionShape(:final value)
+        when wireShapeNeedsGeneratedEncoder(value):
       yield* _nestedEncoderTypeSources(value);
-    case WireCollectionShape() || WireValueShape():
+    case WireEnumShape() || WireCollectionShape() || WireValueShape():
   }
 }
-
-bool _containsWireRecord(WireShape shape) => switch (shape) {
-  WireRecordShape() => true,
-  WireCollectionShape(:final value) => _containsWireRecord(value),
-  WireValueShape() => false,
-};
 
 bool _usesImportPrefix(String source, String prefix) =>
     _importPrefixPattern(prefix).hasMatch(source);

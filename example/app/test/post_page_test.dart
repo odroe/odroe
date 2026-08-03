@@ -156,7 +156,7 @@ CREATE TABLE posts (
           cursor: null,
           ids: const <int>[],
           limit: 2,
-          sort: 'newest',
+          sort: PostSort.newest,
         )),
       ))!;
       expect(initial.items.map((post) => post.id), <int>[45, 44]);
@@ -167,7 +167,7 @@ CREATE TABLE posts (
           cursor: initial.nextCursor,
           ids: const <int>[],
           limit: 2,
-          sort: 'newest',
+          sort: PostSort.newest,
         )),
       ))!;
       expect(next.items.map((post) => post.id), <int>[43, 42]);
@@ -178,7 +178,7 @@ CREATE TABLE posts (
           cursor: 42,
           ids: const <int>[],
           limit: 2,
-          sort: 'oldest',
+          sort: PostSort.oldest,
         )),
       ))!;
       expect(oldest.items.map((post) => post.id), <int>[43, 44]);
@@ -189,7 +189,7 @@ CREATE TABLE posts (
           cursor: oldest.nextCursor,
           ids: const <int>[],
           limit: 2,
-          sort: 'oldest',
+          sort: PostSort.oldest,
         )),
       ))!;
       expect(oldestTail.items.map((post) => post.id), <int>[45]);
@@ -200,7 +200,7 @@ CREATE TABLE posts (
           cursor: null,
           ids: <int>[42, 404],
           limit: 2,
-          sort: 'newest',
+          sort: PostSort.newest,
         )),
       ))!;
       expect(selected.items, <Post>[(id: 42, title: 'Odroe post 42')]);
@@ -212,7 +212,7 @@ CREATE TABLE posts (
             cursor: null,
             ids: List<int>.generate(101, (index) => index),
             limit: 20,
-            sort: 'newest',
+            sort: PostSort.newest,
           ));
           return null;
         } on Object catch (error) {
@@ -237,7 +237,7 @@ CREATE TABLE posts (
               cursor: null,
               ids: const <int>[],
               limit: invalidLimit,
-              sort: 'newest',
+              sort: PostSort.newest,
             ));
             return null;
           } on Object catch (error) {
@@ -256,14 +256,18 @@ CREATE TABLE posts (
         );
       }
 
+      const invalidSort = ServerFunctionRef<Map<String, Object?>, Object?>(
+        id: 'posts.list',
+        method: HttpMethod.get,
+      );
       final sortError = await tester.runAsync<Object?>(() async {
         try {
-          await routes.posts.listPosts(client, (
-            cursor: null,
-            ids: const <int>[],
-            limit: 20,
-            sort: 'popular',
-          ));
+          await invalidSort(client, <String, Object?>{
+            'cursor': null,
+            'ids': const <int>[],
+            'limit': 20,
+            'sort': 'popular',
+          });
           return null;
         } on Object catch (error) {
           return error;
@@ -273,7 +277,11 @@ CREATE TABLE posts (
         sortError,
         isA<RemoteServerException>()
             .having((error) => error.status, 'status', 400)
-            .having((error) => error.message, 'message', 'Invalid post sort.'),
+            .having(
+              (error) => error.message,
+              'message',
+              'Invalid server function payload.',
+            ),
       );
 
       final created = (await tester.runAsync(
@@ -292,7 +300,7 @@ CREATE TABLE posts (
           cursor: null,
           ids: const <int>[],
           limit: 20,
-          sort: 'newest',
+          sort: PostSort.newest,
         )),
       ))!;
       expect(ordered.items.first, created);
@@ -464,7 +472,7 @@ CREATE TABLE posts (
     }
   });
 
-  testWidgets('posts page keeps requests stable across ancestor rebuilds', (
+  testWidgets('posts page normalizes unknown URL sort across rebuilds', (
     tester,
   ) async {
     final transport = _ControlledPostsTransport();
@@ -489,7 +497,7 @@ CREATE TABLE posts (
             ),
             RouterModule(
               routes: routeTree,
-              initialLocation: Uri.parse('/posts'),
+              initialLocation: Uri.parse('/posts?sort=popular'),
             ),
           ],
           builder: (app) => _RebuildHost(routerConfig: app.read(routerKey)),
@@ -498,6 +506,7 @@ CREATE TABLE posts (
       await tester.pump();
       await _pumpUntil(tester, find.text('Existing post'));
       expect(transport.listRequests, 1);
+      expect(transport.sorts, <String>['newest']);
 
       tester.state<_RebuildHostState>(find.byType(_RebuildHost)).rebuild();
       await tester.pump();
@@ -527,6 +536,7 @@ CREATE TABLE posts (
       }
       expect(transport.createRequests, 1);
       expect(transport.listRequests, 2);
+      expect(transport.sorts, <String>['newest', 'newest']);
       expect(find.text('Stable created'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -887,6 +897,7 @@ final class _PagedPostsTransport implements RpcTransport {
 
 final class _ControlledPostsTransport implements RpcTransport {
   final _create = Completer<void>();
+  final List<String> sorts = <String>[];
   var listRequests = 0;
   var createRequests = 0;
   var _created = false;
@@ -897,6 +908,11 @@ final class _ControlledPostsTransport implements RpcTransport {
   Future<ServerResponse> send(ServerRequest request) async {
     if (request.uri.path.endsWith('/posts.list')) {
       listRequests++;
+      final payload =
+          jsonDecode(request.uri.queryParameters['payload']!)
+              as Map<String, Object?>;
+      final input = payload['data']! as Map<String, Object?>;
+      sorts.add(input['sort']! as String);
       return ServerResponse.json(<String, Object?>{
         'version': 1,
         'type': 'data',

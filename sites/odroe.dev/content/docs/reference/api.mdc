@@ -37,7 +37,7 @@ that owns their behavior.
 custom client is required.
 
 `ValueEncoder<T>` and `ValueDecoder<T>` are the small runtime hooks used by
-generated record codecs. Application code normally consumes the typed
+generated record and enum codecs. Application code normally consumes the typed
 `ServerFunctionRef` and does not construct these callbacks itself. A bad typed
 output frame is reported as `RpcProtocolException`.
 

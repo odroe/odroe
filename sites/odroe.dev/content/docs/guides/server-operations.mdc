@@ -53,12 +53,13 @@ only a non-empty string literal and rejects duplicates across the complete route
 tree. Omitting it preserves the path-and-variable fallback for gradual
 migration, but renaming either source location changes that fallback.
 
-Project-local named-record inputs and outputs receive generated symmetric
-codecs only when the typedef is declared directly in the same source file that
-the route server imports with a prefix; the compiler does not discover typedefs
-through `part` or re-export. Nominal classes, even in that source file, continue
-to use an application-owned `SerializationAdapter`. See
-[Typed RPC records](/docs/guides/typed-rpc-records).
+Project-local named-record and enum inputs and outputs receive generated
+symmetric codecs only when the declaration lives directly in the same source
+file that the route server imports with a prefix; the compiler does not discover
+types through `part` or re-export. Enums use their case-name string. Nominal
+classes and dependency enums continue to use an application-owned
+`SerializationAdapter`. See
+[Typed RPC records and enums](/docs/guides/typed-rpc-records).
 
 ## Client origin
 

@@ -70,10 +70,11 @@ Use equivalent adapter sets on both runtime boundaries; no mutable global
 serializer is required. `MoneyAdapter` below represents an application-owned
 `SerializationAdapter` implementation.
 
-Project-local named-record typedefs are different: the route compiler generates
-their field codecs, so `Post` and `CreatePost` do not need adapters. Keep an
-adapter for nominal classes and values with application-owned construction
-rules. See [Typed RPC records](/docs/guides/typed-rpc-records).
+Project-local named-record typedefs and directly declared enums are different:
+the route compiler generates their codecs, so `Post`, `CreatePost`, and
+`PostSort` do not need adapters. Keep an adapter for nominal classes, dependency
+enums, and values with application-owned construction rules. See
+[Typed RPC records and enums](/docs/guides/typed-rpc-records).
 
 ```dart
 Serializer createSerializer() => Serializer(
@@ -134,7 +135,12 @@ final options = InfiniteQueryOptions<PostPage, int?>(
   getNextPageParam: (lastPage, _, _, _) => lastPage.nextCursor,
   query: (page) => routes.listPosts(
     rpc,
-    (cursor: page.pageParam, ids: const <int>[], limit: 20, sort: 'newest'),
+    (
+      cursor: page.pageParam,
+      ids: const <int>[],
+      limit: 20,
+      sort: PostSort.newest,
+    ),
     cancelled: page.query.cancelToken.whenCancelled.then<void>((_) {}),
   ),
 );

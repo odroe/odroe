@@ -58,7 +58,7 @@ InfiniteQueryOptions<PostPage, int?> _createListOptions() {
   return InfiniteQueryOptions<PostPage, int?>(
     key: QueryKey<InfiniteData<PostPage, int?>>(
       'posts.list',
-      <Object?>[sort],
+      <Object?>[EnumName(sort).name],
     ),
     initialPageParam: null,
     getNextPageParam: (lastPage, _, _, _) => lastPage.nextCursor,
@@ -75,6 +75,11 @@ InfiniteQueryOptions<PostPage, int?> _createListOptions() {
   );
 }
 ```
+
+The widget owns `PostSort`; parse and normalize the URL/search string before
+constructing it. The RPC and server handler then receive an exhaustive enum,
+while `EnumName(sort).name` provides the source declaration name for the
+JSON-like Query key even if an enhanced enum defines its own `name` field.
 
 The database handler orders by unique ID, applies the strict cursor predicate,
 reads `limit + 1`, and returns at most `limit` items plus `nextCursor`. Infinite

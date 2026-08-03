@@ -228,7 +228,7 @@ final class AppPostsRoutes {
         "cursor": value.cursor,
         "ids": value.ids,
         "limit": value.limit,
-        "sort": value.sort,
+        "sort": EnumName(value.sort).name,
       };
 
   static posts_models_type.PostPage _decodelistPosts(Object? value) =>
