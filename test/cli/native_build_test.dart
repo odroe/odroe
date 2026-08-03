@@ -12,7 +12,7 @@ import '../support/process.dart';
 
 void main() {
   test(
-    'configured native artifact serves SQLite RPC outside the source tree',
+    'native bundle self-locates from an unrelated launch directory',
     () async {
       final project = Directory('example/app').absolute;
       final artifact = Directory(
@@ -89,6 +89,11 @@ void main() {
       final deployedBundle = Directory(p.join(deployment.path, 'server'));
       artifact.renameSync(deployedBundle.path);
       expect(artifact.existsSync(), isFalse);
+      final launchDirectory = Directory(p.join(deployment.path, 'launch'))
+        ..createSync();
+      final deployedOwner = File(
+        p.join(deployedBundle.path, '.odroe-native-bundle'),
+      );
       final deployedArtifact = File(
         p.join(deployedBundle.path, 'bin', _testNativeExecutableName),
       );
@@ -110,7 +115,7 @@ void main() {
       final port = await _unusedPort();
       final firstServer = await _startNativeServer(
         deployedArtifact,
-        deployedBundle,
+        launchDirectory,
         port: port,
       );
       addTearDown(firstServer.close);
@@ -227,7 +232,7 @@ void main() {
       final secondPort = await _unusedPort();
       final secondServer = await _startNativeServer(
         deployedArtifact,
-        deployedBundle,
+        launchDirectory,
         port: secondPort,
       );
       addTearDown(secondServer.close);
@@ -270,7 +275,7 @@ void main() {
       final overridePort = await _unusedPort();
       final overrideServer = await _startNativeServer(
         deployedArtifact,
-        deployedBundle,
+        launchDirectory,
         port: overridePort,
         databasePath: p.join(deployedBundle.path, '.odroe', 'override.sqlite3'),
         migrationsPath: overrideMigrations.path,
@@ -303,6 +308,65 @@ void main() {
         'type': 'data',
         'data': <String, Object?>{'id': 42, 'title': 'Odroe post 42'},
       });
+
+      overrideClient.close(force: true);
+      await overrideServer.close();
+      Future<ProcessResult> runRejectedBundle() async => runTestProcess(
+        deployedArtifact.path,
+        const <String>[],
+        workingDirectory: launchDirectory.path,
+        environment: _nativeServerEnvironment(port: await _unusedPort()),
+        includeParentEnvironment: false,
+        timeout: const Duration(seconds: 10),
+      );
+
+      deployedOwner.writeAsStringSync('not-an-odroe-bundle\n', flush: true);
+      var invalidMarker = await runRejectedBundle();
+      expect(invalidMarker.exitCode, isNot(0));
+      expect(
+        '${invalidMarker.stdout}\n${invalidMarker.stderr}',
+        contains('Invalid Odroe Native bundle marker.'),
+      );
+      deployedOwner.deleteSync();
+      invalidMarker = await runRejectedBundle();
+      expect(invalidMarker.exitCode, isNot(0));
+      expect(
+        '${invalidMarker.stdout}\n${invalidMarker.stderr}',
+        contains('Odroe Native bundle marker is missing or invalid.'),
+      );
+      Directory(deployedOwner.path).createSync();
+      invalidMarker = await runRejectedBundle();
+      expect(invalidMarker.exitCode, isNot(0));
+      expect(
+        '${invalidMarker.stdout}\n${invalidMarker.stderr}',
+        contains('Odroe Native bundle marker is missing or invalid.'),
+      );
+      Directory(deployedOwner.path).deleteSync();
+      if (!Platform.isWindows) {
+        final markerTarget = File(p.join(deployedBundle.path, 'marker-target'))
+          ..writeAsStringSync('odroe-native-bundle-v1\n');
+        Link(deployedOwner.path).createSync(markerTarget.path);
+        invalidMarker = await runRejectedBundle();
+        expect(invalidMarker.exitCode, isNot(0));
+        expect(
+          '${invalidMarker.stdout}\n${invalidMarker.stderr}',
+          contains('Odroe Native bundle marker is missing or invalid.'),
+        );
+        Link(deployedOwner.path).deleteSync();
+        markerTarget.deleteSync();
+      }
+      expect(
+        Directory(p.join(launchDirectory.path, '.odroe')).existsSync(),
+        isFalse,
+      );
+      expect(
+        Directory(p.join(launchDirectory.path, 'build')).existsSync(),
+        isFalse,
+      );
+      expect(
+        Directory(p.join(launchDirectory.path, 'migrations')).existsSync(),
+        isFalse,
+      );
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
@@ -721,15 +785,36 @@ Future<int> _unusedPort() async {
 
 Future<_NativeServerProcess> _startNativeServer(
   File artifact,
-  Directory workingDirectory, {
+  Directory launchDirectory, {
   required int port,
   String? databasePath,
   String? migrationsPath,
 }) async {
+  final process = await Process.start(
+    artifact.path,
+    const <String>[],
+    workingDirectory: launchDirectory.path,
+    environment: _nativeServerEnvironment(
+      port: port,
+      databasePath: databasePath,
+      migrationsPath: migrationsPath,
+    ),
+    includeParentEnvironment: false,
+  );
+  return _NativeServerProcess(process);
+}
+
+Map<String, String> _nativeServerEnvironment({
+  required int port,
+  String? databasePath,
+  String? migrationsPath,
+}) {
   final environment = <String, String>{
     for (final entry in Platform.environment.entries)
       if (entry.key != 'ODROE_SQLITE_PATH' &&
-          entry.key != 'ODROE_MIGRATIONS_PATH')
+          entry.key != 'ODROE_MIGRATIONS_PATH' &&
+          entry.key != 'ODROE_WEB_ROOT' &&
+          entry.key != 'ODROE_FLUTTER_ORIGIN_FILE')
         entry.key: entry.value,
     'ODROE_HOST': '127.0.0.1',
     'ODROE_PORT': '$port',
@@ -737,14 +822,7 @@ Future<_NativeServerProcess> _startNativeServer(
     'ODROE_SQLITE_PATH': ?databasePath,
     'ODROE_MIGRATIONS_PATH': ?migrationsPath,
   };
-  final process = await Process.start(
-    artifact.path,
-    const <String>[],
-    workingDirectory: workingDirectory.path,
-    environment: environment,
-    includeParentEnvironment: false,
-  );
-  return _NativeServerProcess(process);
+  return environment;
 }
 
 final class _NativeServerProcess {

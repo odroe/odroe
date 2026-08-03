@@ -199,17 +199,24 @@ executable. It defaults to `build/odroe/server`:
 
 ```text
 build/odroe/server/
+├── .odroe-native-bundle
 ├── bin/
 │   └── server
 ├── lib/
 └── migrations/  # when SQLite history is selected
 ```
 
-Run it from that root with `./bin/server`, and deploy the whole directory so
-native libraries keep their relative location. Windows emits `bin/server.exe`
-instead and should run that file from the same root. Cloudflare keeps a file
-contract: it writes `build/odroe/cloudflare/server.js` and `worker.mjs`. Static
-Document and Flutter output lives under `build/web` unless changed explicitly.
+Invoke `bin/server` from any working directory, and deploy the whole directory
+so native libraries keep their relative location. The generated bootstrap
+validates the ownership marker and selects the bundle root before application
+creation. A compiled entry rejects a missing, non-regular, or changed marker;
+non-product source and development runs keep their project working directory
+without requiring one. CLI-managed prerender validates the compiled bundle,
+then retains the project directory for build-time source resources. Windows
+emits `bin/server.exe` with the same contract.
+Cloudflare keeps a file contract: it writes
+`build/odroe/cloudflare/server.js` and `worker.mjs`. Static Document and Flutter
+output lives under `build/web` unless changed explicitly.
 
 `odroe.yaml` makes the application's persistent selection explicit;
 `--sqlite-migrations <path>` overrides it for one build. Either selection makes

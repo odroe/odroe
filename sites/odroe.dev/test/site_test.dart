@@ -306,10 +306,11 @@ void main() {
     expect(tutorial, contains('in-process full-stack initializer'));
     expect(cliReference, contains('two child processes and initializer'));
     expect(cliReference, contains('committed only after publication'));
-    expect(
-      <String>[gettingStarted, tutorial, cliReference],
-      everyElement(isNot(contains("staged package's own"))),
-    );
+    expect(<String>[
+      gettingStarted,
+      tutorial,
+      cliReference,
+    ], everyElement(isNot(contains("staged package's own"))));
     expect(gettingStarted, isNot(contains('cd ../odroe/example/app')));
     expect(gettingStarted, isNot(contains('/posts/42')));
 
@@ -1106,6 +1107,12 @@ void main() {
       deployment,
       contains('ODROE_MIGRATIONS_PATH=/app/server/migrations'),
     );
+    expect(deployment, contains('entry may be invoked from any'));
+    expect(deployment, contains('caller working directory'));
+    expect(deployment, contains('before application creation'));
+    expect(deployment, contains('missing marker, directory, symbolic link'));
+    expect(deployment, contains('build-time source resources'));
+    expect(deployment, contains('without a supervisor `cwd` setting'));
     expect(deployment, contains('complete append-only history'));
   });
 

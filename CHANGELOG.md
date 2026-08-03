@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Make owned Native bundles resolve their runtime root from the compiled
+  executable before application creation. A validated bundle marker now makes
+  relative SQLite, migration, static, and application resource paths independent
+  of the caller's working directory, while source and development runs keep the
+  caller-selected project directory. CLI-managed prerender also keeps the
+  project directory for build-time source resources. Reject a missing,
+  non-regular, or damaged marker in compiled bundles before touching application
+  state.
 - Initialize `odroe create` starters in the current CLI process after dependency
   resolution and canonical checkout identity validation. Keep only Flutter
   scaffold creation and dependency resolution as child processes, avoiding a

@@ -78,7 +78,10 @@ adds `.odroe/` to `.gitignore`. Set `ODROE_SQLITE_PATH` to override it; use an
 absolute path on writable persistent storage in production. The native entry
 applies pending files before listening and preserves existing rows across
 restarts. `ODROE_MIGRATIONS_PATH` overrides the default `migrations/` path.
-Both relative paths resolve from the server process's working directory.
+In source and development runs, relative paths resolve from the project process
+directory. An owned Native bundle self-locates from its executable before
+application creation, so its defaults and relative overrides resolve from the
+bundle root regardless of the caller working directory.
 The starter's application-owned `odroe.yaml` contains
 `sqlite_migrations: migrations`. Native `odroe dev` watches that source and
 restarts after a SQL file changes; build and prerender validate the same source.
@@ -180,9 +183,11 @@ dart run odroe build --server-only --server-target cloudflare
 ```
 
 The Native command publishes the complete bundle root at
-`build/odroe/server`: run `./bin/server` (`bin/server.exe` on Windows) from that
-directory and keep its `lib/` directory beside `bin/`. With
-the configured migration selection, the same root also
+`build/odroe/server`: invoke `bin/server` (`bin/server.exe` on Windows) from any
+working directory and keep its `lib/` directory beside `bin/`. The owned bundle
+marker makes the executable select this root before application creation. A
+compiled entry rejects a missing, non-regular, or changed marker before opening
+application state. With the configured migration selection, the same root also
 contains `migrations/`. A custom Native `--server-artifact` selects this root,
 not the `bin/server` file.
 
@@ -192,9 +197,9 @@ not the `bin/server` file.
 Native prerender is isolated from runtime state. The CLI overrides
 `ODROE_SQLITE_PATH` for the prerender child with a temporary database and removes
 it after the child stops. `odroe.yaml` or `--sqlite-migrations` pins the source
-path. The
-generated starter therefore never reads or writes the local `.odroe/app.sqlite3`
-file during a build.
+path. The CLI also retains the project working directory for build-time source
+resources. The generated starter therefore never reads or writes the local
+`.odroe/app.sqlite3` file during a build.
 
 Next, follow the [full-stack tutorial](/docs/tutorials/full-stack) to change the
 model, query, function, and UI as one coherent feature. Use the

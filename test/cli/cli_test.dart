@@ -50,6 +50,25 @@ void main() {
     addTearDown(() async {
       if (state.existsSync()) await state.delete(recursive: true);
     });
+    final project = Directory('example/app').absolute;
+    final sourceState = Directory(
+      p.join(
+        project.path,
+        '.dart_tool',
+        'odroe',
+        'dev-cwd-$pid-${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    );
+    final databaseFile = File(p.join(sourceState.path, 'app.sqlite3'));
+    final relativeDatabasePath = p.relative(
+      databaseFile.path,
+      from: project.path,
+    );
+    addTearDown(() async {
+      if (sourceState.existsSync()) {
+        await sourceState.delete(recursive: true);
+      }
+    });
 
     final migrationsDirectory = Directory(p.join(state.path, 'migrations'))
       ..createSync();
@@ -132,7 +151,7 @@ void main() {
         environment: <String, String>{
           ...Platform.environment,
           'ODROE_FLUTTER_ORIGIN_FILE': '/stale/flutter-origin',
-          'ODROE_SQLITE_PATH': '${state.path}/app.sqlite3',
+          'ODROE_SQLITE_PATH': relativeDatabasePath,
           'ODROE_MIGRATIONS_PATH': migrationsDirectory.path,
         },
       );
@@ -141,19 +160,28 @@ void main() {
       rethrow;
     }
     final output = StringBuffer();
-    final stdoutDone = process.stdout
+    final stdoutSubscription = process.stdout
         .transform(utf8.decoder)
-        .listen(output.write)
-        .asFuture<void>();
-    final stderrDone = process.stderr
+        .listen(output.write);
+    final stderrSubscription = process.stderr
         .transform(utf8.decoder)
-        .listen(output.write)
-        .asFuture<void>();
+        .listen(output.write);
+    final stdoutDone = stdoutSubscription.asFuture<void>();
+    final stderrDone = stderrSubscription.asFuture<void>();
     addTearDown(() async {
       try {
-        process.kill(ProcessSignal.sigterm);
-        await process.exitCode.timeout(const Duration(seconds: 10));
-        await Future.wait<void>(<Future<void>>[stdoutDone, stderrDone]);
+        await terminateTestProcess(process);
+        try {
+          await Future.wait<void>(<Future<void>>[
+            stdoutDone,
+            stderrDone,
+          ]).timeout(const Duration(seconds: 5));
+        } on TimeoutException {
+          await Future.wait<void>(<Future<void>>[
+            stdoutSubscription.cancel(),
+            stderrSubscription.cancel(),
+          ]);
+        }
       } finally {
         await dartCommandLock.release();
       }
@@ -182,6 +210,7 @@ void main() {
       contains('"location":"/posts/42?preview=true"'),
       reason: '$lastError\n$output',
     );
+    expect(databaseFile.existsSync(), isTrue);
     final assetRequest = await client.getUrl(
       Uri.parse('http://127.0.0.1:$port/dev-asset.js'),
     );
@@ -194,6 +223,25 @@ void main() {
     final bootstrap = await File(
       'example/app/.dart_tool/odroe/server.dart',
     ).readAsString();
+    final enterBundle = bootstrap.indexOf('_enterNativeBundle(arguments);');
+    expect(enterBundle, isNonNegative);
+    expect(
+      enterBundle,
+      lessThan(
+        bootstrap.indexOf("final platformPort = Platform.environment['PORT'];"),
+      ),
+    );
+    expect(
+      bootstrap,
+      contains('final markerType = FileSystemEntity.typeSync('),
+    );
+    expect(bootstrap, contains('followLinks: false'));
+    expect(
+      bootstrap,
+      contains("const bool.fromEnvironment('dart.vm.product')"),
+    );
+    expect(bootstrap, contains("'--odroe-internal-prerender'"));
+    expect(bootstrap, contains("'odroe-native-bundle-v1\\n'"));
     expect(
       bootstrap,
       contains(
@@ -255,7 +303,7 @@ CREATE TABLE dev_watch_probe (id INTEGER PRIMARY KEY) STRICT;
     ) {
       SqliteDatabase? inspection;
       try {
-        inspection = SqliteDatabase.open('${state.path}/app.sqlite3');
+        inspection = SqliteDatabase.open(databaseFile.path);
         final count = await inspection.query(
           BoundSql.raw(
             'SELECT count(*) FROM main._odroe_migrations '

@@ -273,7 +273,8 @@ import 'dart:io';
 import 'package:odroe/server_io.dart';
 import 'package:$packageName/${customServer ? 'server.dart' : 'routes.server.dart'}' as app;
 
-Future<void> main() async {
+Future<void> main(List<String> arguments) async {
+  _enterNativeBundle(arguments);
   final platformPort = Platform.environment['PORT'];
   final host =
       Platform.environment['ODROE_HOST'] ??
@@ -348,6 +349,37 @@ Future<void> main() async {
   if (primaryError != null) {
     Error.throwWithStackTrace(primaryError, primaryStackTrace!);
   }
+}
+
+void _enterNativeBundle(List<String> arguments) {
+  if (!const bool.fromEnvironment('dart.vm.product')) {
+    return;
+  }
+  final bundleRoot = File(Platform.resolvedExecutable).parent.parent;
+  final marker = File.fromUri(
+    bundleRoot.uri.resolve('.odroe-native-bundle'),
+  );
+  final markerType = FileSystemEntity.typeSync(
+    marker.path,
+    followLinks: false,
+  );
+  if (markerType != FileSystemEntityType.file) {
+    throw FileSystemException(
+      'Odroe Native bundle marker is missing or invalid.',
+      marker.path,
+    );
+  }
+  if (marker.readAsStringSync() != 'odroe-native-bundle-v1\\n') {
+    throw FileSystemException(
+      'Invalid Odroe Native bundle marker.',
+      marker.path,
+    );
+  }
+  if (arguments.length == 1 &&
+      arguments.single == '--odroe-internal-prerender') {
+    return;
+  }
+  Directory.current = bundleRoot.path;
 }
 
 Future<void> _closeNativeApplication(

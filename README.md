@@ -977,7 +977,10 @@ dart run odroe build --server-target cloudflare web
 Native target 的 `--server-artifact` 指向完整 bundle root，而不是可执行文件。
 默认目录是 `build/odroe/server`；类 Unix 入口为 `bin/server`，Windows 为
 `bin/server.exe`。运行所需的 native libraries 保留在 `lib/`；选择 SQLite
-history 时还包含 `migrations/`。从 bundle 根运行入口，部署时不要单独复制该文件。
+history 时还包含 `migrations/`。可从任意工作目录直接执行该入口；bootstrap 会用
+ownership marker 自定位到 bundle 根并在创建应用前切换运行目录。部署时不要单独
+复制可执行文件。编译后的 AOT 入口要求 bundle 根存在内容完全匹配的普通 marker
+文件；marker 缺失、是目录或符号链接、或内容损坏时，都会在创建应用前终止。
 Cloudflare target 的该选项仍指向编译后的 `server.js`。
 
 将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
@@ -992,7 +995,8 @@ prerender 静态 route。纯 Document route 输出纯 HTML；
 `--no-server` 不生成可部署 server artifact，但仍运行生成的 Dart
 server 源码完成 prerender，适合只部署 `build/web` 的 assets-only SSG。
 CLI 会覆盖 native prerender 子进程的 `ODROE_SQLITE_PATH`，让它使用独立临时
-数据库，并在子进程结束后删除。`odroe.yaml` 或显式
+数据库，并在子进程结束后删除；该 CLI 内部运行仍保留项目目录，使构建期源码资源
+按项目解析。`odroe.yaml` 或显式
 `--sqlite-migrations` 同时固定本轮读取的 source，因此构建不读取或改写
 `.odroe/app.sqlite3`，也不受继承环境中的 history 路径影响。
 
@@ -1012,10 +1016,13 @@ OS/architecture 绑定。CLI 通过隐藏 ownership marker 管理整个 bundle r
 `migrations/`，失败时恢复上一份 bundle。
 旧版单文件产物不会被隐式升级；确认并保留旧 migration history 后，需显式移走或
 删除该构建产物再首次生成 bundle。
-请在目标平台或兼容 builder 中构建。生成的 bootstrap 默认从进程当前目录下的
-`build/web` 提供静态文件；`ODROE_WEB_ROOT` 可指定明确目录，空字符串会禁用
-静态根。从 bundle root 运行时，默认位置就是 `<bundle>/build/web`。部署时必须
-同时携带对应静态目录、设置显式路径，或禁用静态服务。
+请在目标平台或兼容 builder 中构建。有效 ownership marker 会让生成的 Native
+bootstrap 在创建应用前把运行目录设为 bundle 根，因此默认从
+`<bundle>/build/web` 提供静态文件，并让数据库、migration 与其他相对路径稳定地
+相对该根解析，无需依赖调用者 cwd。编译后的入口会 fail-closed：marker 缺失、不是
+普通文件或内容不匹配时不会创建应用。非 product 的源码与 dev 运行仍保留项目进程
+目录，不要求 bundle marker。`ODROE_WEB_ROOT` 可指定明确目录，空字符串会禁用
+静态根；部署时必须携带对应静态目录、设置显式路径，或禁用静态服务。
 Native `IoServer` 会为 `publicDirectory` 中的文件逐次验证真实路径，使用
 `no-cache` 配合 ETag/Last-Modified 避免重复传输，并对至少 1 KiB 的
 文本、JavaScript、JSON、SVG 与 Wasm 流式发送 gzip。文件名不会被猜测为

@@ -7,11 +7,15 @@ Future<ProcessResult> runTestProcess(
   List<String> arguments, {
   required Duration timeout,
   Map<String, String>? environment,
+  String? workingDirectory,
+  bool includeParentEnvironment = true,
 }) async {
   final process = await Process.start(
     executable,
     arguments,
     environment: environment,
+    workingDirectory: workingDirectory,
+    includeParentEnvironment: includeParentEnvironment,
   );
   final output = StringBuffer();
   final errors = StringBuffer();

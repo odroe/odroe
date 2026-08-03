@@ -366,8 +366,10 @@ requests borrow it, and `Server.close()` closes it. `ODROE_SQLITE_PATH` may
 override the file; production should use an absolute path on writable persistent
 storage. Before opening the listener, the entry loads `migrations/*.sql` and
 calls `SqliteDatabase.applyMigrations`. `ODROE_MIGRATIONS_PATH` may override
-that directory. Both default relative paths resolve from the server process's
-working directory.
+that directory. Source and development runs resolve relative paths from the
+project process directory. An owned Native bundle first selects its bundle root
+from the executable and marker, so its defaults and relative overrides do not
+depend on the caller working directory.
 During native prerender the CLI overrides `ODROE_SQLITE_PATH` with a temporary
 database. `odroe.yaml` or `--sqlite-migrations` pins the selected project
 source, and the CLI deletes the database afterward, keeping builds independent

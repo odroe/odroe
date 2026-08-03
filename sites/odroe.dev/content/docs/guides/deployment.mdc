@@ -65,6 +65,7 @@ The result is a native bundle rather than an isolated executable:
 
 ```text
 build/odroe/server/
+├── .odroe-native-bundle
 ├── bin/
 │   └── server
 ├── lib/
@@ -80,6 +81,18 @@ Migration files are copied byte-for-byte through a sibling staging directory;
 the complete `bin/`, `lib/`, and optional `migrations/` bundle replaces the
 previous root only after compilation and a final source recheck succeed. A
 hidden ownership marker keeps the CLI from overwriting an unrelated directory.
+The generated bootstrap also uses that marker to identify an owned bundle. It
+derives the root from the resolved executable and changes the runtime working
+directory before application creation, so the entry may be invoked from any
+caller working directory. A compiled entry requires an exact, regular marker
+file; a missing marker, directory, symbolic link, or changed content fails
+before application state is opened. Non-product source and development runs
+keep the project working directory and do not require a bundle marker.
+CLI-managed prerender explicitly retains the project working directory so
+build-time source resources keep their source semantics, but only after the
+compiled entry validates the marker. This does not weaken the deployed bundle
+contract.
+
 The full-stack starter selects `migrations` in the application-owned
 `odroe.yaml`; `--sqlite-migrations <path>` can override one build. If neither
 config nor CLI selects a history, Odroe never interprets a PostgreSQL or MySQL
@@ -89,32 +102,32 @@ whole root; copying only `bin/server` can omit required native libraries.
 
 `ODROE_HOST` and `ODROE_PORT` configure
 the listener; platforms that provide `PORT` are supported by the generated
-bootstrap. Static files default to `build/web` relative to the process working
-directory. Set `ODROE_WEB_ROOT` to an explicit directory, or to an empty string
-to disable the static root. Because the supported launch directory is the
-bundle root, that default means `<bundle>/build/web`; a production image must
-place assets there, set an explicit path, or disable static serving.
+bootstrap. In an owned bundle, static files default to `<bundle>/build/web`
+regardless of the caller working directory. Set `ODROE_WEB_ROOT` to an explicit
+directory, or to an empty string to disable the static root. A production image
+must place assets in the default location, set an explicit path, or disable
+static serving.
 
 The generated full-stack starter defaults SQLite to `.odroe/app.sqlite3`
-relative to the process working directory. That location is local development
-state, not durable production storage. Native production must use one process
-and an explicit absolute path on a writable persistent volume:
+relative to the effective runtime root. In an owned bundle that is the bundle
+root; in source and development runs it remains the project process directory.
+This default is local state, not durable production storage. Native production
+must use one process and an explicit absolute path on a writable persistent
+volume:
 
 ```sh
-cd build/odroe/server
-ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 ./bin/server
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 \
+/app/server/bin/server
 ```
 
-Starting from the bundle root makes the default `migrations/` path resolve to
-the validated history. A process supervisor or container should set that root
-as its working directory. For example, when the bundle is copied to
-`/app/server`:
+The self-located bundle root makes the default `migrations/` path resolve to the
+validated history without a supervisor `cwd` setting. When history is mounted
+elsewhere, override it explicitly:
 
 ```sh
-cd /app/server
 ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 \
 ODROE_MIGRATIONS_PATH=/app/server/migrations \
-./bin/server
+/app/server/bin/server
 ```
 
 The server validates the complete append-only history and applies pending files

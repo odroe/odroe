@@ -263,7 +263,7 @@ Future<int> runBuild(
         : p.join(artifactPath!, 'bin', _nativeServerExecutableName);
     final prerenderArguments = prerenderFromSource
         ? <String>['run', project.bootstrap.path]
-        : const <String>[];
+        : const <String>['--odroe-internal-prerender'];
     final prerenderMigrationSource =
         migrationSource != null && !prerenderFromSource
         ? Directory(p.join(artifactPath!, 'migrations'))
