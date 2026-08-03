@@ -61,6 +61,10 @@ Future<int> runOdroe(
       defaultsTo: ServerBuildTarget.native.name,
       help: 'Server runtime to run.',
     )
+    ..addOption(
+      'sqlite-migrations',
+      help: 'SQLite migration directory relative to the project.',
+    )
     ..addFlag(
       'server-only',
       negatable: false,
@@ -86,6 +90,10 @@ Future<int> runOdroe(
       allowed: ServerBuildTarget.values.map((target) => target.name),
       defaultsTo: ServerBuildTarget.native.name,
       help: 'Server runtime to compile.',
+    )
+    ..addOption(
+      'sqlite-migrations',
+      help: 'Use this SQLite source for Native bundle and prerender.',
     )
     ..addFlag(
       'prerender',
@@ -197,6 +205,7 @@ Future<int> runOdroe(
           command.option('server-target')!,
         ),
         serverArtifact: command.option('server-artifact'),
+        sqliteMigrations: command.option('sqlite-migrations'),
         prerender: command.flag('prerender'),
         prerenderOutput: command.option('prerender-output')!,
         prerenderConcurrency: _positiveInt(
@@ -244,6 +253,12 @@ Future<int> _runDevelopmentCommand(
   final target = ServerBuildTarget.values.byName(
     command.option('server-target')!,
   );
+  if (target == ServerBuildTarget.cloudflare &&
+      command.option('sqlite-migrations') != null) {
+    throw const FormatException(
+      '--sqlite-migrations is only available in Native development.',
+    );
+  }
   final arguments = (
     host: command.option('host')!,
     port: _port(command.option('port')!),
@@ -257,6 +272,7 @@ Future<int> _runDevelopmentCommand(
       port: arguments.port,
       serverOnly: arguments.serverOnly,
       flutterArguments: arguments.flutterArguments,
+      sqliteMigrations: command.option('sqlite-migrations'),
       out: out,
       err: err,
     ),

@@ -42,9 +42,11 @@ The prerender server mounts no static root while generating pages, so neither
 an old build nor a same-path HTML file from `public/` can replace the current
 route response.
 
-When the deployment also needs the default native server, use
-`dart run odroe build web` instead. For a document-only product such as this
-website, no Flutter target is required:
+When a full-stack deployment also needs the default Native server, include its
+SQLite history with
+`dart run odroe build --sqlite-migrations migrations web`. A Native product
+without SQLite migrations can omit that option. For a document-only product
+such as this website, no Flutter target is required:
 
 ```sh
 dart run odroe build --no-server
@@ -57,10 +59,29 @@ deployment also needs the default native server.
 ## Native server
 
 ```sh
-dart run odroe build --server-only
+dart run odroe build --server-only --sqlite-migrations migrations
 ```
 
-The result is a Dart native executable. `ODROE_HOST` and `ODROE_PORT` configure
+The result is a native bundle rather than an isolated executable:
+
+```text
+build/odroe/
+├── server
+└── migrations/
+    ├── 0001_posts.sql
+    └── 0002_unify_posts.sql
+```
+
+Migration files are copied byte-for-byte through a sibling staging directory;
+the executable and migration directory replace the previous bundle only after
+compilation and a final source recheck succeed. A hidden ownership marker keeps
+the CLI from overwriting an unrelated directory. After one build selects a
+history, a later build must select it again or fail before publication, so a
+new executable cannot silently retain a stale sidecar. Deploy both. The option
+is explicit: a PostgreSQL or MySQL application's generic migration directory
+is never interpreted as SQLite merely because it exists.
+
+`ODROE_HOST` and `ODROE_PORT` configure
 the listener; platforms that provide `PORT` are supported by the generated
 bootstrap. Static files default to `build/web` relative to the process working
 directory. Set `ODROE_WEB_ROOT` to an explicit directory, or to an empty string
@@ -73,14 +94,30 @@ state, not durable production storage. Native production must use one process
 and an explicit absolute path on a writable persistent volume:
 
 ```sh
-ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 ./build/odroe/server
+cd build/odroe
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 ./server
 ```
 
-Back up that volume. Do not share the starter's single SQLite connection across
+Starting from the bundle root makes the default `migrations/` path resolve to
+the validated sidecar. From another working directory, pass the deployed
+directory explicitly:
+
+```sh
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 \
+ODROE_MIGRATIONS_PATH=/app/migrations \
+/app/server
+```
+
+The server validates the complete append-only history and applies pending files
+before listening. Do not edit, remove, rename, or backfill an applied file;
+publish a higher-numbered file. Back up the data volume before a production
+migration. A failed file is rolled back, but an operational rollback still uses
+your volume backup and application release process—there is no generated down
+migration.
+
+Do not share the starter's single SQLite connection across
 multiple service replicas; use a server database such as PostgreSQL for
-horizontal scaling. The starter bootstrap creates only its fixed initial
-schema, so production schema changes require an application-owned migration
-process.
+horizontal scaling.
 
 Native static files are contained by their resolved public root on every
 request. Every name uses `no-cache` with ETag and Last-Modified revalidation
@@ -193,7 +230,7 @@ local path from that application root:
 
 ```sh
 npm ci
-dart run odroe build --no-server web
+dart run odroe build --no-server --sqlite-migrations migrations web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```

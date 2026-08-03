@@ -22,13 +22,26 @@ void main() {
     );
   });
 
+  test('native database rejects an empty migration path', () async {
+    await expectLater(
+      native_server.createNativeServer(
+        databasePath: '.odroe/test.sqlite3',
+        migrationsPath: '',
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('native database preserves created posts across restart', () async {
     final state = await Directory.systemTemp.createTemp('odroe-posts-test-');
     final path = '${state.path}/app.sqlite3';
+    final migrations = readSqliteMigrations(
+      Directory('migrations').absolute.path,
+    );
     SqliteDatabase? database;
     try {
       database = SqliteDatabase.open(path);
-      await initializePostsDatabase(database);
+      await database.applyMigrations(migrations);
       final created = await postQueries
           .insert(posts, <SqlAssignment>[posts.title.set('Persisted post')])
           .returning(posts.projection)
@@ -37,7 +50,7 @@ void main() {
       database = null;
 
       database = SqliteDatabase.open(path);
-      await initializePostsDatabase(database);
+      await database.applyMigrations(migrations);
       final persisted = await postQueries
           .selectTable(
             posts,
@@ -45,12 +58,66 @@ void main() {
             orderBy: <SqlOrder>[posts.id.ascending],
           )
           .all(database);
-      expect(persisted, <Post>[(id: 42, title: 'SQLite post 42'), created]);
+      expect(persisted, <Post>[(id: 42, title: 'Odroe post 42'), created]);
     } finally {
       await database?.close();
       if (state.existsSync()) await state.delete(recursive: true);
     }
   });
+
+  test(
+    'shared migrations adopt the previous native starter without data loss',
+    () async {
+      final state = await Directory.systemTemp.createTemp(
+        'odroe-legacy-posts-test-',
+      );
+      final path = '${state.path}/app.sqlite3';
+      SqliteDatabase? database;
+      try {
+        database = SqliteDatabase.open(path);
+        await database.execute(
+          BoundSql.raw('''
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL
+) STRICT
+''', dialect: SqlDialect.sqlite),
+        );
+        await database.execute(
+          BoundSql.raw(
+            "INSERT INTO posts (id, title) VALUES (42, 'SQLite post 42')",
+            dialect: SqlDialect.sqlite,
+          ),
+        );
+        await database.execute(
+          BoundSql.raw(
+            "INSERT INTO posts (id, title) VALUES (43, 'Existing post')",
+            dialect: SqlDialect.sqlite,
+          ),
+        );
+        await database.close();
+        database = SqliteDatabase.open(path);
+
+        final migrations = readSqliteMigrations(
+          Directory('migrations').absolute.path,
+        );
+        expect(await database.applyMigrations(migrations), 2);
+        expect(await database.applyMigrations(migrations), 0);
+        expect(
+          await postQueries
+              .selectTable(posts, orderBy: <SqlOrder>[posts.id.ascending])
+              .all(database),
+          <Post>[
+            (id: 42, title: 'Odroe post 42'),
+            (id: 43, title: 'Existing post'),
+          ],
+        );
+      } finally {
+        await database?.close();
+        if (state.existsSync()) await state.delete(recursive: true);
+      }
+    },
+  );
 
   testWidgets('generated RPC completes inside the Flutter event loop', (
     tester,
@@ -68,7 +135,7 @@ void main() {
         ),
       );
 
-      expect(post, (id: 42, title: 'SQLite post 42'));
+      expect(post, (id: 42, title: 'Odroe post 42'));
     } finally {
       transport.close();
       await tester.runAsync(application.close);
@@ -88,7 +155,7 @@ void main() {
           sort: 'newest',
         )),
       ))!;
-      expect(initial, <Post>[(id: 42, title: 'SQLite post 42')]);
+      expect(initial, <Post>[(id: 42, title: 'Odroe post 42')]);
 
       final selected = (await tester.runAsync(
         () => routes.posts.listPosts(client, (
@@ -96,7 +163,7 @@ void main() {
           sort: 'newest',
         )),
       ))!;
-      expect(selected, <Post>[(id: 42, title: 'SQLite post 42')]);
+      expect(selected, <Post>[(id: 42, title: 'Odroe post 42')]);
 
       final oversizedError = await tester.runAsync<Object?>(() async {
         try {
@@ -224,11 +291,11 @@ void main() {
         RpcModule(client),
         query: query,
         waitForRealAsync: true,
-        expectedText: 'SQLite post 42; preview=true; tags=one,two',
+        expectedText: 'Odroe post 42; preview=true; tags=one,two',
       );
 
       expect(
-        find.text('SQLite post 42; preview=true; tags=one,two'),
+        find.text('Odroe post 42; preview=true; tags=one,two'),
         findsOneWidget,
       );
     } finally {
@@ -271,7 +338,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await _pumpUntilReal(tester, find.text('SQLite post 42'));
+      await _pumpUntilReal(tester, find.text('Odroe post 42'));
 
       await tester.enterText(find.byType(TextField), '  Created from UI  ');
       await tester.pump();
@@ -296,7 +363,7 @@ void main() {
       );
 
       expect(find.text('Created from UI'), findsOneWidget);
-      expect(find.text('SQLite post 42'), findsOneWidget);
+      expect(find.text('Odroe post 42'), findsOneWidget);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
@@ -409,7 +476,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await _pumpUntilReal(tester, find.text('SQLite post 42'));
+      await _pumpUntilReal(tester, find.text('Odroe post 42'));
 
       await tester.enterText(find.byType(TextField), 'Created after retry');
       await tester.pump();
@@ -418,7 +485,7 @@ void main() {
       await _pumpUntilReal(tester, find.text('Posts may be out of date.'));
 
       expect(transport.failedRefresh, isTrue);
-      expect(find.text('SQLite post 42'), findsOneWidget);
+      expect(find.text('Odroe post 42'), findsOneWidget);
       expect(find.text('Created after retry'), findsNothing);
 
       await tester.tap(find.text('Retry refresh'));
@@ -804,6 +871,7 @@ Future<_NativeApplication> _startNativeApplication() async {
   try {
     server = await native_server.createNativeServer(
       databasePath: '${state.path}/app.sqlite3',
+      migrationsPath: Directory('migrations').absolute.path,
     );
     final httpServer = await IoServer.bind(server.handler, port: 0);
     return _NativeApplication(server, httpServer, state);

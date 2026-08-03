@@ -106,7 +106,10 @@ void main() {
       expect(errors, isEmpty);
       expect(output.toString(), contains('Odroe full-stack starter'));
       expect(output.toString(), contains('npm ci'));
-      expect(output.toString(), contains('build --no-server web'));
+      expect(
+        output.toString(),
+        contains('build --no-server --sqlite-migrations migrations web'),
+      );
       final ownedFiles = <File>[
         for (final path in _fullStackFiles) File(p.join(project.path, path)),
       ];
@@ -183,14 +186,15 @@ void main() {
         p.join(project.path, 'lib', 'routes', 'page.dart'),
       ).readAsStringSync();
       expect(nativeServer, contains('ODROE_SQLITE_PATH'));
+      expect(nativeServer, contains('ODROE_MIGRATIONS_PATH'));
       expect(nativeServer, contains("'.odroe/app.sqlite3'"));
       expect(nativeServer, contains('databasePath.isEmpty'));
       expect(nativeServer, contains('SqliteDatabase.open(databaseFile.path)'));
-      expect(database, contains('CREATE TABLE IF NOT EXISTS posts'));
+      expect(nativeServer, contains('readSqliteMigrations(migrationsPath)'));
+      expect(nativeServer, contains('database.applyMigrations(migrations)'));
+      expect(database, isNot(contains('CREATE TABLE')));
       expect(database, contains("import 'posts.dart';"));
       expect(database, contains('SqlTable<Post>'));
-      expect(database, contains('.insertOnConflictDoNothing('));
-      expect(database, contains('target: [posts.id]'));
       expect(database, isNot(contains('INSERT INTO posts')));
       expect(models, contains('typedef Post = ({int id, String title});'));
       expect(models, contains('typedef CreatePost = ({String title});'));
@@ -680,6 +684,7 @@ const _fullStackFiles = <String>[
   'lib/routes/page.dart',
   'lib/routes/server.dart',
   'migrations/0001_posts.sql',
+  'migrations/0002_unify_posts.sql',
   'package.json',
   'package-lock.json',
   'wrangler.jsonc',

@@ -68,13 +68,37 @@ imports `rpc.dart`; Fetch and IO imports stay at their host entrypoints.
 | Entrypoint | Owns |
 | --- | --- |
 | `database.dart` | Typed SQL contracts, codecs, rows, statements, modules, relational queries |
-| `database_sqlite.dart` | Native `SqliteDatabase` |
+| `database_sqlite.dart` | Native `SqliteDatabase`, `SqliteMigration`, loader, and runner |
 | `database_postgres.dart` | `PostgresDatabase` plus public connection/pool constructor types |
 | `database_mysql.dart` | Native `MysqlDatabase` for MySQL/MariaDB |
 | `database_d1.dart` | Cloudflare `D1SqlDatabase` |
 
 Do not import native drivers into shared route or Worker code. Put the driver in
 the runtime-specific server entry and expose only `DatabaseModule` to handlers.
+
+### Native SQLite migrations
+
+```dart
+final migrations = readSqliteMigrations(migrationsPath);
+final applied = await database.applyMigrations(migrations);
+```
+
+`readSqliteMigrations` synchronously reads top-level regular files named
+`NNNN_snake_case.sql`, returns them in numeric order, and rejects invalid names
+or duplicate versions, symbolic links, and NUL-containing SQL. `applyMigrations`
+snapshots the supplied iterable immediately, takes a cross-connection write
+lock, revalidates the complete exact history under that lock, and returns the
+number newly committed. SQLite parses each statement, while Odroe keeps the
+file and its ledger row in one runner-owned transaction. It rejects edited,
+renamed, missing, and backfilled applied files; transaction or connection
+control; `writable_schema`; and any use or schema change of the reserved
+`main._odroe_migrations` ledger through `SqliteMigrationException`. Driver
+failures remain available as `cause` without placing the SQL in the exception
+string.
+
+The API belongs only to native SQLite. D1 uses Wrangler against the same source
+files; PostgreSQL and MySQL/MariaDB do not pretend to share SQLite migration
+semantics.
 
 ### Typed SQL predicates
 

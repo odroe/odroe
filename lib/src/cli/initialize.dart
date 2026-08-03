@@ -179,7 +179,10 @@ bool initializeProject(
     if (fullStack) {
       out.writeln('Cloudflare local:');
       out.writeln('  npm ci');
-      out.writeln('  dart run odroe build --no-server web');
+      out.writeln(
+        '  dart run odroe build --no-server '
+        '--sqlite-migrations migrations web',
+      );
       out.writeln('  npm run cloudflare:migrate:local');
       out.writeln('  npm run cloudflare:dev');
     } else {
@@ -271,6 +274,8 @@ Map<String, String> _readFullStackSources(Uri odroeLibrary) {
     'lib/server_native.dart': 'example/app/lib/server_native.dart',
     'lib/server_cloudflare.dart': 'example/app/lib/server_cloudflare.dart',
     'migrations/0001_posts.sql': 'example/app/migrations/0001_posts.sql',
+    'migrations/0002_unify_posts.sql':
+        'example/app/migrations/0002_unify_posts.sql',
     'package.json': 'example/app/package.json',
     'package-lock.json': 'example/app/package-lock.json',
     'wrangler.jsonc': 'example/app/wrangler.jsonc',

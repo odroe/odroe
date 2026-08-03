@@ -1,6 +1,6 @@
 # Odroe
 
-Odroe 是单包、可组合的 Flutter 全栈元框架。当前 Flutter 产品入口面向
+Odroe 是面向 Dart 与 Flutter 产品的单包、可组合全栈元框架。当前 Flutter 产品入口面向
 Android、iOS 与 Web；示例源码已在临时生成的 host scaffold 中通过 Web、
 Android APK 与 iOS `--no-codesign` release build。该证据不等于签名、真机或
 商店发布。只有应用选择 Web 时，Document 的 SSR/SSG 与 Flutter 首屏交接才
@@ -25,7 +25,7 @@ Odroe 不提供一个暗中装配全部能力的全局对象。应用显式选�
 | `press.dart` | 平台中立的不可变内容集合与 `PressPage` |
 | `press_io.dart` | 文件系统 MDC discovery、原子 snapshot 与缓存 |
 | `database.dart` | typed SQL transport、`SqlQueries`、row codec 与 transaction capability |
-| `database_sqlite.dart` | 已验证的 native SQLite driver |
+| `database_sqlite.dart` | 已验证的 native SQLite driver 与 append-only SQL migration runner |
 | `database_postgres.dart` | 已验证的 PostgreSQL driver |
 | `database_mysql.dart` | Preview MySQL/MariaDB driver |
 | `database_d1.dart` | Preview Cloudflare D1 binding adapter |
@@ -78,7 +78,9 @@ my_app/
 │   │   └── server.dart        # typed list/create RPC + SQL
 │   ├── routes.dart            # generated client tree
 │   └── routes.server.dart     # generated server tree
-├── migrations/0001_posts.sql
+├── migrations/
+│   ├── 0001_posts.sql
+│   └── 0002_unify_posts.sql
 ├── package.json
 ├── package-lock.json
 └── wrangler.jsonc
@@ -91,9 +93,13 @@ named-record typed RPC → Server → typed SQL → SQLite。它同时准备 D1 
 自定义源码、配置、目录冲突或符号链接会整体拒绝，不提供 `--force`，也不会修改
 pubspec 或平台宿主。
 
-Native 默认把 SQLite 数据保存在项目的 `.odroe/app.sqlite3`，初始化器会将
-`.odroe/` 加入 `.gitignore`。`ODROE_SQLITE_PATH` 可覆盖路径；生产环境应使用
-持久卷上的绝对可写路径。默认相对路径以 server 进程的当前目录为基准。
+Native 默认把 SQLite 数据保存在项目的 `.odroe/app.sqlite3`，并在监听前将
+`migrations/*.sql` 逐文件原子应用。初始化器会将 `.odroe/` 加入 `.gitignore`。
+`ODROE_SQLITE_PATH` 与 `ODROE_MIGRATIONS_PATH` 可分别覆盖数据和 migration 路径；
+生产环境应使用持久卷上的绝对数据库路径。相对路径以 server 进程的当前目录为
+基准。`odroe dev` 会监听实际 migration 目录并在 SQL 变化后重启 Native server；
+构建可搬运 bundle 时显式传入 `--sqlite-migrations migrations`，不会把其他数据库
+项目的同名目录误判为 SQLite history。
 
 只需要 Document 与 Router 时，改用 `dart run odroe init`；未修改的基础 starter
 可以随后原子升级为 `--full-stack`。
@@ -719,13 +725,31 @@ return postQueries
 
 `lib/server.dart` 通过条件导出隔离平台 driver。Native 入口使用进程拥有的文件
 SQLite，默认路径为 `.odroe/app.sqlite3`，request 只借用，并由
-`Server.close()` 关闭。`CREATE TABLE IF NOT EXISTS` 与
-typed `insertOnConflictDoNothing(..., target: [posts.id])` 让 starter 可重复启动
-且不覆盖已有数据；这是固定初始 schema 的示例 bootstrap，不会迁移已有表。
-Native schema 演进由应用自己的 migration 流程负责。Cloudflare 入口则在
-`invocationModules` 中包装 D1 binding，schema 与 seed 来自
-`migrations/0001_posts.sql`。两套初始化路径保持显式分离，因此 Flutter Web、
-Wasm 与 Worker 产物都不需要触达 SQLite FFI。
+`Server.close()` 关闭。监听前显式读取并应用应用拥有的 SQL 历史：
+
+```dart
+final migrations = readSqliteMigrations(
+  Platform.environment['ODROE_MIGRATIONS_PATH'] ?? 'migrations',
+);
+final database = SqliteDatabase.open(databaseFile.path);
+await database.applyMigrations(migrations);
+```
+
+文件名必须是 `NNNN_snake_case.sql`，版本唯一且只能向后追加。Native ledger 保存
+文件名与完整 SQL；已应用文件被修改、删除、改名或在较小版本补插时，启动会在
+执行 pending SQL 前失败。runner 取得 `BEGIN IMMEDIATE` 写锁后会再次校验完整
+source 与 ledger，避免两个进程接受互不完整的历史。每个文件由 SQLite parser
+逐 statement 执行，而不是按分号切割；文件与 ledger 行仍在同一事务提交，失败只
+回滚当前文件，此前成功版本保留。`main._odroe_migrations` 是保留名，其 canonical
+schema 也会在提交前验证。这里没有 schema diff、down migration 或通用 migration
+DSL。
+
+Cloudflare 入口在 `invocationModules` 中包装 D1 binding。Wrangler 消费同一组
+`migrations/*.sql`，但维护自己的 `d1_migrations` ledger；Worker Fetch 不会自动
+迁移。`0002_unify_posts.sql` 同时把历史 seed 演进为 provider-neutral
+`Odroe post 42` 并创建索引，因此 Native 与本地 D1 会得到同一产品状态。Native
+构建把 migration 原字节放在 executable 同级的 `migrations/`；Worker、Flutter
+Web 与 Wasm 产物都不会触达 SQLite FFI。
 
 生成的应用在自己的 `package.json` 与 lockfile 中固定 Wrangler 4.118.0；Node 22+
 与 npm 10.9+ 只用于本地 Cloudflare 工具链，不进入 Dart 依赖图或部署产物。
@@ -733,7 +757,7 @@ Wasm 与 Worker 产物都不需要触达 SQLite FFI。
 
 ```sh
 npm ci
-dart run odroe build --no-server web
+dart run odroe build --no-server --sqlite-migrations migrations web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
@@ -853,9 +877,9 @@ flutter devices
 dart run odroe dev -- -d <ios-device-id> --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe dev -- -d chrome
 dart run odroe build --no-server -- apk --dart-define=ODROE_API_ORIGIN=https://api.example.com
-dart run odroe build --no-server web
+dart run odroe build --no-server --sqlite-migrations migrations web
 dart run odroe build --no-server -- web --wasm
-dart run odroe build web
+dart run odroe build --sqlite-migrations migrations web
 dart run odroe build --server-only --server-target cloudflare
 dart run odroe build --server-target cloudflare web
 ```
@@ -863,15 +887,18 @@ dart run odroe build --server-target cloudflare web
 将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
 Web；`--` 后参数原样交给 Flutter CLI。包含 RPC 的原生运行与构建必须传入
 `ODROE_API_ORIGIN`，Web 继续使用同源。开发 server 直接挂载源码 `public/`，
-不读取旧 `build/web`。`build --no-server web` 只构建 Flutter Web 与静态产物；
-`build web` 还会生成 native server artifact。两者都会通过真实 server
+不读取旧 `build/web`。带 migration 选项的 `build --no-server web` 只构建
+Flutter Web 与静态产物；
+带 `--sqlite-migrations migrations` 的 `build web` 还会生成包含 SQLite
+history 的 native server bundle。两者都会通过真实 server
 prerender 静态 route。纯 Document route 输出纯 HTML；
 带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样
 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
 `--no-server` 不生成可部署 server artifact，但仍运行生成的 Dart
 server 源码完成 prerender，适合只部署 `build/web` 的 assets-only SSG。
 CLI 会覆盖 native prerender 子进程的 `ODROE_SQLITE_PATH`，让它使用独立临时
-数据库，并在子进程结束后删除。因此构建不读取或改写 `.odroe/app.sqlite3`。
+数据库，并在子进程结束后删除。`--sqlite-migrations` 同时固定本轮读取的 source，
+因此构建不读取或改写 `.odroe/app.sqlite3`，也不受继承环境中的 history 路径影响。
 
 prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 HTML 响应
 最多 1 MiB。`--prerender-concurrency`、`--prerender-max-routes` 与
@@ -882,7 +909,10 @@ artifact 的构建也复用生成的 Dart server 源码完成 prerender，不再
 prerender 期间 server 明确禁用静态根，旧产物与 `public/` 中的同名 HTML
 不会替代本轮真实 route 响应。
 
-`build --server-only` 生成的 native executable 与构建 OS/architecture 绑定。
+`build --server-only --sqlite-migrations migrations` 生成的 native bundle 与构建
+OS/architecture 绑定。CLI 用隐藏 ownership marker 绑定 executable 与 migration
+sidecar；不会覆盖未标记目录，后续若漏传 migration 选项也会在发布新 executable
+前失败，避免留下旧 history。
 请在目标平台或兼容 builder 中构建。生成的 bootstrap 默认从进程当前目录下的
 `build/web` 提供静态文件；`ODROE_WEB_ROOT` 可指定明确目录，空字符串会禁用
 静态根。部署时必须同时携带对应静态目录，或显式禁用。

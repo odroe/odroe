@@ -17,21 +17,3 @@ final class Posts extends SqlTable<Post> {
 
 final posts = Posts();
 const postQueries = SqlQueries(SqlDialect.sqlite);
-
-Future<void> initializePostsDatabase(SqlDatabase database) async {
-  await database.execute(
-    BoundSql.raw('''
-CREATE TABLE IF NOT EXISTS posts (
-  id INTEGER PRIMARY KEY,
-  title TEXT NOT NULL
-) STRICT
-''', dialect: SqlDialect.sqlite),
-  );
-  await postQueries
-      .insertOnConflictDoNothing(
-        posts,
-        <SqlAssignment>[posts.id.set(42), posts.title.set('SQLite post 42')],
-        target: [posts.id],
-      )
-      .execute(database);
-}

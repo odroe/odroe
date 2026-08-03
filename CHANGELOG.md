@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an append-only native SQLite migration runner with strict numbered SQL
+  loading, exact applied-source verification, per-file atomic execution, and
+  concurrent-startup locking. Let Native and Wrangler D1 consume the same
+  application-owned history while keeping separate ledgers; explicitly select
+  the SQLite source for Native bundles and prerender, watch it in development,
+  and wire the contract through the full-stack starter and reference product.
+  Validate route, migration, artifact, sidecar, and prerender paths before any
+  generated write, and serialize Native bundle publication across processes.
 - Add provider-neutral `SqlQueries.countRows` for typed `COUNT(*)` over the
   existing table, join, and predicate path across SQLite, PostgreSQL,
   MySQL/MariaDB, and D1. Joined duplicates count as relation rows; ordering,
@@ -52,16 +60,16 @@
   not refetch stale lists or re-enable an in-flight create action.
 - Add typed conflict-target `insertOnConflictDoNothing` for SQLite, Cloudflare
   D1, and PostgreSQL, with exact pre-I/O rejection on MySQL. Make the full-stack
-  starter decode a complete `Post` record and seed native SQLite through the
-  same public typed query API.
+  starter decode a complete `Post` record through the same typed projection
+  used by its application writes.
 - Add exact-cardinality `SqlRead.one` and `oneOrNull` terminals. Typed selects
   probe at most two rows while preserving offsets and explicit limits up to
   two; mutation `RETURNING` keeps its original statement and validates the
   returned rows.
 - Persist the full-stack starter's native SQLite data at `.odroe/app.sqlite3`,
-  allow an `ODROE_SQLITE_PATH` override, and preserve existing rows with an
-  idempotent bootstrap. Give prerender an isolated temporary database and
-  remove it after the build.
+  allow `ODROE_SQLITE_PATH` and `ODROE_MIGRATIONS_PATH` overrides, and preserve
+  existing rows through append-only migrations. Give prerender an isolated
+  temporary database and remove it after the build.
 - Return a controlled HTTP 400 for strict typed search decoding failures
   without invoking the route or server error reporter. Keep handler, loader,
   and codec encoding failures classified as unexpected server errors.
@@ -78,7 +86,7 @@
   gates, D1 migration and development scripts, and a direct Getting Started
   handoff.
   Keep installed Node and Wrangler state out of the Dart publication archive.
-- Rebuild odroe.dev documentation as 16 product-first pages across start,
+- Rebuild odroe.dev documentation as 17 product-first pages across start,
   tutorial, concepts, guides, and reference. Make the generated full-stack
   project the primary onboarding path, preserve old documentation URLs with
   redirects, and move website-only deployment operations out of public docs.
@@ -93,7 +101,7 @@
   `NoServerInput` and `ValueDecoder`.
 - Run the example post page through Flutter Query, generated typed RPC, a real
   `DatabaseModule`, typed SQL, native SQLite, and local Cloudflare D1. Keep the
-  drivers platform-isolated, track the D1 schema as a migration, and export
+  drivers platform-isolated, track one shared SQLite/D1 SQL history, and export
   `NotFound` and `Redirect` from the RPC product entrypoint. Validate typed
   frame versions, reject empty typed responses, and require control-frame
   status to match HTTP status. Raise the minimum server frame budget from 16

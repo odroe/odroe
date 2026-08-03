@@ -105,8 +105,11 @@ final class FileRouteCompiler {
   }
 
   /// Compiles and atomically updates generated files when content changed.
-  FileRouteOutput write() {
-    final output = compile();
+  ///
+  /// [compiled] lets callers validate every destination before publishing an
+  /// already inspected route snapshot.
+  FileRouteOutput write({FileRouteOutput? compiled}) {
+    final output = compiled ?? compile();
     if (output.hasErrors) {
       throw FileRouteCompilationException(output.diagnostics);
     }

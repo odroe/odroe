@@ -5,11 +5,40 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:odroe/database_sqlite.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/dart_command_lock.dart';
+import '../support/process.dart';
 
 void main() {
+  test('dev rejects an empty inherited migration path', () async {
+    final result = await withDartCommandLock(
+      () => runTestProcess(
+        dartExecutable,
+        const <String>[
+          'run',
+          'odroe',
+          'dev',
+          '--project',
+          'example/app',
+          '--server-only',
+          '--port',
+          '0',
+        ],
+        environment: <String, String>{
+          ...Platform.environment,
+          'ODROE_MIGRATIONS_PATH': '',
+        },
+        timeout: const Duration(seconds: 10),
+      ),
+    );
+
+    expect(result.exitCode, 64, reason: '${result.stdout}\n${result.stderr}');
+    expect(result.stderr, contains('ODROE_MIGRATIONS_PATH must not be empty.'));
+  });
+
   test('dev serves the generated route tree and server functions', () async {
     final reservation = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
@@ -22,6 +51,16 @@ void main() {
       if (state.existsSync()) await state.delete(recursive: true);
     });
 
+    final migrationsDirectory = Directory(p.join(state.path, 'migrations'))
+      ..createSync();
+    for (final name in <String>['0001_posts.sql', '0002_unify_posts.sql']) {
+      File(
+        p.join('example/app', 'migrations', name),
+      ).copySync(p.join(migrationsDirectory.path, name));
+    }
+    final devMigration = File(
+      p.join(migrationsDirectory.path, '9999_dev_watch.sql'),
+    );
     final dartCommandLock = await acquireDartCommandLock();
     final publicDirectory = Directory('example/app/public').absolute;
     final publicDirectoryExisted = publicDirectory.existsSync();
@@ -94,6 +133,7 @@ void main() {
           ...Platform.environment,
           'ODROE_FLUTTER_ORIGIN_FILE': '/stale/flutter-origin',
           'ODROE_SQLITE_PATH': '${state.path}/app.sqlite3',
+          'ODROE_MIGRATIONS_PATH': migrationsDirectory.path,
         },
       );
     } on Object {
@@ -198,8 +238,58 @@ void main() {
     expect(jsonDecode(rpcBody), <String, Object?>{
       'version': 1,
       'type': 'data',
-      'data': <String, Object?>{'id': 42, 'title': 'SQLite post 42'},
+      'data': <String, Object?>{'id': 42, 'title': 'Odroe post 42'},
     });
+
+    devMigration.writeAsStringSync('''
+CREATE TABLE dev_watch_probe (id INTEGER PRIMARY KEY) STRICT;
+''');
+    var migrationApplied = false;
+    var serverRecovered = false;
+    Object? migrationError;
+    Object? recoveryError;
+    for (
+      var attempt = 0;
+      attempt < 100 && (!migrationApplied || !serverRecovered);
+      attempt++
+    ) {
+      SqliteDatabase? inspection;
+      try {
+        inspection = SqliteDatabase.open('${state.path}/app.sqlite3');
+        final count = await inspection.query(
+          BoundSql.raw(
+            'SELECT count(*) FROM main._odroe_migrations '
+            'WHERE version = 9999',
+          ),
+          (row) => row.read(0, sqlInt),
+        );
+        migrationApplied = count.single == 1;
+      } on Object catch (error) {
+        migrationError = error;
+      } finally {
+        await inspection?.close();
+      }
+      if (migrationApplied) {
+        try {
+          final request = await client.getUrl(
+            Uri.parse('http://127.0.0.1:$port/posts/42?preview=true'),
+          );
+          request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+          final response = await request.close();
+          final body = await response.transform(utf8.decoder).join();
+          serverRecovered =
+              response.statusCode == HttpStatus.ok &&
+              body.contains('"location":"/posts/42?preview=true"');
+        } on Object catch (error) {
+          recoveryError = error;
+        }
+      }
+      if (!migrationApplied || !serverRecovered) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    expect(migrationApplied, isTrue, reason: '$migrationError\n$output');
+    expect(serverRecovered, isTrue, reason: '$recoveryError\n$output');
 
     final missing = await client.getUrl(
       Uri.parse(

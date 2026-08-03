@@ -37,6 +37,51 @@ void main() {
     expect(File(p.join(outside.path, 'target.dart')).existsSync(), isFalse);
   });
 
+  test('route source and generated outputs cannot overlap', () async {
+    final parent = await Directory.systemTemp.createTemp(
+      'odroe_generate_overlap_test_',
+    );
+    addTearDown(() => parent.delete(recursive: true));
+    final project = _createProject(parent);
+    final routes = Directory(p.join(project.path, 'lib', 'routes'))
+      ..createSync(recursive: true);
+    final sentinel = File(p.join(routes.path, 'route.dart'))
+      ..writeAsStringSync('route source');
+    final cases = <List<String>>[
+      <String>['--output', 'lib/routes/route.dart'],
+      <String>['--server-output', 'lib/routes/generated.dart'],
+      <String>['--output', 'lib'],
+      <String>[
+        '--output',
+        'lib/generated.dart',
+        '--server-output',
+        'lib/generated.dart',
+      ],
+      <String>[
+        '--output',
+        'lib/generated',
+        '--server-output',
+        'lib/generated/server.dart',
+      ],
+    ];
+
+    for (final arguments in cases) {
+      final errors = StringBuffer();
+      final code = await runOdroe(
+        <String>['generate', '--project', project.path, ...arguments],
+        output: StringBuffer(),
+        errors: errors,
+      );
+
+      expect(code, 64, reason: arguments.join(' '));
+      expect(
+        errors.toString(),
+        '--routes, --output, and --server-output must not overlap.\n',
+      );
+      expect(sentinel.readAsStringSync(), 'route source');
+    }
+  });
+
   test(
     'generate paths cannot traverse an existing symbolic link',
     () async {

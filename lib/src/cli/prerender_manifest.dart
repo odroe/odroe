@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-const _defaultCallbackTimeout = Duration(seconds: 20);
+const _defaultCallbackTimeout = Duration(minutes: 1);
 const _defaultTerminationGracePeriod = Duration(seconds: 10);
 const _maxCallbackStderrCharacters = 8 * 1024;
 
@@ -40,7 +40,7 @@ Future<List<String>> loadPrerenderLocations({
   final output = File(p.join(directory.path, 'prerender-$temporaryId.json'));
   final source = _bootstrapSource(packageName);
 
-  final processArguments = <String>['run', bootstrap.path];
+  final processArguments = <String>[bootstrap.path];
   final executable = dartExecutable ?? Platform.resolvedExecutable;
   Process? process;
   Future<int>? exitCode;

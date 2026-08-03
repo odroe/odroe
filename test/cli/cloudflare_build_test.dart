@@ -123,6 +123,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
     final outputs = <Directory>[
       Directory(p.join(project.path, 'build', 'overlap-test')),
       Directory(p.join(project.path, 'build', 'overlap-case')),
+      Directory(p.join(project.path, 'build', 'native-sidecar')),
       Directory(
         p.join(project.path, 'build', 'cloudflare-sidecar', 'worker.mjs'),
       ),
@@ -136,33 +137,45 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       }
     });
 
-    final cases = <({String artifact, String output, String target})>[
-      (
-        artifact: 'build/overlap-test/server',
-        output: 'build/overlap-test',
-        target: 'native',
-      ),
-      (
-        artifact: 'build/overlap-test/server.js',
-        output: 'build/overlap-test',
-        target: 'cloudflare',
-      ),
-      (
-        artifact: 'build/Overlap-Case/server.js',
-        output: 'build/overlap-case',
-        target: 'cloudflare',
-      ),
-      (
-        artifact: 'build/cloudflare-sidecar/server.js',
-        output: 'build/cloudflare-sidecar/worker.mjs',
-        target: 'cloudflare',
-      ),
-      (
-        artifact: 'build/cloudflare-deps/server.js',
-        output: 'build/cloudflare-deps/server.js.deps',
-        target: 'cloudflare',
-      ),
-    ];
+    final cases =
+        <({String artifact, String output, String target, bool migrations})>[
+          (
+            artifact: 'build/overlap-test/server',
+            output: 'build/overlap-test',
+            target: 'native',
+            migrations: false,
+          ),
+          (
+            artifact: 'build/overlap-test/server.js',
+            output: 'build/overlap-test',
+            target: 'cloudflare',
+            migrations: false,
+          ),
+          (
+            artifact: 'build/native-sidecar/server',
+            output: 'build/native-sidecar/migrations',
+            target: 'native',
+            migrations: false,
+          ),
+          (
+            artifact: 'build/Overlap-Case/server.js',
+            output: 'build/overlap-case',
+            target: 'cloudflare',
+            migrations: false,
+          ),
+          (
+            artifact: 'build/cloudflare-sidecar/server.js',
+            output: 'build/cloudflare-sidecar/worker.mjs',
+            target: 'cloudflare',
+            migrations: false,
+          ),
+          (
+            artifact: 'build/cloudflare-deps/server.js',
+            output: 'build/cloudflare-deps/server.js.deps',
+            target: 'cloudflare',
+            migrations: false,
+          ),
+        ];
     for (final buildCase in cases) {
       final errors = StringBuffer();
       final code = await runOdroe(
@@ -176,6 +189,10 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
           buildCase.artifact,
           '--prerender-output',
           buildCase.output,
+          if (buildCase.migrations) ...<String>[
+            '--sqlite-migrations',
+            'content',
+          ],
         ],
         output: StringBuffer(),
         errors: errors,
@@ -190,6 +207,564 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       for (final output in outputs) {
         expect(output.existsSync(), isFalse, reason: '$buildCase');
       }
+    }
+  });
+
+  test('migration source cannot overlap prerender output', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final state = Directory(
+      p.join(
+        project.path,
+        'build',
+        'migration-overlap-$pid-${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (state.existsSync()) state.deleteSync(recursive: true);
+    });
+    final cases = <({Directory source, Directory output})>[
+      (
+        source: Directory(p.join(state.path, 'output', 'migrations')),
+        output: Directory(p.join(state.path, 'output')),
+      ),
+      (
+        source: Directory(p.join(state.path, 'source')),
+        output: Directory(p.join(state.path, 'source', 'web')),
+      ),
+    ];
+
+    for (final buildCase in cases) {
+      buildCase.source.createSync(recursive: true);
+      final migration = File(p.join(buildCase.source.path, '0001_probe.sql'))
+        ..writeAsStringSync('CREATE TABLE probe (id INTEGER PRIMARY KEY);');
+      final errors = StringBuffer();
+
+      final code = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          '--no-server',
+          '--sqlite-migrations',
+          p.relative(buildCase.source.path, from: project.path),
+          '--prerender-output',
+          p.relative(buildCase.output.path, from: project.path),
+        ],
+        output: StringBuffer(),
+        errors: errors,
+      );
+
+      expect(code, 64, reason: '$buildCase');
+      expect(
+        errors.toString(),
+        '--sqlite-migrations and --prerender-output must not overlap.\n',
+        reason: '$buildCase',
+      );
+      expect(
+        migration.readAsStringSync(),
+        'CREATE TABLE probe (id INTEGER PRIMARY KEY);',
+      );
+    }
+  });
+
+  test('migration source cannot overlap server outputs', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final state = Directory(
+      p.join(
+        project.path,
+        'build',
+        'migration-server-overlap-$pid-'
+            '${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (state.existsSync()) state.deleteSync(recursive: true);
+    });
+    final cases = <({Directory source, String artifact, String target})>[
+      (
+        source: Directory(p.join(state.path, 'native-source')),
+        artifact: p.join(state.path, 'native-source', '0001_probe.sql'),
+        target: 'native',
+      ),
+      (
+        source: Directory(p.join(state.path, 'native-sidecar', 'migrations')),
+        artifact: p.join(state.path, 'native-sidecar', 'server'),
+        target: 'native',
+      ),
+      (
+        source: Directory(p.join(state.path, 'cloudflare', 'worker.mjs')),
+        artifact: p.join(state.path, 'cloudflare', 'server.js'),
+        target: 'cloudflare',
+      ),
+      (
+        source: Directory(
+          p.join(state.path, 'cloudflare-deps', 'server.js.deps'),
+        ),
+        artifact: p.join(state.path, 'cloudflare-deps', 'server.js'),
+        target: 'cloudflare',
+      ),
+    ];
+
+    for (final buildCase in cases) {
+      buildCase.source.createSync(recursive: true);
+      final migration = File(p.join(buildCase.source.path, '0001_probe.sql'))
+        ..writeAsStringSync('SELECT 1;');
+      final errors = StringBuffer();
+
+      final code = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          '--server-target',
+          buildCase.target,
+          '--server-artifact',
+          p.relative(buildCase.artifact, from: project.path),
+          '--sqlite-migrations',
+          p.relative(buildCase.source.path, from: project.path),
+        ],
+        output: StringBuffer(),
+        errors: errors,
+      );
+
+      expect(code, 64, reason: '$buildCase');
+      expect(
+        errors.toString(),
+        '--sqlite-migrations and server artifact outputs must not overlap.\n',
+        reason: '$buildCase',
+      );
+      expect(migration.readAsStringSync(), 'SELECT 1;');
+    }
+  });
+
+  test('migration source cannot overlap generated route outputs', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final state = Directory(
+      p.join(
+        project.path,
+        'build',
+        'migration-route-overlap-$pid-'
+            '${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (state.existsSync()) state.deleteSync(recursive: true);
+    });
+
+    for (final option in <String>['--output', '--server-output']) {
+      final optionName = option.substring(2);
+      final caseRoot = Directory(p.join(state.path, optionName))..createSync();
+      final source = Directory(p.join(caseRoot.path, 'migrations'))
+        ..createSync();
+      final migration = File(p.join(source.path, '0001_probe.sql'))
+        ..writeAsStringSync('SELECT 1;');
+      final outputs = <String>[
+        caseRoot.path,
+        migration.path,
+        p.join(source.path, 'generated.dart'),
+      ];
+
+      for (final output in outputs) {
+        final errors = StringBuffer();
+        final code = await runOdroe(
+          <String>[
+            'build',
+            '--project',
+            project.path,
+            '--no-server',
+            '--sqlite-migrations',
+            p.relative(source.path, from: project.path),
+            option,
+            p.relative(output, from: project.path),
+          ],
+          output: StringBuffer(),
+          errors: errors,
+        );
+
+        expect(code, 64, reason: '$option $output');
+        expect(
+          errors.toString(),
+          '--sqlite-migrations and generated route outputs must not '
+          'overlap.\n',
+          reason: '$option $output',
+        );
+        expect(migration.readAsStringSync(), 'SELECT 1;');
+      }
+    }
+  });
+
+  test('generated route outputs cannot overlap build outputs', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final root = p.join(
+      project.path,
+      'build',
+      'generated-build-overlap-$pid-'
+          '${DateTime.now().microsecondsSinceEpoch}',
+    );
+    final output = Directory(root);
+    addTearDown(() {
+      if (output.existsSync()) output.deleteSync(recursive: true);
+    });
+
+    final cases = <({List<String> arguments, String error})>[
+      (
+        arguments: <String>[
+          '--server-only',
+          '--server-artifact',
+          p.relative(p.join(root, 'server'), from: project.path),
+          '--output',
+          p.relative(p.join(root, 'server'), from: project.path),
+        ],
+        error:
+            'Generated route outputs and server artifact outputs must not '
+            'overlap.\n',
+      ),
+      (
+        arguments: <String>[
+          '--no-server',
+          '--prerender-output',
+          p.relative(root, from: project.path),
+          '--server-output',
+          p.relative(p.join(root, 'routes.server.dart'), from: project.path),
+        ],
+        error:
+            'Generated route outputs and --prerender-output must not '
+            'overlap.\n',
+      ),
+    ];
+
+    for (final buildCase in cases) {
+      final errors = StringBuffer();
+      final code = await runOdroe(
+        <String>['build', '--project', project.path, ...buildCase.arguments],
+        output: StringBuffer(),
+        errors: errors,
+      );
+
+      expect(code, 64, reason: '${buildCase.arguments}');
+      expect(errors.toString(), buildCase.error);
+      expect(output.existsSync(), isFalse);
+    }
+  });
+
+  test('route source cannot overlap destructive build outputs', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final state = Directory(
+      p.join(
+        project.path,
+        'build',
+        'route-build-overlap-$pid-${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (state.existsSync()) state.deleteSync(recursive: true);
+    });
+    final routes = Directory(p.join(state.path, 'output', 'routes'))
+      ..createSync(recursive: true);
+    final source = File(p.join(routes.path, 'route.dart'))
+      ..writeAsStringSync(r'''
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
+
+final route = AppRoute<NoParams, NoSearch, NoData>().document(
+  (_) => const RouteDocument(title: 'Protected route', body: HtmlText('ok')),
+);
+''');
+    final cases = <({List<String> arguments, String error})>[
+      (
+        arguments: <String>[
+          '--no-server',
+          '--routes',
+          p.relative(routes.path, from: project.path),
+          '--prerender-output',
+          p.relative(routes.parent.path, from: project.path),
+        ],
+        error: 'Route source and --prerender-output must not overlap.\n',
+      ),
+      (
+        arguments: <String>[
+          '--server-only',
+          '--routes',
+          p.relative(routes.path, from: project.path),
+          '--server-artifact',
+          p.relative(p.join(routes.path, 'server'), from: project.path),
+        ],
+        error: 'Route source and server artifact outputs must not overlap.\n',
+      ),
+    ];
+
+    for (final buildCase in cases) {
+      final errors = StringBuffer();
+      final code = await runOdroe(
+        <String>['build', '--project', project.path, ...buildCase.arguments],
+        output: StringBuffer(),
+        errors: errors,
+      );
+
+      expect(code, 64, reason: '${buildCase.arguments}');
+      expect(errors.toString(), buildCase.error);
+      expect(source.readAsStringSync(), contains('Protected route'));
+    }
+  });
+
+  test(
+    'Flutter output cannot overlap Odroe sources or server outputs',
+    () async {
+      final project = Directory('sites/odroe.dev').absolute;
+      final state = Directory(
+        p.join(
+          project.path,
+          'build',
+          'flutter-overlap-$pid-${DateTime.now().microsecondsSinceEpoch}',
+        ),
+      )..createSync(recursive: true);
+      addTearDown(() {
+        if (state.existsSync()) state.deleteSync(recursive: true);
+      });
+      final webRoot = Directory(p.join(project.path, 'build', 'web'))
+        ..createSync(recursive: true);
+      final migrationSource = Directory(p.join(webRoot.path, 'migrations'))
+        ..createSync();
+      final migration = File(p.join(migrationSource.path, '0001_probe.sql'))
+        ..writeAsStringSync('SELECT 1;');
+      final routeSource = Directory(p.join(webRoot.path, 'routes'))
+        ..createSync();
+      final route = File(p.join(routeSource.path, 'route.dart'))
+        ..writeAsStringSync(r'''
+import 'package:odroe/router.dart';
+
+final route = AppRoute<NoParams, NoSearch, NoData>();
+''');
+      final linkedOutput = Platform.isWindows
+          ? null
+          : (Link(p.join(state.path, 'linked-output'))
+              ..createSync(routeSource.path));
+      addTearDown(() {
+        if (webRoot.existsSync()) webRoot.deleteSync(recursive: true);
+      });
+      final relativeState = p.relative(state.path, from: project.path);
+      final cases = <({List<String> arguments, String error})>[
+        (
+          arguments: <String>[
+            '--no-prerender',
+            '--server-artifact',
+            'build/web/server',
+            '--',
+            'web',
+          ],
+          error:
+              'Flutter build output and server artifact outputs must not '
+              'overlap.\n',
+        ),
+        (
+          arguments: <String>[
+            '--no-prerender',
+            '--server-artifact',
+            '$relativeState/output-dir/server',
+            '--',
+            'web',
+            '--output-dir=$relativeState/output-dir',
+          ],
+          error:
+              'Flutter build output and server artifact outputs must not '
+              'overlap.\n',
+        ),
+        (
+          arguments: <String>[
+            '--no-prerender',
+            '--server-artifact',
+            '$relativeState/repeated/server',
+            '--',
+            'web',
+            '--output',
+            '$relativeState/safe',
+            '--output-dir=$relativeState/repeated',
+          ],
+          error:
+              'Flutter build output and server artifact outputs must not '
+              'overlap.\n',
+        ),
+        (
+          arguments: <String>[
+            '--no-prerender',
+            '--sqlite-migrations',
+            p.relative(migrationSource.path, from: project.path),
+            '--',
+            'web',
+          ],
+          error:
+              'Flutter build output and SQLite migration source must not '
+              'overlap.\n',
+        ),
+        (
+          arguments: <String>[
+            '--no-server',
+            '--no-prerender',
+            '--routes',
+            p.relative(routeSource.path, from: project.path),
+            '--',
+            'web',
+          ],
+          error: 'Flutter build output and route source must not overlap.\n',
+        ),
+        if (linkedOutput != null)
+          (
+            arguments: <String>[
+              '--no-server',
+              '--no-prerender',
+              '--routes',
+              p.relative(routeSource.path, from: project.path),
+              '--',
+              'web',
+              '--output',
+              p.relative(linkedOutput.path, from: project.path),
+            ],
+            error: 'Flutter build output and route source must not overlap.\n',
+          ),
+        (
+          arguments: <String>[
+            '--no-server',
+            '--no-prerender',
+            '--output',
+            'build/web/routes.dart',
+            '--',
+            'web',
+          ],
+          error:
+              'Flutter build output and generated route outputs must not '
+              'overlap.\n',
+        ),
+        (
+          arguments: <String>[
+            '--no-prerender',
+            '--server-artifact',
+            '$relativeState/custom/server',
+            '--',
+            'web',
+            '--output',
+            '$relativeState/custom',
+          ],
+          error:
+              'Flutter build output and server artifact outputs must not '
+              'overlap.\n',
+        ),
+        (
+          arguments: <String>[
+            '--no-prerender',
+            '--server-artifact',
+            'build/app/server',
+            '--',
+            'apk',
+          ],
+          error:
+              'Flutter build output and server artifact outputs must not '
+              'overlap.\n',
+        ),
+      ];
+
+      for (final buildCase in cases) {
+        final errors = StringBuffer();
+        final code = await runOdroe(
+          <String>['build', '--project', project.path, ...buildCase.arguments],
+          output: StringBuffer(),
+          errors: errors,
+        );
+
+        expect(code, 64, reason: '${buildCase.arguments}');
+        expect(errors.toString(), buildCase.error);
+        expect(migration.readAsStringSync(), 'SELECT 1;');
+        expect(route.readAsStringSync(), contains('AppRoute'));
+      }
+    },
+  );
+
+  test('Flutter configured build root participates in overlap checks', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final state = await Directory.systemTemp.createTemp(
+      'odroe-flutter-build-root-',
+    );
+    addTearDown(() => state.delete(recursive: true));
+    final home = Directory(p.join(state.path, 'home'))..createSync();
+    final xdg = Directory(p.join(state.path, 'xdg'))..createSync();
+    final settings = Platform.isWindows
+        ? File(p.join(home.path, '.flutter_settings'))
+        : File(p.join(xdg.path, 'settings'));
+    settings.writeAsStringSync(
+      jsonEncode(<String, Object?>{'build-dir': 'build/odroe'}),
+    );
+
+    final root = Directory.current.absolute;
+    final build = await runTestProcess(
+      dartExecutable,
+      <String>[
+        '--packages=${p.join(root.path, '.dart_tool', 'package_config.json')}',
+        p.join(root.path, 'bin', 'odroe.dart'),
+        'build',
+        '--project',
+        project.path,
+        '--no-prerender',
+        '--server-artifact',
+        'build/odroe/web/server',
+        '--',
+        'web',
+      ],
+      timeout: const Duration(seconds: 30),
+      environment: <String, String>{
+        ...Platform.environment,
+        'HOME': home.path,
+        'APPDATA': home.path,
+        'XDG_CONFIG_HOME': xdg.path,
+      },
+    );
+
+    expect(build.exitCode, 64, reason: '${build.stdout}\n${build.stderr}');
+    expect(
+      build.stderr,
+      contains(
+        'Flutter build output and server artifact outputs must not overlap.',
+      ),
+    );
+    expect(
+      File(
+        p.join(project.path, 'build', 'odroe', 'web', 'server'),
+      ).existsSync(),
+      isFalse,
+    );
+
+    if (!Platform.isWindows) {
+      final withoutHome = await runTestProcess(
+        dartExecutable,
+        <String>[
+          '--packages=${p.join(root.path, '.dart_tool', 'package_config.json')}',
+          p.join(root.path, 'bin', 'odroe.dart'),
+          'build',
+          '--project',
+          project.path,
+          '--no-prerender',
+          '--server-artifact',
+          'build/odroe/web/server',
+          '--',
+          'web',
+        ],
+        timeout: const Duration(seconds: 30),
+        environment: <String, String>{
+          ...Platform.environment,
+          'HOME': '',
+          'XDG_CONFIG_HOME': xdg.path,
+        },
+      );
+
+      expect(
+        withoutHome.exitCode,
+        64,
+        reason: '${withoutHome.stdout}\n${withoutHome.stderr}',
+      );
+      expect(
+        withoutHome.stderr,
+        contains(
+          'Flutter build output and server artifact outputs must not overlap.',
+        ),
+      );
     }
   });
 
@@ -305,6 +880,63 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
   );
 
   test(
+    'prerender manifest imports the current generated route snapshot',
+    () async {
+      for (final staleSnapshot in <bool>[false, true]) {
+        final project = await _createDocumentFixture();
+        addTearDown(() => project.delete(recursive: true));
+        if (staleSnapshot) {
+          final code = await runOdroe(
+            <String>['generate', '--project', project.path],
+            output: StringBuffer(),
+            errors: StringBuffer(),
+          );
+          expect(code, 0);
+        }
+
+        final fresh = File(
+          p.join(project.path, 'lib', 'routes', 'fresh', 'route.dart'),
+        );
+        await fresh.parent.create(recursive: true);
+        await fresh.writeAsString(r'''
+import 'package:odroe/router.dart';
+
+final route = AppRoute<NoParams, NoSearch, NoData>();
+''');
+        await File(p.join(project.path, 'lib', 'prerender.dart')).writeAsString(
+          r'''
+import 'routes.dart' as generated;
+
+Future<Iterable<Uri>> prerenderLocations() async {
+  generated.routes.fresh.hashCode;
+  return <Uri>[Uri(path: '/')];
+}
+''',
+        );
+
+        final build = await _runDart(<String>[
+          'run',
+          'odroe',
+          'build',
+          '--project',
+          project.path,
+          '--no-server',
+        ]);
+        final logs = '${build.stdout}\n${build.stderr}';
+
+        expect(build.exitCode, 0, reason: 'stale=$staleSnapshot\n$logs');
+        expect(
+          await File(
+            p.join(project.path, 'build', 'web', 'index.html'),
+          ).readAsString(),
+          contains('fresh route'),
+        );
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
     'prerender ignores same-path HTML from public',
     () async {
       final project = await _createDocumentFixture();
@@ -354,12 +986,19 @@ Server createServer() {
   if (path == null || path.isEmpty) {
     throw StateError('ODROE_SQLITE_PATH is required during prerender.');
   }
+  final migrations = Platform.environment['ODROE_MIGRATIONS_PATH'];
+  if (migrations == null || migrations.isEmpty) {
+    throw StateError('ODROE_MIGRATIONS_PATH is required during prerender.');
+  }
   File(path).writeAsStringSync('prerender state');
   stderr.writeln('ODROE_TEST_STATE=$path');
+  stderr.writeln('ODROE_TEST_MIGRATIONS=$migrations');
   return generated.createServer();
 }
 ''');
     final inheritedState = File(p.join(project.path, 'inherited-app.sqlite3'));
+    final inheritedMigrations = p.join(project.path, 'inherited-migrations');
+    await Directory(p.join(project.path, 'migrations')).create();
 
     final build = await _runDart(
       <String>[
@@ -369,10 +1008,13 @@ Server createServer() {
         '--project',
         project.path,
         '--no-server',
+        '--sqlite-migrations',
+        'migrations',
       ],
       environment: <String, String>{
         ...Platform.environment,
         'ODROE_SQLITE_PATH': inheritedState.path,
+        'ODROE_MIGRATIONS_PATH': inheritedMigrations,
       },
     );
     final logs = '${build.stdout}\n${build.stderr}';
@@ -387,7 +1029,81 @@ Server createServer() {
     expect(p.equals(isolatedPath, inheritedState.path), isFalse);
     expect(File(isolatedPath).existsSync(), isFalse);
     expect(Directory(p.dirname(isolatedPath)).existsSync(), isFalse);
+    final migrationMarker = RegExp(
+      r'ODROE_TEST_MIGRATIONS=([^\r\n]+)',
+    ).firstMatch(build.stderr);
+    expect(migrationMarker, isNotNull, reason: logs);
+    expect(
+      p.normalize(migrationMarker!.group(1)!),
+      p.normalize(p.join(project.path, 'migrations')),
+    );
+    expect(p.equals(migrationMarker.group(1)!, inheritedMigrations), isFalse);
   });
+
+  test(
+    'native prerender consumes the published migration sidecar',
+    () async {
+      final project = await _createDocumentFixture();
+      addTearDown(() => project.delete(recursive: true));
+      final migrationSource = Directory(p.join(project.path, 'migrations'))
+        ..createSync();
+      final migration = File(p.join(migrationSource.path, '0001_probe.sql'))
+        ..writeAsStringSync('SELECT 1;');
+      final marker = File(p.join(project.path, 'selected-migration.txt'));
+      await File(p.join(project.path, 'lib', 'server.dart')).writeAsString(r'''
+import 'dart:io';
+
+import 'package:odroe/server.dart';
+
+import 'routes.server.dart' as generated;
+
+Server createServer() {
+  final selected = Platform.environment['ODROE_MIGRATIONS_PATH'];
+  if (selected == null || selected.isEmpty) {
+    throw StateError('ODROE_MIGRATIONS_PATH is required during prerender.');
+  }
+  File('migrations/0001_probe.sql').writeAsStringSync('SELECT 2;');
+  final selectedSql = File(
+    '$selected${Platform.pathSeparator}0001_probe.sql',
+  ).readAsStringSync();
+  File('selected-migration.txt').writeAsStringSync('$selected\n$selectedSql');
+  return generated.createServer();
+}
+''');
+      final artifact = File(
+        p.join(project.path, 'build', 'odroe', 'snapshot', 'server'),
+      );
+
+      final build = await _runDart(<String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--server-artifact',
+        p.relative(artifact.path, from: project.path),
+        '--sqlite-migrations',
+        'migrations',
+      ]);
+      final logs = '${build.stdout}\n${build.stderr}';
+
+      expect(build.exitCode, 0, reason: logs);
+      final selected = marker.readAsLinesSync();
+      expect(
+        p.normalize(selected.first),
+        p.normalize(p.join(artifact.parent.path, 'migrations')),
+      );
+      expect(selected.skip(1).join('\n'), 'SELECT 1;');
+      expect(migration.readAsStringSync(), 'SELECT 2;');
+      expect(
+        File(
+          p.join(artifact.parent.path, 'migrations', '0001_probe.sql'),
+        ).readAsStringSync(),
+        'SELECT 1;',
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
 
   test(
     'failed artifact-free prerender preserves the previous website output',
@@ -437,8 +1153,9 @@ Server createServer() {
 
   final wrangler = Platform.environment['ODROE_WRANGLER'];
   test(
-    'generated Worker serves requests in local Workerd',
+    'generated Worker upgrades legacy D1 and serves requests in local Workerd',
     () async {
+      final wranglerExecutable = wrangler!;
       final project = Directory('example/app').absolute;
       final output = Directory(
         '${project.path}/build/odroe/cloudflare-workerd-test',
@@ -468,10 +1185,12 @@ Server createServer() {
         ..['main'] = 'worker.mjs';
       final databases = (sourceConfig['d1_databases']! as List<Object?>)
           .cast<Map<String, Object?>>();
-      databases.single['migrations_dir'] = p.relative(
-        p.join(project.path, 'migrations'),
-        from: output.path,
-      );
+      final migrations = Directory(p.join(output.path, 'migrations'))
+        ..createSync();
+      File(
+        p.join(migrations.path, '0001_posts.sql'),
+      ).writeAsStringSync(_legacyPostsMigration);
+      databases.single['migrations_dir'] = 'migrations';
       expect(sourceConfig['compatibility_date'], '2026-08-01');
       expect(sourceConfig['compatibility_flags'], <String>[
         'enable_request_signal',
@@ -495,14 +1214,10 @@ Server createServer() {
         'WRANGLER_LOG_PATH': '${runtime.path}/wrangler.log',
         'XDG_CONFIG_HOME': xdgConfig.path,
       };
-      final migration = await Process.run(
-        wrangler!,
+      Future<ProcessResult> runWrangler(List<String> arguments) => Process.run(
+        wranglerExecutable,
         <String>[
-          'd1',
-          'migrations',
-          'apply',
-          'DB',
-          '--local',
+          ...arguments,
           '--config',
           config.path,
           '--persist-to',
@@ -512,11 +1227,64 @@ Server createServer() {
         environment: wranglerEnvironment,
         includeParentEnvironment: true,
       ).timeout(const Duration(seconds: 30));
+
+      final legacyMigration = await runWrangler(<String>[
+        'd1',
+        'migrations',
+        'apply',
+        'DB',
+        '--local',
+      ]);
+      expect(
+        legacyMigration.exitCode,
+        0,
+        reason: '${legacyMigration.stdout}\n${legacyMigration.stderr}',
+      );
+      final existingPost = await runWrangler(<String>[
+        'd1',
+        'execute',
+        'DB',
+        '--local',
+        '--command',
+        "INSERT INTO posts (id, title) VALUES (43, 'Existing D1 post')",
+      ]);
+      expect(
+        existingPost.exitCode,
+        0,
+        reason: '${existingPost.stdout}\n${existingPost.stderr}',
+      );
+
+      for (final name in <String>['0001_posts.sql', '0002_unify_posts.sql']) {
+        await File(
+          p.join(project.path, 'migrations', name),
+        ).copy(p.join(migrations.path, name));
+      }
+      final migration = await runWrangler(<String>[
+        'd1',
+        'migrations',
+        'apply',
+        'DB',
+        '--local',
+      ]);
       expect(
         migration.exitCode,
         0,
         reason: '${migration.stdout}\n${migration.stderr}',
       );
+      expect(migration.stdout, contains('0002_unify_posts.sql'));
+      final repeatedMigration = await runWrangler(<String>[
+        'd1',
+        'migrations',
+        'apply',
+        'DB',
+        '--local',
+      ]);
+      expect(
+        repeatedMigration.exitCode,
+        0,
+        reason: '${repeatedMigration.stdout}\n${repeatedMigration.stderr}',
+      );
+      expect(repeatedMigration.stdout, contains('No migrations to apply'));
       final port = await _unusedPort();
       var inspectorPort = await _unusedPort();
       while (inspectorPort == port) {
@@ -524,7 +1292,7 @@ Server createServer() {
       }
 
       final process = await Process.start(
-        wrangler,
+        wranglerExecutable,
         <String>[
           'dev',
           '--config',
@@ -591,7 +1359,7 @@ Server createServer() {
           queryParameters: <String, String>{
             'payload': jsonEncode(<String, Object?>{
               'data': <String, Object?>{
-                'ids': <int>[42, 404],
+                'ids': <int>[42, 43, 404],
                 'sort': 'newest',
               },
             }),
@@ -606,7 +1374,8 @@ Server createServer() {
         'version': 1,
         'type': 'data',
         'data': <Object?>[
-          <String, Object?>{'id': 42, 'title': 'D1 post 42'},
+          <String, Object?>{'id': 43, 'title': 'Existing D1 post'},
+          <String, Object?>{'id': 42, 'title': 'Odroe post 42'},
         ],
       });
 
@@ -803,6 +1572,15 @@ Server createServer() {
     timeout: const Timeout(Duration(minutes: 3)),
   );
 }
+
+const _legacyPostsMigration = '''
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL
+) STRICT;
+
+INSERT INTO posts (id, title) VALUES (42, 'D1 post 42');
+''';
 
 Future<Directory> _createDocumentFixture() async {
   final project = await Directory.systemTemp.createTemp(

@@ -10,21 +10,20 @@ import '../database/error.dart';
 import '../database/result.dart';
 import '../database/row.dart';
 import '../database/statement.dart';
+import 'migration.dart';
 
 /// A native SQLite database with serialized access.
 final class SqliteDatabase implements TransactionalSqlDatabase {
   /// Opens the SQLite database at [path].
   factory SqliteDatabase.open(String path) {
     return SqliteDatabase._(
-      _runSqlite(() => sqlite.sqlite3.open(path), operation: 'open'),
+      _openSqliteDatabase(() => sqlite.sqlite3.open(path)),
     );
   }
 
   /// Opens a private in-memory SQLite database.
   factory SqliteDatabase.openInMemory() {
-    return SqliteDatabase._(
-      _runSqlite(sqlite.sqlite3.openInMemory, operation: 'open'),
-    );
+    return SqliteDatabase._(_openSqliteDatabase(sqlite.sqlite3.openInMemory));
   }
 
   SqliteDatabase._(this._database) {
@@ -63,6 +62,16 @@ final class SqliteDatabase implements TransactionalSqlDatabase {
   Future<List<SqlWriteResult>> atomicWrite(List<BoundSql> statements) {
     final batch = List<BoundSql>.unmodifiable(statements);
     return _schedule(() => _atomicWrite(batch));
+  }
+
+  /// Applies pending native SQLite [migrations] in numeric order.
+  ///
+  /// Each complete SQL script and its history row commit atomically. Applied
+  /// SQL strings are verified exactly and must never be edited, removed, or
+  /// renamed. Returns the number of migrations applied by this call.
+  Future<int> applyMigrations(Iterable<SqliteMigration> migrations) {
+    final snapshot = List<SqliteMigration>.unmodifiable(migrations);
+    return _schedule(() => _applyMigrations(snapshot));
   }
 
   @override
@@ -222,6 +231,340 @@ final class SqliteDatabase implements TransactionalSqlDatabase {
     }
   }
 
+  int _applyMigrations(Iterable<SqliteMigration> source) {
+    final migrations = source.toList(growable: false)
+      ..sort((left, right) {
+        final version = left.version.compareTo(right.version);
+        return version == 0 ? left.name.compareTo(right.name) : version;
+      });
+    for (var index = 1; index < migrations.length; index++) {
+      if (migrations[index - 1].version == migrations[index].version) {
+        throw SqliteMigrationException(
+          'Migration version ${migrations[index].version} is duplicated.',
+        );
+      }
+    }
+    for (final migration in migrations) {
+      _validateMigrationScript(migration);
+    }
+
+    _runMigrationOperation(
+      () => _database.execute('PRAGMA writable_schema = OFF'),
+      message: 'Could not secure the SQLite migration connection.',
+    );
+    _runMigrationOperation(
+      () => _database.execute(_createMigrationHistorySql),
+      message: 'Could not initialize the SQLite migration history.',
+    );
+    var appliedVersions = _verifyMigrationHistory(migrations);
+    var observedDataVersion = _databaseDataVersion();
+    var verifiedUnderWriteLock = false;
+
+    var applied = 0;
+    for (final migration in migrations) {
+      if (appliedVersions.contains(migration.version)) continue;
+
+      final previousCommitFilter = _database.commitFilter;
+      var allowCommit = false;
+      _database.commitFilter = () {
+        return allowCommit && (previousCommitFilter?.call() ?? true);
+      };
+      try {
+        _control('BEGIN IMMEDIATE');
+        final dataVersion = _databaseDataVersion();
+        if (!verifiedUnderWriteLock ||
+            dataVersion != observedDataVersion ||
+            _migrationHistoryCount() != appliedVersions.length) {
+          appliedVersions = _verifyMigrationHistory(migrations);
+          observedDataVersion = dataVersion;
+          verifiedUnderWriteLock = true;
+        }
+        if (appliedVersions.contains(migration.version)) {
+          allowCommit = true;
+          _control('COMMIT');
+          continue;
+        }
+        final historyCount = _migrationHistoryCount();
+        _runMigrationOperation(
+          () => _executeMigrationScript(migration),
+          message: 'Migration failed and was rolled back.',
+          migration: migration.name,
+        );
+        if (_database.autocommit || _migrationHistoryCount() != historyCount) {
+          throw SqliteMigrationException(
+            'Migration scripts cannot modify the Odroe migration history.',
+            migration: migration.name,
+          );
+        }
+        _verifyMigrationHistorySchema();
+        _runMigrationOperation(
+          () => _database.execute(
+            'INSERT INTO main._odroe_migrations (version, name, sql) '
+            'VALUES (?, ?, ?)',
+            <Object?>[migration.version, migration.name, migration.sql],
+          ),
+          message: 'Migration history could not be recorded.',
+          migration: migration.name,
+        );
+        final recorded = _readMigration(migration.version);
+        if (recorded == null || _migrationHistoryCount() != historyCount + 1) {
+          throw SqliteMigrationException(
+            'Migration history could not be verified before commit.',
+            migration: migration.name,
+          );
+        }
+        _verifyMigration(migration, recorded);
+        allowCommit = true;
+        _control('COMMIT');
+        appliedVersions.add(migration.version);
+        observedDataVersion = _databaseDataVersion();
+        applied++;
+      } on Object catch (error, stackTrace) {
+        _rollback();
+        final failure = error is SqliteMigrationException
+            ? error
+            : SqliteMigrationException(
+                'Migration failed and was rolled back.',
+                migration: migration.name,
+                cause: error,
+              );
+        Error.throwWithStackTrace(failure, stackTrace);
+      } finally {
+        _database.commitFilter = previousCommitFilter;
+        _synchronizeTotalChanges();
+      }
+    }
+    return applied;
+  }
+
+  Set<int> _verifyMigrationHistory(List<SqliteMigration> migrations) {
+    _verifyMigrationHistorySchema();
+    final available = <int, SqliteMigration>{
+      for (final migration in migrations) migration.version: migration,
+    };
+    final rows = _readMigrationHistory();
+    final appliedVersions = <int>{};
+    var latest = 0;
+    for (final applied in rows) {
+      appliedVersions.add(applied.version);
+      final migration = available[applied.version];
+      if (migration == null) {
+        throw SqliteMigrationException(
+          'Applied migration ${applied.name} is missing or was renamed.',
+          migration: applied.name,
+        );
+      }
+      _verifyMigration(migration, applied);
+      latest = applied.version;
+    }
+    for (final migration in migrations) {
+      if (migration.version < latest &&
+          !appliedVersions.contains(migration.version)) {
+        throw SqliteMigrationException(
+          'A lower-numbered migration cannot be inserted after version '
+          '$latest.',
+          migration: migration.name,
+        );
+      }
+    }
+    return appliedVersions;
+  }
+
+  ({int version, String name, String sql})? _readMigration(int version) {
+    final rows = _runMigrationOperation(
+      () => _database.select(
+        'SELECT version, name, sql '
+        'FROM main._odroe_migrations WHERE version = ?',
+        <Object?>[version],
+      ),
+      message: 'Could not read the SQLite migration history.',
+    );
+    return rows.isEmpty ? null : _migrationRow(rows.single);
+  }
+
+  ({int version, String name, String sql}) _migrationRow(sqlite.Row row) {
+    final version = row.columnAt(0);
+    final name = row.columnAt(1);
+    final sql = row.columnAt(2);
+    if (version is! int || name is! String || sql is! String) {
+      throw const SqliteMigrationException(
+        'The SQLite migration history has an invalid shape.',
+      );
+    }
+    return (version: version, name: name, sql: sql);
+  }
+
+  List<_MigrationRecord> _readMigrationHistory() {
+    final rows = _runMigrationOperation(
+      () => _database.select(
+        'SELECT version, name, sql '
+        'FROM main._odroe_migrations ORDER BY version',
+      ),
+      message: 'Could not read the SQLite migration history.',
+    );
+    return <_MigrationRecord>[for (final row in rows) _migrationRow(row)];
+  }
+
+  int _migrationHistoryCount() {
+    final value = _runMigrationOperation(
+      () => _database
+          .select('SELECT count(*) FROM main._odroe_migrations')
+          .single
+          .columnAt(0),
+      message: 'Could not read the SQLite migration history.',
+    );
+    if (value is! int) {
+      throw const SqliteMigrationException(
+        'The SQLite migration history has an invalid shape.',
+      );
+    }
+    return value;
+  }
+
+  int _databaseDataVersion() {
+    final value = _runMigrationOperation(
+      () => _database.select('PRAGMA main.data_version').single.columnAt(0),
+      message: 'Could not read the SQLite data version.',
+    );
+    if (value is! int) {
+      throw const SqliteMigrationException(
+        'SQLite returned an invalid data version.',
+      );
+    }
+    return value;
+  }
+
+  void _executeMigrationScript(SqliteMigration migration) {
+    var remaining = migration.sql;
+    while (true) {
+      late final sqlite.PreparedStatement statement;
+      try {
+        statement = _database.prepare(remaining);
+      } on ArgumentError {
+        return;
+      }
+      final consumed = statement.sql.length;
+      try {
+        final keyword = _firstSqlWord(statement.sql);
+        if (_forbiddenMigrationStatements.contains(keyword)) {
+          throw SqliteMigrationException(
+            'Migration scripts cannot control transactions or connections.',
+            migration: migration.name,
+          );
+        }
+        statement.execute();
+      } finally {
+        statement.close();
+      }
+      if (consumed <= 0 || consumed > remaining.length) {
+        throw SqliteMigrationException(
+          'SQLite could not advance through the migration script.',
+          migration: migration.name,
+        );
+      }
+      remaining = remaining.substring(consumed);
+    }
+  }
+
+  void _verifyMigrationHistorySchema() {
+    final objects =
+        <
+          ({String schema, String type, String name, String table, String? sql})
+        >[];
+    for (final schema in const <String>['main', 'temp']) {
+      final rows = _runMigrationOperation(
+        () => _database.select(
+          'SELECT type, name, tbl_name, sql FROM $schema.sqlite_master',
+        ),
+        message: 'Could not verify the SQLite migration history schema.',
+      );
+      for (final row in rows) {
+        final type = row.columnAt(0);
+        final name = row.columnAt(1);
+        final table = row.columnAt(2);
+        final sql = row.columnAt(3);
+        if (type is! String ||
+            name is! String ||
+            table is! String ||
+            (sql != null && sql is! String)) {
+          throw const SqliteMigrationException(
+            'SQLite returned an invalid schema record.',
+          );
+        }
+        objects.add((
+          schema: schema,
+          type: type,
+          name: name,
+          table: table,
+          sql: sql,
+        ));
+      }
+    }
+
+    var foundTable = false;
+    var foundIndex = false;
+    for (final object in objects) {
+      if (object.schema == 'main' &&
+          object.type == 'table' &&
+          object.name == _migrationHistoryTable &&
+          object.table == _migrationHistoryTable) {
+        if (foundTable ||
+            object.sql == null ||
+            _normalizeSql(object.sql!) !=
+                _normalizeSql(_migrationHistorySchemaSql)) {
+          throw const SqliteMigrationException(
+            'The SQLite migration history schema was modified.',
+          );
+        }
+        foundTable = true;
+        continue;
+      }
+      if (object.schema == 'main' &&
+          object.type == 'index' &&
+          object.name == _migrationHistoryIndex &&
+          object.table == _migrationHistoryTable &&
+          object.sql == null) {
+        if (foundIndex) {
+          throw const SqliteMigrationException(
+            'The SQLite migration history schema was modified.',
+          );
+        }
+        foundIndex = true;
+        continue;
+      }
+      if (object.name.toLowerCase() == _migrationHistoryTable ||
+          object.table.toLowerCase() == _migrationHistoryTable ||
+          _mentionsMigrationHistory(object.sql)) {
+        throw const SqliteMigrationException(
+          'The SQLite migration history schema was modified.',
+        );
+      }
+    }
+    if (!foundTable || !foundIndex) {
+      throw const SqliteMigrationException(
+        'The SQLite migration history schema has an invalid shape.',
+      );
+    }
+  }
+
+  void _verifyMigration(
+    SqliteMigration migration,
+    ({int version, String name, String sql}) applied,
+  ) {
+    if (applied.name != migration.name) {
+      throw SqliteMigrationException(
+        'Applied migration ${applied.name} was renamed.',
+        migration: migration.name,
+      );
+    }
+    if (applied.sql != migration.sql) {
+      throw SqliteMigrationException(
+        'An applied migration was edited. Add a new migration instead.',
+        migration: migration.name,
+      );
+    }
+  }
+
   Future<T> _transaction<T>(
     Future<T> Function(SqlExecutor transaction) action,
   ) async {
@@ -284,6 +627,22 @@ final class SqliteDatabase implements TransactionalSqlDatabase {
     } on Object {
       // Preserve the primary statement or rollback failure.
     }
+  }
+}
+
+typedef _MigrationRecord = ({int version, String name, String sql});
+
+sqlite.Database _openSqliteDatabase(sqlite.Database Function() open) {
+  final database = _runSqlite(open, operation: 'open');
+  try {
+    _runSqlite(
+      () => database.execute('PRAGMA busy_timeout = 5000'),
+      operation: 'configure busy timeout',
+    );
+    return database;
+  } on Object {
+    database.close();
+    rethrow;
   }
 }
 
@@ -460,6 +819,8 @@ SqlValue _readValue(Object? value) {
 T _runSqlite<T>(T Function() action, {required String operation}) {
   try {
     return action();
+  } on SqliteMigrationException {
+    rethrow;
   } on SqlException {
     rethrow;
   } on sqlite.SqliteException catch (error) {
@@ -477,6 +838,162 @@ T _runSqlite<T>(T Function() action, {required String operation}) {
       cause: error,
     );
   }
+}
+
+T _runMigrationOperation<T>(
+  T Function() action, {
+  required String message,
+  String? migration,
+}) {
+  try {
+    return _runSqlite(action, operation: 'migration');
+  } on SqliteMigrationException {
+    rethrow;
+  } on Object catch (error) {
+    throw SqliteMigrationException(message, migration: migration, cause: error);
+  }
+}
+
+const _migrationHistoryTable = '_odroe_migrations';
+const _migrationHistoryIndex = 'sqlite_autoindex__odroe_migrations_1';
+const _migrationHistorySchemaSql = '''
+CREATE TABLE _odroe_migrations (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  sql TEXT NOT NULL,
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+) STRICT
+''';
+const _createMigrationHistorySql = '''
+CREATE TABLE IF NOT EXISTS main._odroe_migrations (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  sql TEXT NOT NULL,
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+) STRICT
+''';
+const _forbiddenMigrationStatements = <String>{
+  'attach',
+  'begin',
+  'commit',
+  'detach',
+  'end',
+  'release',
+  'rollback',
+  'savepoint',
+  'vacuum',
+};
+void _validateMigrationScript(SqliteMigration migration) {
+  if (_mentionsMigrationHistory(migration.sql) ||
+      migration.sql.toLowerCase().contains('writable_schema')) {
+    throw SqliteMigrationException(
+      'Migration scripts cannot modify the Odroe migration history.',
+      migration: migration.name,
+    );
+  }
+}
+
+String _firstSqlWord(String sql) {
+  for (final word in _sqlWords(sql)) {
+    return word;
+  }
+  return '';
+}
+
+Iterable<String> _sqlWords(String sql) sync* {
+  var index = 0;
+  while (index < sql.length) {
+    final code = sql.codeUnitAt(index);
+    if (code == 0x2d &&
+        index + 1 < sql.length &&
+        sql.codeUnitAt(index + 1) == 0x2d) {
+      index += 2;
+      while (index < sql.length) {
+        final current = sql.codeUnitAt(index++);
+        if (current == 0x0a || current == 0x0d) break;
+      }
+      continue;
+    }
+    if (code == 0x2f &&
+        index + 1 < sql.length &&
+        sql.codeUnitAt(index + 1) == 0x2a) {
+      index += 2;
+      while (index + 1 < sql.length &&
+          !(sql.codeUnitAt(index) == 0x2a &&
+              sql.codeUnitAt(index + 1) == 0x2f)) {
+        index++;
+      }
+      index = index + 1 < sql.length ? index + 2 : sql.length;
+      continue;
+    }
+    if (code == 0x27) {
+      index = _skipQuotedSql(sql, index, 0x27);
+      continue;
+    }
+    if (code == 0x22 || code == 0x60) {
+      final quote = code;
+      final start = ++index;
+      while (index < sql.length && sql.codeUnitAt(index) != quote) {
+        index++;
+      }
+      if (index > start) {
+        yield sql.substring(start, index).toLowerCase();
+      }
+      index = index < sql.length ? index + 1 : index;
+      continue;
+    }
+    if (code == 0x5b) {
+      final start = ++index;
+      while (index < sql.length && sql.codeUnitAt(index) != 0x5d) {
+        index++;
+      }
+      if (index > start) {
+        yield sql.substring(start, index).toLowerCase();
+      }
+      index = index < sql.length ? index + 1 : index;
+      continue;
+    }
+    if (_isSqlWordCode(code)) {
+      final start = index++;
+      while (index < sql.length && _isSqlWordCode(sql.codeUnitAt(index))) {
+        index++;
+      }
+      yield sql.substring(start, index).toLowerCase();
+      continue;
+    }
+    index++;
+  }
+}
+
+int _skipQuotedSql(String sql, int index, int quote) {
+  index++;
+  while (index < sql.length) {
+    if (sql.codeUnitAt(index) != quote) {
+      index++;
+      continue;
+    }
+    if (index + 1 < sql.length && sql.codeUnitAt(index + 1) == quote) {
+      index += 2;
+      continue;
+    }
+    return index + 1;
+  }
+  return index;
+}
+
+bool _isSqlWordCode(int code) {
+  return code == 0x5f ||
+      code >= 0x30 && code <= 0x39 ||
+      code >= 0x41 && code <= 0x5a ||
+      code >= 0x61 && code <= 0x7a;
+}
+
+bool _mentionsMigrationHistory(String? sql) {
+  return sql?.toLowerCase().contains(_migrationHistoryTable) ?? false;
+}
+
+String _normalizeSql(String sql) {
+  return sql.trim().replaceAll(RegExp(r'\s+'), ' ');
 }
 
 SqlException _mapSqlite(sqlite.SqliteException error) {

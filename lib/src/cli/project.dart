@@ -49,21 +49,35 @@ final class CliProject {
     if (match == null) {
       throw FormatException('pubspec.yaml must declare a valid package name.');
     }
-    final resolvedRoutesPath = _resolveProjectPath(
+    final resolvedRoutesPath = resolveProjectPath(
       root,
       routesPath,
       option: '--routes',
     );
-    final resolvedOutputPath = _resolveProjectPath(
+    final resolvedOutputPath = resolveProjectPath(
       root,
       outputPath,
       option: '--output',
     );
-    final resolvedServerOutputPath = _resolveProjectPath(
+    final resolvedServerOutputPath = resolveProjectPath(
       root,
       serverOutputPath,
       option: '--server-output',
     );
+    final resolvedPaths = <String>[
+      p.join(root.path, resolvedRoutesPath),
+      p.join(root.path, resolvedOutputPath),
+      p.join(root.path, resolvedServerOutputPath),
+    ];
+    for (var left = 0; left < resolvedPaths.length; left++) {
+      for (var right = left + 1; right < resolvedPaths.length; right++) {
+        if (_pathsOverlap(resolvedPaths[left], resolvedPaths[right])) {
+          throw const FormatException(
+            '--routes, --output, and --server-output must not overlap.',
+          );
+        }
+      }
+    }
     return CliProject._(
       root: root,
       packageName: match.group(1)!,
@@ -130,7 +144,16 @@ final class CliProject {
 Directory _absoluteDirectory(String path) =>
     Directory(p.normalize(Directory(path).absolute.path));
 
-String _resolveProjectPath(
+bool _pathsOverlap(String left, String right) {
+  final normalizedLeft = p.normalize(left).toLowerCase();
+  final normalizedRight = p.normalize(right).toLowerCase();
+  return p.equals(normalizedLeft, normalizedRight) ||
+      p.isWithin(normalizedLeft, normalizedRight) ||
+      p.isWithin(normalizedRight, normalizedLeft);
+}
+
+/// Resolves a user-selected relative path without leaving [projectRoot].
+String resolveProjectPath(
   Directory projectRoot,
   String relativePath, {
   required String option,
@@ -165,10 +188,11 @@ String _resolveProjectPath(
 FileRouteOutput? generateRoutes(
   CliProject project,
   StringSink out,
-  StringSink err,
-) {
+  StringSink err, {
+  FileRouteOutput? compiled,
+}) {
   try {
-    final result = project.compiler.write();
+    final result = project.compiler.write(compiled: compiled);
     project.writeBootstrap();
     out.writeln(
       result.changed

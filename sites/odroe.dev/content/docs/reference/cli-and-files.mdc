@@ -29,7 +29,7 @@ passed directly, for example `dart run odroe build apk`.
 | `create` | Create a guarded full-stack Flutter application | target directory, `--odroe-path`, `--platforms`, `--org`, `--project-name`, `--offline` |
 | `init` | Initialize an empty Flutter application | `--project`, `--full-stack` |
 | `generate` | Generate client and server route targets | `--routes`, `--output`, `--server-output`, `--watch` |
-| `dev` | Watch sources, run one selected server runtime, and optionally run Flutter | `--host`, `--port`, `--server-target`, `--server-only` |
+| `dev` | Watch sources, run one selected server runtime, and optionally run Flutter | `--host`, `--port`, `--server-target`, `--sqlite-migrations`, `--server-only` |
 | `build` | Build Flutter, prerendered HTML, and/or a server artifact | target and options below |
 
 `init`, `generate`, `dev`, and `build` accept `--project`, defaulting to the
@@ -64,7 +64,7 @@ owned paths, reject application source, and write transactionally. There is no
 destructive force mode.
 
 The small starter owns `lib/main.dart`, `lib/routes/route.dart`, and
-`lib/routes/page.dart`. Full-stack mode owns these 14 application files:
+`lib/routes/page.dart`. Full-stack mode owns these 15 application files:
 
 ```text
 lib/main.dart
@@ -78,6 +78,7 @@ lib/routes/route.dart
 lib/routes/page.dart
 lib/routes/server.dart
 migrations/0001_posts.sql
+migrations/0002_unify_posts.sql
 package.json
 package-lock.json
 wrangler.jsonc
@@ -129,12 +130,20 @@ dart run odroe dev -- -d chrome
 ```
 
 The default `--server-target native` runs the Dart IO server and retains the
-Flutter integration above. Cloudflare development is intentionally an explicit
-server-only path:
+Flutter integration above.
+
+For Native development, `--sqlite-migrations <path>` selects a project-relative
+SQLite history. Odroe passes the resolved directory to the server through
+`ODROE_MIGRATIONS_PATH` and watches its top-level `.sql` files. A change
+regenerates routes and restarts the Native server, which validates and applies
+pending files before listening. Cloudflare development rejects this option;
+D1 migrations remain an explicit Wrangler command.
+
+Cloudflare development is intentionally an explicit server-only path:
 
 ```sh
 npm ci
-dart run odroe build --no-server web
+dart run odroe build --no-server --sqlite-migrations migrations web
 dart run odroe dev --server-target cloudflare --server-only
 ```
 
@@ -163,6 +172,7 @@ explicit commands.
 | `--[no-]server` | on | Emit or skip a deployable server artifact |
 | `--server-target` | `native` | `native` or `cloudflare` |
 | `--server-artifact` | target-specific | Path inside the project build directory |
+| `--sqlite-migrations` | off | SQLite source directory inside the project |
 | `--[no-]prerender` | on | Generate static HTML where applicable |
 | `--prerender-output` | `build/web` | Static output inside the project |
 | `--prerender-concurrency` | `4` | Parallel prerender requests |
@@ -174,9 +184,33 @@ Native output defaults to `build/odroe/server`. Cloudflare writes
 `build/odroe/cloudflare/server.js` and `worker.mjs`. Static Document and Flutter
 output lives under `build/web` unless changed explicitly.
 
-For native prerender only, `build` overrides the child server's
+`--sqlite-migrations migrations` makes a Native build validate those
+`NNNN_snake_case.sql` files and emit a clean sibling
+`build/odroe/migrations/` directory. The opt-in avoids reserving a generic
+source path used by PostgreSQL or MySQL projects. The copy is byte-for-byte and
+nonrecursive; invalid names, duplicate versions, symbolic links, and a
+non-directory target fail the build. A hidden ownership marker binds the
+sidecar to its executable.
+Odroe refuses to replace an unmarked directory, and a later build that omits
+the option fails instead of leaving stale migrations beside a new executable.
+Cloudflare builds do not copy it because Wrangler reads the application
+directory directly.
+
+Route source cannot overlap either generated target or any destructive build
+output. Migration source, generated route targets, server artifacts, sidecars,
+and prerender output also must not overlap. Odroe validates those paths before
+writing generated code or replacing build output, and serializes Native bundle
+publication across processes. The selected Flutter target output, including an
+explicit forwarded `--output`/`--output-dir` and the effective
+`flutter config --build-dir`, is reserved from those Odroe sources and server
+artifacts as well.
+
+For native prerender, `build` overrides the child server's
 `ODROE_SQLITE_PATH` with a temporary database path and removes that directory
-after shutdown. It does not pass this override when users run the deployable
+after shutdown. When `--sqlite-migrations` is present, it also pins
+`ODROE_MIGRATIONS_PATH` to the Native artifact's published sidecar, so the
+static output and deployable bundle consume the same validated snapshot. It
+does not pass the temporary database override when users run the deployable
 server artifact.
 
 The application owns `pubspec.yaml`, platform hosts, `public/`, migrations,

@@ -73,13 +73,15 @@ libraries and the behavior each owns.
 | Flutter | App composition, Router pages and shells, Query builders, Document handoff |
 | Web | Semantic HTML, metadata, SSG/prerendering, MDC and Press content |
 | Server | Typed routes/functions, middleware, cancellation, native and Fetch hosts |
-| Data | Typed relational SQL; SQLite and PostgreSQL verified; MySQL/MariaDB and D1 Preview |
+| Data | Typed relational SQL; verified SQLite migrations and PostgreSQL; MySQL/MariaDB and D1 Preview |
 | Build | Flutter pass-through, native server, static output, Cloudflare Worker |
 
-Odroe does not currently claim a full identity-map ORM, automatic schema
-migrations, streaming database queries, mobile store release automation, or
-provider-specific deployment beyond the native and Cloudflare build targets.
-Those limits are part of the product contract, not footnotes.
+Odroe does not currently claim a full identity-map ORM, automatic or
+cross-provider schema migration, streaming database queries, mobile store
+release automation, or provider-specific deployment beyond the native and
+Cloudflare build targets. The native SQLite runner stays explicit and
+application-SQL-first. Those limits are part of the product contract, not
+footnotes.
 
 ## Choose the next page
 

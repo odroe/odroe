@@ -201,17 +201,30 @@ listener. It lends that database to requests and closes it with the server:
 FutureOr<Server> createServer() => createNativeServer(
   databasePath:
       Platform.environment['ODROE_SQLITE_PATH'] ?? '.odroe/app.sqlite3',
+  migrationsPath:
+      Platform.environment['ODROE_MIGRATIONS_PATH'] ?? 'migrations',
 );
 
-Future<Server> createNativeServer({required String databasePath}) async {
+Future<Server> createNativeServer({
+  required String databasePath,
+  String migrationsPath = 'migrations',
+}) async {
   if (databasePath.isEmpty) {
     throw ArgumentError.value(databasePath, 'databasePath', 'must not be empty');
   }
+  if (migrationsPath.isEmpty) {
+    throw ArgumentError.value(
+      migrationsPath,
+      'migrationsPath',
+      'must not be empty',
+    );
+  }
+  final migrations = readSqliteMigrations(migrationsPath);
   final databaseFile = File(databasePath).absolute;
   await databaseFile.parent.create(recursive: true);
   final database = SqliteDatabase.open(databaseFile.path);
   try {
-    await initializePostsDatabase(database);
+    await database.applyMigrations(migrations);
     return generated.createServer(
       modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
       onClose: database.close,
@@ -223,29 +236,49 @@ Future<Server> createNativeServer({required String databasePath}) async {
 }
 ```
 
-The starter bootstrap creates only its fixed initial schema. Its typed seed is
-idempotent and cannot overwrite a changed post:
+`readSqliteMigrations` performs the filesystem preflight before the database is
+opened. It accepts only top-level regular files named `NNNN_snake_case.sql`,
+orders them by numeric version, and rejects duplicate versions. The database
+runner then proves that its ledger is an exact prefix of that history before it
+executes a pending file.
 
-```dart
-await postQueries
-    .insertOnConflictDoNothing(
-      posts,
-      <SqlAssignment>[
-        posts.id.set(42),
-        posts.title.set('SQLite post 42'),
-      ],
-      target: [posts.id],
-    )
-    .execute(database);
+The starter's initial file uses `CREATE TABLE IF NOT EXISTS` and a
+conflict-ignoring seed so the previous unreleased Native starter, which had the
+same table but no ledger, can be adopted without deleting user rows. This is a
+specific starter transition; the runner never infers a baseline for arbitrary
+existing schemas.
+
+```sql
+-- migrations/0002_unify_posts.sql
+UPDATE posts
+SET title = 'Odroe post 42'
+WHERE id = 42 AND title IN ('D1 post 42', 'SQLite post 42');
+
+CREATE INDEX posts_title ON posts(title);
 ```
 
-This is not a migration runner. Future native schema changes belong to the
-application's migration process. `.odroe/app.sqlite3` is ignored local state;
-production should set `ODROE_SQLITE_PATH` to a persistent absolute path.
+After taking a `BEGIN IMMEDIATE` write lock, the runner revalidates the complete
+source and applied history. SQLite's own parser then advances statement by
+statement instead of Odroe splitting text on semicolons; the complete file and
+its ledger row still commit in one transaction. A failure rolls back only that
+file. Native stores the exact SQL string and fails if an applied file is edited,
+deleted, renamed, or backfilled below a later version. The canonical
+`main._odroe_migrations` ledger is reserved and verified before commit. There is
+no schema diff, down migration, or generated entity layer. Migration scripts
+must not contain transaction or connection control.
+
+`.odroe/app.sqlite3` is ignored local state; production should set
+`ODROE_SQLITE_PATH` to a persistent absolute path and
+`ODROE_MIGRATIONS_PATH` to the deployed immutable history when the process
+working directory is not the bundle root.
 
 Cloudflare has a different lifetime. Each Fetch invocation wraps its `DB`
-binding in `D1SqlDatabase`; `migrations/0001_posts.sql` owns schema creation.
-No SQLite FFI object is reachable from the Worker artifact.
+binding in `D1SqlDatabase`. Before starting the Worker, explicitly run the
+Wrangler migration command against the intended local or remote database;
+`cloudflare:dev` does not apply migrations. Native and D1 keep separate ledgers
+because they are separate databases, but review the same source history. No
+SQLite FFI object or startup migration runner is reachable from the Worker
+artifact.
 
 ## Read the list with Query
 
@@ -350,7 +383,7 @@ Use the project-owned, locked Cloudflare toolchain:
 
 ```sh
 npm ci
-dart run odroe build --no-server web
+dart run odroe build --no-server --sqlite-migrations migrations web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
@@ -361,7 +394,7 @@ compilation must succeed before Wrangler starts. After startup it watches Dart
 server sources and preserves the last-known-good Worker when generation or
 compilation fails. Rebuild Flutter Web explicitly after page or asset changes.
 
-The generated starter must list `D1 post 42`, create a post through D1
+The generated starter must list `Odroe post 42`, create a post through D1
 `INSERT ... RETURNING`, and list it again. The reference app additionally
 filters the list through typed ID membership and reads the created ID through
 `posts.read`. An empty title must return controlled HTTP
@@ -375,15 +408,15 @@ Adding an `excerpt` field is a vertical change:
 
 1. Add it to `Post` and, if accepted from the client, `CreatePost`.
 2. Add the typed table column and projection decoder.
-3. Add a reviewable D1 migration and the equivalent native migration.
+3. Append one reviewable SQL migration consumed by both Native and D1.
 4. Decide whether the existing RPC IDs remain compatible.
 5. Regenerate routes and fix compiler diagnostics.
 6. Update Query keys only if resource identity changed.
 7. Verify SQLite persistence and local D1 before documenting support.
 
-Do not add a repository, universal entity base class, or migration abstraction
-until repeated product code demonstrates the same problem. The visible path is
-small enough to review because each layer owns exactly one concern.
+Do not edit an applied migration, and do not add a repository or universal
+entity base class until repeated product code demonstrates the same problem.
+The visible path stays reviewable because each layer owns exactly one concern.
 
 Continue with [Database providers](/docs/guides/database-providers),
 [Query workflows](/docs/guides/query-workflows), and

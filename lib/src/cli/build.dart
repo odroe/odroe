@@ -6,6 +6,7 @@ import 'package:odroe/server_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../atomic_write.dart';
+import '../database_sqlite/migration.dart';
 import 'prerender_manifest.dart';
 import 'project.dart';
 
@@ -25,6 +26,7 @@ Future<int> runBuild(
   required bool buildServer,
   required ServerBuildTarget serverTarget,
   required String? serverArtifact,
+  required String? sqliteMigrations,
   required bool prerender,
   required String prerenderOutput,
   required int prerenderConcurrency,
@@ -35,13 +37,16 @@ Future<int> runBuild(
   required StringSink out,
   required StringSink err,
 }) async {
-  final generated = generateRoutes(project, out, err);
-  if (generated == null) return 1;
   if (serverOnly && !buildServer) {
     err.writeln('--server-only cannot be combined with --no-server.');
     return 64;
   }
-  if (!serverOnly && generated.hasFlutter && flutterArguments.isEmpty) {
+  final inspectedRoutes = project.compiler.compile();
+  if (inspectedRoutes.hasErrors) {
+    generateRoutes(project, out, err, compiled: inspectedRoutes);
+    return 1;
+  }
+  if (!serverOnly && inspectedRoutes.hasFlutter && flutterArguments.isEmpty) {
     err.writeln(
       'Choose a Flutter build target, for example: '
       'dart run odroe build apk or dart run odroe build web.',
@@ -54,7 +59,29 @@ Future<int> runBuild(
   final shouldPrerender =
       prerender &&
       !serverOnly &&
-      (!generated.hasFlutter || flutterTarget == 'web');
+      (!inspectedRoutes.hasFlutter || flutterTarget == 'web');
+  final buildsNativeServer =
+      buildServer && serverTarget == ServerBuildTarget.native;
+  if (sqliteMigrations != null && !buildsNativeServer && !shouldPrerender) {
+    err.writeln(
+      '--sqlite-migrations requires a Native server build or prerender.',
+    );
+    return 64;
+  }
+  final migrationSource = _resolveSqliteMigrations(project, sqliteMigrations);
+  final generatedRouteOutputs = <String>[
+    project.compiler.outputFile.path,
+    project.compiler.serverOutputFile.path,
+  ];
+  if (migrationSource != null &&
+      generatedRouteOutputs.any(
+        (path) => _pathsOverlap(migrationSource.path, path),
+      )) {
+    err.writeln(
+      '--sqlite-migrations and generated route outputs must not overlap.',
+    );
+    return 64;
+  }
   File? artifact;
   if (buildServer) {
     artifact = File(
@@ -64,6 +91,74 @@ Future<int> runBuild(
         option: '--server-artifact',
       ),
     );
+  }
+  final serverArtifactFile = artifact;
+  final serverOutputs = serverArtifactFile == null
+      ? const <String>[]
+      : <String>[
+          serverArtifactFile.path,
+          if (serverTarget == ServerBuildTarget.native)
+            p.join(serverArtifactFile.parent.path, 'migrations'),
+          if (serverTarget == ServerBuildTarget.cloudflare) ...<String>[
+            p.join(serverArtifactFile.parent.path, 'worker.mjs'),
+            '${serverArtifactFile.path}.deps',
+          ],
+        ];
+  if (migrationSource != null &&
+      serverOutputs.any((path) => _pathsOverlap(migrationSource.path, path))) {
+    err.writeln(
+      '--sqlite-migrations and server artifact outputs must not overlap.',
+    );
+    return 64;
+  }
+  if (serverOutputs.any(
+    (path) => generatedRouteOutputs.any(
+      (generatedPath) => _pathsOverlap(path, generatedPath),
+    ),
+  )) {
+    err.writeln(
+      'Generated route outputs and server artifact outputs must not overlap.',
+    );
+    return 64;
+  }
+  if (serverOutputs.any(
+    (path) => _pathsOverlap(path, project.compiler.routesDirectory.path),
+  )) {
+    err.writeln('Route source and server artifact outputs must not overlap.');
+    return 64;
+  }
+  final flutterOutputs = serverOnly
+      ? const <Directory>[]
+      : _flutterBuildOutputs(project, flutterTarget, flutterArguments);
+  for (final flutterOutput in flutterOutputs) {
+    if (migrationSource != null &&
+        _pathsOverlap(flutterOutput.path, migrationSource.path)) {
+      err.writeln(
+        'Flutter build output and SQLite migration source must not overlap.',
+      );
+      return 64;
+    }
+    if (_pathsOverlap(
+      flutterOutput.path,
+      project.compiler.routesDirectory.path,
+    )) {
+      err.writeln('Flutter build output and route source must not overlap.');
+      return 64;
+    }
+    if (generatedRouteOutputs.any(
+      (path) => _pathsOverlap(flutterOutput.path, path),
+    )) {
+      err.writeln(
+        'Flutter build output and generated route outputs must not overlap.',
+      );
+      return 64;
+    }
+    if (serverOutputs.any((path) => _pathsOverlap(flutterOutput.path, path))) {
+      err.writeln(
+        'Flutter build output and server artifact outputs must not overlap.',
+      );
+      return 64;
+    }
   }
   var routes = const <String>[];
   late final Directory outputDirectory;
@@ -75,15 +170,29 @@ Future<int> runBuild(
         option: '--prerender-output',
       ),
     );
-    final serverArtifactFile = artifact;
+    if (migrationSource != null &&
+        _pathsOverlap(migrationSource.path, outputDirectory.path)) {
+      err.writeln(
+        '--sqlite-migrations and --prerender-output must not overlap.',
+      );
+      return 64;
+    }
+    if (generatedRouteOutputs.any(
+      (path) => _pathsOverlap(path, outputDirectory.path),
+    )) {
+      err.writeln(
+        'Generated route outputs and --prerender-output must not overlap.',
+      );
+      return 64;
+    }
+    if (_pathsOverlap(
+      project.compiler.routesDirectory.path,
+      outputDirectory.path,
+    )) {
+      err.writeln('Route source and --prerender-output must not overlap.');
+      return 64;
+    }
     if (serverArtifactFile != null) {
-      final serverOutputs = <String>[
-        serverArtifactFile.path,
-        if (serverTarget == ServerBuildTarget.cloudflare) ...<String>[
-          p.join(serverArtifactFile.parent.path, 'worker.mjs'),
-          '${serverArtifactFile.path}.deps',
-        ],
-      ];
       if (serverOutputs.any(
         (path) => _pathsOverlap(path, outputDirectory.path),
       )) {
@@ -93,6 +202,15 @@ Future<int> runBuild(
         return 64;
       }
     }
+  }
+  final generated = generateRoutes(
+    project,
+    out,
+    err,
+    compiled: inspectedRoutes,
+  );
+  if (generated == null) return 1;
+  if (shouldPrerender) {
     try {
       routes = await loadPrerenderLocations(
         projectRoot: project.root,
@@ -110,6 +228,7 @@ Future<int> runBuild(
       project,
       target: serverTarget,
       artifact: artifact!,
+      migrationSource: migrationSource,
       out: out,
     );
     if (code != 0) return code;
@@ -139,6 +258,10 @@ Future<int> runBuild(
     final prerenderArguments = prerenderFromSource
         ? <String>['run', project.bootstrap.path]
         : const <String>[];
+    final prerenderMigrationSource =
+        migrationSource != null && !prerenderFromSource
+        ? Directory(p.join(artifact!.parent.path, 'migrations'))
+        : migrationSource;
     final code = await _prerenderBuild(
       project,
       executable: prerenderExecutable,
@@ -153,6 +276,7 @@ Future<int> runBuild(
       startupTimeout: prerenderFromSource
           ? const Duration(minutes: 1)
           : const Duration(seconds: 20),
+      migrationSource: prerenderMigrationSource,
       out: out,
       err: err,
     );
@@ -172,6 +296,133 @@ String _defaultServerArtifact(ServerBuildTarget target) => switch (target) {
   ServerBuildTarget.native => 'build/odroe/server',
   ServerBuildTarget.cloudflare => 'build/odroe/cloudflare/server.js',
 };
+
+List<Directory> _flutterBuildOutputs(
+  CliProject project,
+  String? target,
+  List<String> arguments,
+) {
+  if (target == null) return const <Directory>[];
+  final explicitOutput = switch (target) {
+    'aar' || 'ios-framework' || 'macos-framework' || 'swift-package' || 'web' =>
+      _optionValue(arguments, const <String>['--output', '--output-dir', '-o']),
+    'bundle' => _optionValue(arguments, const <String>['--asset-dir']),
+    _ => null,
+  };
+  final outputs = <String>{};
+  void add(String path) => outputs.add(p.normalize(path));
+  if (explicitOutput != null && explicitOutput.isNotEmpty) {
+    add(
+      p.isAbsolute(explicitOutput)
+          ? p.normalize(explicitOutput)
+          : p.normalize(p.join(project.root.path, explicitOutput)),
+    );
+  }
+
+  final defaultRoot = p.join(project.root.path, 'build');
+  final configuredRoot = _flutterBuildRoot(project.root).path;
+  final suffix = switch (target) {
+    'aar' => 'host',
+    'apk' || 'appbundle' => 'app',
+    'bundle' => 'flutter_assets',
+    'ios' || 'ios-framework' || 'ipa' => 'ios',
+    'linux' => 'linux',
+    'macos' || 'macos-framework' => 'macos',
+    'swift-package' =>
+      _optionValue(arguments, const <String>['--platform']) == 'macos'
+          ? 'macos'
+          : 'ios',
+    'web' => 'web',
+    'windows' => 'windows',
+    _ => null,
+  };
+  if (suffix != null && explicitOutput == null) {
+    add(p.join(configuredRoot, suffix));
+  }
+  if (target case 'aar' || 'ios-framework' || 'macos-framework') {
+    add(p.join(defaultRoot, suffix!));
+    add(p.join(configuredRoot, suffix));
+  }
+  if (target == 'swift-package') {
+    if (explicitOutput == null) {
+      add(p.join(defaultRoot, suffix!, 'SwiftPackages'));
+    }
+    add(p.join(configuredRoot, suffix!));
+  }
+  return <Directory>[
+    for (final output in outputs)
+      Directory(_realPathForOverlap(output)).absolute,
+  ];
+}
+
+Directory _flutterBuildRoot(Directory project) {
+  final environment = Platform.environment;
+  final home = environment[Platform.isWindows ? 'APPDATA' : 'HOME'] ?? '.';
+  final legacy = File(p.join(home, '.flutter_settings'));
+  final settings = Platform.isLinux || Platform.isMacOS
+      ? (legacy.existsSync()
+            ? legacy
+            : File(
+                p.join(
+                  environment['XDG_CONFIG_HOME'] ??
+                      p.join(home, '.config', 'flutter'),
+                  'settings',
+                ),
+              ))
+      : legacy;
+  var buildDirectory = 'build';
+  if (settings.existsSync()) {
+    try {
+      final decoded = jsonDecode(settings.readAsStringSync());
+      final configured = decoded is Map<String, Object?>
+          ? decoded['build-dir']
+          : null;
+      if (configured is String) {
+        buildDirectory = configured;
+      }
+    } on FormatException {
+      // Flutter ignores malformed settings and falls back to build/.
+    } on FileSystemException {
+      // Flutter reports unreadable settings later; retain the safe default.
+    }
+  }
+  if (p.isAbsolute(buildDirectory)) {
+    throw const FormatException(
+      'Flutter build-dir configuration must be relative.',
+    );
+  }
+  return Directory(p.normalize(p.join(project.path, buildDirectory))).absolute;
+}
+
+String? _optionValue(List<String> arguments, List<String> options) {
+  String? value;
+  for (var index = 0; index < arguments.length; index++) {
+    final argument = arguments[index];
+    for (final option in options) {
+      if (argument == option) {
+        value = index + 1 < arguments.length ? arguments[index + 1] : null;
+      }
+      if (argument.startsWith('$option=')) {
+        value = argument.substring(option.length + 1);
+      }
+    }
+  }
+  return value;
+}
+
+String _realPathForOverlap(String path) {
+  var existing = p.normalize(Directory(path).absolute.path);
+  final suffix = <String>[];
+  while (FileSystemEntity.typeSync(existing, followLinks: false) ==
+      FileSystemEntityType.notFound) {
+    final parent = p.dirname(existing);
+    if (p.equals(parent, existing)) break;
+    suffix.insert(0, p.basename(existing));
+    existing = parent;
+  }
+  final resolved = Directory(existing).resolveSymbolicLinksSync();
+  return p.normalize(p.joinAll(<String>[resolved, ...suffix]));
+}
 
 bool _pathsOverlap(String left, String right) {
   final normalizedLeft = p.normalize(left).toLowerCase();
@@ -253,11 +504,17 @@ Future<int> _buildServer(
   CliProject project, {
   required ServerBuildTarget target,
   required File artifact,
+  required Directory? migrationSource,
   required StringSink out,
 }) async {
   artifact.parent.createSync(recursive: true);
   if (target == ServerBuildTarget.native) {
-    return _compileNativeServer(project, artifact);
+    return _compileNativeServer(
+      project,
+      artifact,
+      migrationSource: migrationSource,
+      out: out,
+    );
   }
   return buildCloudflareServer(project, artifact: artifact, out: out);
 }
@@ -347,14 +604,307 @@ Future<void> _terminateProcess(Process process, Future<int> exitCode) async {
   }
 }
 
-Future<int> _compileNativeServer(CliProject project, File artifact) async {
+Future<int> _compileNativeServer(
+  CliProject project,
+  File artifact, {
+  required Directory? migrationSource,
+  required StringSink out,
+}) async {
   artifact.parent.createSync(recursive: true);
-  final process = await startProjectProcess(
-    Platform.resolvedExecutable,
-    <String>['compile', 'exe', project.bootstrap.path, '-o', artifact.path],
-    project: project,
+  final migrationOutput = Directory(p.join(artifact.parent.path, 'migrations'));
+  if (p.equals(artifact.path, migrationOutput.path)) {
+    throw const FormatException(
+      'Native server artifacts cannot use the name migrations.',
+    );
+  }
+  _validateNativeMigrationOutput(
+    artifact,
+    migrationOutput,
+    selected: migrationSource != null,
   );
-  return process.exitCode;
+
+  final migrations = migrationSource == null
+      ? null
+      : readSqliteMigrations(migrationSource.path);
+  final staging = artifact.parent.createTempSync('.odroe-native-');
+  final stagedArtifact = File(p.join(staging.path, p.basename(artifact.path)));
+  final stagedMigrations = migrationSource == null
+      ? null
+      : (Directory(p.join(staging.path, 'migrations'))..createSync());
+  try {
+    if (stagedMigrations != null) {
+      File(
+        p.join(stagedMigrations.path, _nativeMigrationOwnerFile),
+      ).writeAsStringSync(_nativeMigrationOwner(artifact));
+    }
+    for (final migration in migrations ?? const <SqliteMigration>[]) {
+      final stagedMigration = File(
+        p.join(stagedMigrations!.path, migration.name),
+      );
+      File(
+        p.join(migrationSource!.path, migration.name),
+      ).copySync(stagedMigration.path);
+      if (stagedMigration.readAsStringSync() != migration.sql) {
+        throw FileSystemException(
+          'SQLite migration changed while the native bundle was staged.',
+          p.join(migrationSource.path, migration.name),
+        );
+      }
+    }
+    final process = await startProjectProcess(
+      Platform.resolvedExecutable,
+      <String>[
+        'compile',
+        'exe',
+        project.bootstrap.path,
+        '-o',
+        stagedArtifact.path,
+      ],
+      project: project,
+    );
+    final code = await process.exitCode;
+    if (code != 0) return code;
+    if (migrationSource != null) {
+      verifySqliteMigrationSnapshot(migrationSource, migrations!);
+    }
+    _validateNativeMigrationOutput(
+      artifact,
+      migrationOutput,
+      selected: migrationSource != null,
+    );
+    await replaceNativeBundle(
+      stagedArtifact: stagedArtifact,
+      stagedMigrations: stagedMigrations,
+      artifact: artifact,
+      migrations: migrationOutput,
+      lockFile: File(
+        p.join(project.root.path, '.dart_tool', 'odroe', 'native-build.lock'),
+      ),
+      expectedMigrationOwner: migrationSource == null
+          ? null
+          : _nativeMigrationOwner(artifact),
+    );
+    out.writeln(
+      'Built native server -> '
+      '${p.relative(artifact.path, from: project.root.path)}',
+    );
+    if (migrations != null) {
+      out.writeln(
+        'Bundled ${migrations.length} SQLite migrations -> '
+        '${p.relative(migrationOutput.path, from: project.root.path)}',
+      );
+    }
+    return 0;
+  } finally {
+    if (staging.existsSync()) staging.deleteSync(recursive: true);
+  }
+}
+
+const _nativeMigrationOwnerFile = '.odroe-native-migrations';
+
+String _nativeMigrationOwner(File artifact) => '${p.basename(artifact.path)}\n';
+
+void _validateNativeMigrationOutput(
+  File artifact,
+  Directory output, {
+  required bool selected,
+}) {
+  final outputType = FileSystemEntity.typeSync(output.path, followLinks: false);
+  if (outputType == FileSystemEntityType.notFound) return;
+  if (outputType != FileSystemEntityType.directory) {
+    throw FileSystemException(
+      'Native migration output must be a regular directory.',
+      output.path,
+    );
+  }
+
+  if (!_isOwnedNativeMigrationOutput(output, _nativeMigrationOwner(artifact))) {
+    throw FileSystemException(
+      'Native migration output already exists but is not owned by this '
+      'server artifact. Move or remove it explicitly.',
+      output.path,
+    );
+  }
+  if (!selected) {
+    throw FileSystemException(
+      'A previous Native build bundled SQLite migrations. Pass '
+      '--sqlite-migrations again or remove the sidecar explicitly.',
+      output.path,
+    );
+  }
+}
+
+/// Atomically publishes one staged Native executable and optional migrations.
+Future<void> replaceNativeBundle({
+  required File stagedArtifact,
+  required Directory? stagedMigrations,
+  required File artifact,
+  required Directory migrations,
+  required File lockFile,
+  String? expectedMigrationOwner,
+}) async {
+  lockFile.parent.createSync(recursive: true);
+  final lock = await lockFile.open(mode: FileMode.append);
+  try {
+    await lock.lock(FileLock.blockingExclusive);
+    try {
+      _replaceNativeBundleLocked(
+        stagedArtifact: stagedArtifact,
+        stagedMigrations: stagedMigrations,
+        artifact: artifact,
+        migrations: migrations,
+        expectedMigrationOwner: expectedMigrationOwner,
+      );
+    } finally {
+      await lock.unlock();
+    }
+  } finally {
+    await lock.close();
+  }
+}
+
+void _replaceNativeBundleLocked({
+  required File stagedArtifact,
+  required Directory? stagedMigrations,
+  required File artifact,
+  required Directory migrations,
+  required String? expectedMigrationOwner,
+}) {
+  final backup = artifact.parent.createTempSync('.odroe-native-backup-');
+  final artifactBackup = File(p.join(backup.path, 'server'));
+  final migrationsBackup = Directory(p.join(backup.path, 'migrations'));
+  var artifactMoved = false;
+  var migrationsMoved = false;
+  var artifactPublished = false;
+  var migrationsPublished = false;
+  var keepBackup = false;
+  try {
+    if (artifact.existsSync()) {
+      artifact.renameSync(artifactBackup.path);
+      artifactMoved = true;
+    }
+    final migrationType = FileSystemEntity.typeSync(
+      migrations.path,
+      followLinks: false,
+    );
+    if (stagedMigrations == null &&
+        migrationType != FileSystemEntityType.notFound) {
+      throw FileSystemException(
+        'Native migration output appeared before publication. It was '
+        'preserved.',
+        migrations.path,
+      );
+    }
+    if (stagedMigrations != null &&
+        migrationType != FileSystemEntityType.notFound) {
+      if (migrationType != FileSystemEntityType.directory) {
+        throw FileSystemException(
+          'Native migration output changed before publication. It was '
+          'preserved.',
+          migrations.path,
+        );
+      }
+      migrations.renameSync(migrationsBackup.path);
+      migrationsMoved = true;
+      if (expectedMigrationOwner != null &&
+          !_isOwnedNativeMigrationOutput(
+            migrationsBackup,
+            expectedMigrationOwner,
+          )) {
+        throw FileSystemException(
+          'Native migration output changed before publication. Its contents '
+          'were preserved.',
+          migrations.path,
+        );
+      }
+    }
+    stagedArtifact.renameSync(artifact.path);
+    artifactPublished = true;
+    if (stagedMigrations != null) {
+      stagedMigrations.renameSync(migrations.path);
+      migrationsPublished = true;
+    } else if (FileSystemEntity.typeSync(migrations.path, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      throw FileSystemException(
+        'Native migration output appeared during publication. It was '
+        'preserved.',
+        migrations.path,
+      );
+    }
+  } on Object catch (error, stackTrace) {
+    try {
+      if (artifactPublished && artifact.existsSync()) artifact.deleteSync();
+      if (migrationsPublished && migrations.existsSync()) {
+        migrations.deleteSync(recursive: true);
+      }
+      if (artifactMoved) artifactBackup.renameSync(artifact.path);
+      if (migrationsMoved) migrationsBackup.renameSync(migrations.path);
+    } on Object catch (restoreError) {
+      keepBackup = true;
+      throw FileSystemException(
+        'Could not restore the previous native bundle; recover it from '
+        '${backup.path}. Build failure: $error. Restore failure: '
+        '$restoreError',
+        artifact.parent.path,
+      );
+    }
+    Error.throwWithStackTrace(error, stackTrace);
+  } finally {
+    if (!keepBackup && backup.existsSync()) {
+      backup.deleteSync(recursive: true);
+    }
+  }
+}
+
+bool _isOwnedNativeMigrationOutput(Directory output, String expectedOwner) {
+  final owner = File(p.join(output.path, _nativeMigrationOwnerFile));
+  return FileSystemEntity.typeSync(owner.path, followLinks: false) ==
+          FileSystemEntityType.file &&
+      owner.readAsStringSync() == expectedOwner;
+}
+
+/// Rejects a Native bundle when its migration source changed during compile.
+void verifySqliteMigrationSnapshot(
+  Directory source,
+  List<SqliteMigration> expected,
+) {
+  final current = readSqliteMigrations(source.path);
+  if (current.length != expected.length) {
+    throw FileSystemException(
+      'SQLite migrations changed while the native server was compiled.',
+      source.path,
+    );
+  }
+  for (var index = 0; index < current.length; index++) {
+    final left = current[index];
+    final right = expected[index];
+    if (left.version != right.version ||
+        left.name != right.name ||
+        left.sql != right.sql) {
+      throw FileSystemException(
+        'SQLite migrations changed while the native server was compiled.',
+        source.path,
+      );
+    }
+  }
+}
+
+Directory? _resolveSqliteMigrations(CliProject project, String? relativePath) {
+  if (relativePath == null) return null;
+  final resolved = resolveProjectPath(
+    project.root,
+    relativePath,
+    option: '--sqlite-migrations',
+  );
+  final directory = Directory(p.join(project.root.path, resolved)).absolute;
+  if (FileSystemEntity.typeSync(directory.path, followLinks: false) !=
+      FileSystemEntityType.directory) {
+    throw FileSystemException(
+      'SQLite migrations must be a regular directory.',
+      directory.path,
+    );
+  }
+  return directory;
 }
 
 String _cloudflareWorkerSource(String serverFile) =>
@@ -408,6 +958,7 @@ Future<int> _prerenderBuild(
   required int maxRoutes,
   required int maxResponseBytes,
   required Duration startupTimeout,
+  required Directory? migrationSource,
   required StringSink out,
   required StringSink err,
 }) async {
@@ -431,6 +982,8 @@ Future<int> _prerenderBuild(
         'ODROE_WEB_ROOT': '',
         'ODROE_FLUTTER_ORIGIN_FILE': '',
         'ODROE_SQLITE_PATH': p.join(stateDirectory.path, 'app.sqlite3'),
+        if (migrationSource != null)
+          'ODROE_MIGRATIONS_PATH': migrationSource.path,
       },
     );
   } on Object {

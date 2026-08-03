@@ -255,7 +255,13 @@ void main() {
         contains('dart run odroe create ../my_app --odroe-path .'),
       );
       expect(source, contains('dart run odroe dev -- -d chrome'));
-      expect(source, contains('dart run odroe build --no-server web'));
+      expect(
+        source,
+        contains(
+          'dart run odroe build --no-server '
+          '--sqlite-migrations migrations web',
+        ),
+      );
       expect(
         source,
         contains('dart run odroe build --no-server -- web --wasm'),
@@ -274,7 +280,8 @@ void main() {
       'server_native.dart',
       'server_cloudflare.dart',
       'routes.server.dart',
-      'migrations/0001_posts.sql',
+      '0001_posts.sql',
+      '0002_unify_posts.sql',
       'package-lock.json',
       'wrangler.jsonc',
     ]) {
@@ -285,10 +292,11 @@ void main() {
     expect(gettingStarted, contains('dart run odroe dev -- -d <device-id>'));
     expect(gettingStarted, contains('ODROE_API_ORIGIN'));
     expect(gettingStarted, contains('reuses stale HTML'));
-    expect(gettingStarted, contains('SQLite post 42'));
-    expect(gettingStarted, contains('D1 post 42'));
+    expect(gettingStarted, contains('Odroe post 42'));
     expect(gettingStarted, contains('.odroe/app.sqlite3'));
     expect(gettingStarted, contains('ODROE_SQLITE_PATH'));
+    expect(gettingStarted, contains('ODROE_MIGRATIONS_PATH'));
+    expect(gettingStarted, contains('NNNN_snake_case.sql'));
     expect(gettingStarted, contains('temporary database'));
     expect(gettingStarted, contains('serves the semantic handoff'));
     expect(gettingStarted, isNot(contains('cd ../odroe/example/app')));
@@ -316,7 +324,7 @@ void main() {
       );
       _expectInOrder(entry.key, entry.value, <String>[
         'npm ci',
-        'dart run odroe build --no-server web',
+        'dart run odroe build --no-server --sqlite-migrations migrations web',
         'npm run cloudflare:migrate:local',
         'npm run cloudflare:dev',
       ]);
@@ -352,12 +360,16 @@ void main() {
     expect(source, contains('| Flutter Web | Verified locally |'));
     expect(
       source,
-      contains('| Flutter Android and iOS | Available, not yet verified |'),
+      contains('| Flutter Android and iOS | Build verified locally |'),
     );
-    expect(source, contains('no repository build, device, or store-release'));
+    expect(source, contains('release builds Android APK and iOS'));
+    expect(source, contains('no signing, device, or store-release'));
     expect(source, contains('| Cloudflare Worker + D1 | Preview |'));
     expect(source, contains('| Remote Cloudflare deploy | Not claimed |'));
-    expect(source, contains('typed SQL, not a full ORM'));
+    expect(
+      source,
+      contains('typed SQL with a focused native SQLite SQL runner'),
+    );
     expect(source, contains('multi-row inserts are one statement'));
     expect(source, contains('do not guarantee that returned rows'));
     expect(source, contains('same exact `QueryKey<T>` data type'));
@@ -408,7 +420,20 @@ void main() {
       contains(r'$ dart run odroe create ../my_app --odroe-path .'),
     );
     expect(homepage, contains(r'$ dart run odroe dev -- -d chrome'));
-    expect(homepage, contains(r'$ dart run odroe build --no-server web'));
+    expect(
+      homepage,
+      contains(
+        r'$ dart run odroe build --no-server '
+        r'--sqlite-migrations migrations web',
+      ),
+    );
+    expect(
+      homepage,
+      contains(
+        r'$ dart run odroe build --server-only '
+        r'--sqlite-migrations migrations',
+      ),
+    );
 
     for (final entry in <String, String>{
       'README': readme,
@@ -805,7 +830,7 @@ void main() {
     _expectInOrder('Database docs', fullStack, <String>[
       'flutter pub get',
       'npm ci',
-      'dart run odroe build --no-server web',
+      'dart run odroe build --no-server --sqlite-migrations migrations web',
       'npm run cloudflare:migrate:local',
       'npm run cloudflare:dev',
     ]);
@@ -826,6 +851,9 @@ void main() {
     ).readAsString();
     final migration = await File(
       '$example/migrations/0001_posts.sql',
+    ).readAsString();
+    final secondMigration = await File(
+      '$example/migrations/0002_unify_posts.sql',
     ).readAsString();
     final exampleReadme = await File('$example/README.md').readAsString();
     final exampleFullStack = _shellBlockContaining(
@@ -856,16 +884,16 @@ void main() {
     expect(native, contains("package:odroe/database_sqlite.dart"));
     expect(native, contains('FutureOr<Server> createServer()'));
     expect(native, contains("ODROE_SQLITE_PATH']"));
+    expect(native, contains("ODROE_MIGRATIONS_PATH']"));
     expect(native, contains("'.odroe/app.sqlite3'"));
     expect(native, contains('SqliteDatabase.open(databaseFile.path)'));
-    expect(native, contains('await initializePostsDatabase(database)'));
+    expect(native, contains('readSqliteMigrations(migrationsPath)'));
+    expect(native, contains('await database.applyMigrations(migrations)'));
     expect(native, contains('DatabaseModule.borrowed(database)'));
     expect(native, contains('onClose: database.close'));
     expect(native, isNot(contains('database_d1.dart')));
-    expect(nativeDatabase, contains('CREATE TABLE IF NOT EXISTS posts'));
+    expect(nativeDatabase, isNot(contains('CREATE TABLE')));
     expect(nativeDatabase, contains('SqlTable<Post>'));
-    expect(nativeDatabase, contains('.insertOnConflictDoNothing('));
-    expect(nativeDatabase, contains('target: [posts.id]'));
     expect(nativeDatabase, isNot(contains('INSERT INTO posts')));
     expect(cloudflare, contains("package:odroe/database_d1.dart"));
     expect(cloudflare, contains('FutureOr<Server> createServer()'));
@@ -881,8 +909,11 @@ void main() {
     expect(route, isNot(contains('database_sqlite.dart')));
     expect(route, isNot(contains('database_d1.dart')));
     expect(route, isNot(contains(r'Post ${context.data}')));
-    expect(migration, contains('CREATE TABLE posts'));
+    expect(migration, contains('CREATE TABLE IF NOT EXISTS posts'));
     expect(migration, contains("VALUES (42, 'D1 post 42')"));
+    expect(migration, contains('ON CONFLICT (id) DO NOTHING'));
+    expect(secondMigration, contains("SET title = 'Odroe post 42'"));
+    expect(secondMigration, contains('CREATE INDEX posts_title'));
     expect(config['main'], './build/odroe/cloudflare/worker.mjs');
     expect(config[r'$schema'], './node_modules/wrangler/config-schema.json');
     expect(config['compatibility_date'], '2026-08-01');
@@ -890,8 +921,8 @@ void main() {
     expect(database['binding'], 'DB');
     expect(database['migrations_dir'], 'migrations');
     expect(exampleReadme, contains('Flutter\nQuery / Mutation'));
-    expect(exampleReadme, contains('SQLite post 42'));
-    expect(exampleReadme, contains('D1 post 42'));
+    expect(exampleReadme, contains('Odroe post 42'));
+    expect(exampleReadme, contains('readSqliteMigrations(path)'));
     expect(package['private'], isTrue);
     expect(package['engines'], <String, Object?>{
       'node': '>=22.0.0',
@@ -932,7 +963,7 @@ void main() {
     _expectInOrder('Example README', exampleFullStack, <String>[
       'flutter pub get',
       'npm ci',
-      'dart run odroe build --no-server web',
+      'dart run odroe build --no-server --sqlite-migrations migrations web',
       'npm run cloudflare:migrate:local',
       'npm run cloudflare:dev',
     ]);
@@ -945,7 +976,8 @@ void main() {
       deployment,
       contains('ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3'),
     );
-    expect(deployment, contains('application-owned migration'));
+    expect(deployment, contains('ODROE_MIGRATIONS_PATH=/app/migrations'));
+    expect(deployment, contains('complete append-only history'));
   });
 
   test('Constructor dependency types stay on product entrypoints', () async {

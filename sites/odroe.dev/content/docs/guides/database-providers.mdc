@@ -339,17 +339,18 @@ The native entry opens one process-owned file SQLite database, defaulting to
 `.odroe/app.sqlite3`. Initialization completes before the listener can bind,
 requests borrow it, and `Server.close()` closes it. `ODROE_SQLITE_PATH` may
 override the file; production should use an absolute path on writable persistent
-storage. Idempotent starter DDL and seed preserve existing data across restarts.
-The seed uses the same public typed conflict-target insert API as application
-code. The default relative path resolves from the server process's working
-directory.
+storage. Before opening the listener, the entry loads `migrations/*.sql` and
+calls `SqliteDatabase.applyMigrations`. `ODROE_MIGRATIONS_PATH` may override
+that directory. Both default relative paths resolve from the server process's
+working directory.
 During native prerender the CLI overrides `ODROE_SQLITE_PATH` with a temporary
-database and deletes it afterward, keeping builds independent of local state.
+database. `--sqlite-migrations` pins the selected project source, and the CLI
+deletes the database afterward, keeping builds independent of local state.
 
 The Cloudflare entry creates an invocation-owned D1 wrapper;
-`migrations/0001_posts.sql` owns its schema and seed instead of running DDL in
-the Fetch bootstrap. Native bootstrap and D1 migrations are intentionally
-separate rather than hidden behind an unproven migration abstraction.
+Wrangler applies the same top-level SQL history instead of running DDL in the
+Fetch bootstrap. Shared source does not mean shared state: Native records exact
+source in `_odroe_migrations`, while Wrangler owns `d1_migrations` in D1.
 
 The example owns a locked local Wrangler toolchain. With Node 22+ and npm 10.9+,
 its D1 path is:
@@ -357,7 +358,7 @@ its D1 path is:
 ```sh
 flutter pub get
 npm ci
-dart run odroe build --no-server web
+dart run odroe build --no-server --sqlite-migrations migrations web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
@@ -366,9 +367,9 @@ npm run cloudflare:dev
 Wrangler and watches later server changes. Initial route generation and compile
 must succeed; after startup, a failed generation or compile leaves the previous
 Worker live. The command never applies migrations or touches remote D1.
-Flutter Web and static assets remain an explicit `build --no-server web` step.
+Flutter Web and static assets remain an explicit build step.
 
-Native returns `SQLite post 42`; local D1 returns `D1 post 42`. A missing ID
+Native and local D1 both return `Odroe post 42`. A missing ID
 returns a typed RPC 404. Applying a remote migration or deploying the Worker is
 a separate state-changing operation.
 
@@ -417,7 +418,7 @@ of Odroe's public constructor signatures.
 
 | Entrypoint | Runtime | Status | Current boundary |
 | --- | --- | --- | --- |
-| `database_sqlite.dart` | Native SQLite | Verified | Real CRUD, `RETURNING`, batches, and transactions |
+| `database_sqlite.dart` | Native SQLite | Verified | Real CRUD, `RETURNING`, batches, transactions, and append-only migrations |
 | `database_postgres.dart` | Dart VM + PostgreSQL | Verified | Real single-connection, pooled concurrency, and transaction suite |
 | `database_d1.dart` | Cloudflare D1 | Preview | Optional local Wrangler/Workerd contract; atomic batches, no interactive transaction |
 | `database_mysql.dart` | Dart VM + MySQL/MariaDB | Preview | Verified with real MySQL 8.4 and MariaDB 11.8 |
@@ -442,7 +443,44 @@ artifact when binary size matters.
 
 ## Schema and migrations
 
-Keep migrations as reviewable `.sql` files. D1 uses Wrangler migrations.
-Server databases use an application-owned provider migration path. The
-generated SQLite bootstrap creates its fixed initial schema but does not evolve
-existing tables. Odroe does not add code generation or a migration abstraction.
+Native SQLite and D1 can consume one application-owned, append-only SQL history:
+
+```text
+migrations/
+├── 0001_posts.sql
+└── 0002_unify_posts.sql
+```
+
+Names must match `NNNN_snake_case.sql`; versions are unique and gaps are
+allowed. Always pass the complete history. Once a file has been applied, never
+edit, delete, or rename it, and never insert a lower version below an applied
+higher one. Append a new file instead.
+
+```dart
+final migrations = readSqliteMigrations(migrationsPath);
+final applied = await database.applyMigrations(migrations);
+```
+
+The native runner returns the number applied by this call. It serializes with
+normal driver work, takes a cross-connection write lock with `BEGIN IMMEDIATE`,
+uses SQLite's parser to execute every statement without naïvely splitting on
+semicolons, and records the complete file in the same transaction. Connections
+wait briefly for a competing SQLite writer. After taking that lock, the runner
+revalidates the complete source and applied history so two processes cannot
+accept incompatible histories. A failed current file rolls back while earlier
+files remain applied. Its reserved `main._odroe_migrations` ledger stores the
+exact SQL string; the runner verifies its canonical schema and rejects direct
+or trigger-based changes without a hash dependency.
+
+Wrangler reads the same files for D1 and maintains its own ledger. Run it as an
+explicit deployment step; do not apply migrations during a Fetch invocation.
+Wrangler records names rather than source, so immutable artifacts and review are
+still required to catch D1 history edits. Keep scripts inside the SQLite/D1
+common subset. Omit transaction and connection controls: `BEGIN`, `COMMIT`,
+`END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `ATTACH`, `DETACH`, and `VACUUM`.
+`writable_schema` and the reserved ledger name are also rejected.
+
+This is a small application-SQL runner, not a cross-provider migration
+framework. PostgreSQL and MySQL/MariaDB continue to use an application-owned
+provider path; Odroe does not generate schema diffs, entities, or down
+migrations.

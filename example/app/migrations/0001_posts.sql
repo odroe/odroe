@@ -1,6 +1,8 @@
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY,
   title TEXT NOT NULL
 ) STRICT;
 
-INSERT INTO posts (id, title) VALUES (42, 'D1 post 42');
+INSERT INTO posts (id, title)
+VALUES (42, 'D1 post 42')
+ON CONFLICT (id) DO NOTHING;

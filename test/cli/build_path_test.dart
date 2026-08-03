@@ -18,6 +18,7 @@ void main() {
     expect(code, 0);
     expect(usage, contains('--[no-]server'));
     expect(usage, contains('Emit a deployable Odroe server artifact.'));
+    expect(usage, contains('--sqlite-migrations'));
     expect(usage, contains('--prerender-crawl'));
     expect(usage, contains('Discover additional same-origin HTML links.'));
     expect(usage, contains('--prerender-concurrency'));
@@ -52,6 +53,50 @@ void main() {
       parsePrerenderReadyLine('Odroe listening on http://127.0.0.1:4321'),
       Uri.parse('http://127.0.0.1:4321'),
     );
+  });
+
+  test('SQLite migrations require a Native bundle or prerender', () async {
+    final project = await Directory.systemTemp.createTemp(
+      'odroe_build_migration_consumer_',
+    );
+    addTearDown(() => project.delete(recursive: true));
+    File(
+      p.join(project.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: migration_consumer_fixture\n');
+    Directory(p.join(project.path, 'lib', 'routes')).createSync(recursive: true);
+
+    for (final arguments in <List<String>>[
+      <String>[
+        '--server-only',
+        '--server-target',
+        ServerBuildTarget.cloudflare.name,
+      ],
+      const <String>['--no-server', '--no-prerender'],
+    ]) {
+      final errors = StringBuffer();
+      final code = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          ...arguments,
+          '--sqlite-migrations',
+          'missing',
+        ],
+        output: StringBuffer(),
+        errors: errors,
+      );
+
+      expect(code, 64, reason: arguments.join(' '));
+      expect(
+        errors.toString(),
+        contains(
+          '--sqlite-migrations requires a Native server build or prerender.',
+        ),
+        reason: arguments.join(' '),
+      );
+      expect(errors.toString(), isNot(contains('does not exist')));
+    }
   });
 
   test('build outputs cannot escape or replace project content', () async {
