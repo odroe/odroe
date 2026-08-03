@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Initialize `odroe create` starters in the current CLI process after dependency
+  resolution and canonical checkout identity validation. Keep only Flutter
+  scaffold creation and dependency resolution as child processes, avoiding a
+  redundant Dart startup and native build-hook cost while preserving staged
+  rollback, interruption handling, and no-replace publication. Commit buffered
+  initializer output only after publication, using the final project path.
 - Enable and verify SQLite foreign-key enforcement whenever a native in-memory
   or file connection opens. Reject a connection that cannot enable the safety
   setting, keep violations on the existing `SqlErrorCode.constraint` path, and

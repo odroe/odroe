@@ -39,9 +39,12 @@ current directory.
 
 `create` requires one nonexistent target whose direct parent already exists.
 It creates a private same-parent staging directory, runs
-`flutter create --empty --no-pub`, adds Odroe as a path dependency, and invokes
-the staged package's own `odroe init --full-stack`. The requested target is
-published only after all three stages succeed. The default platform set is
+`flutter create --empty --no-pub`, and adds Odroe as a path dependency. The
+current process then confirms the staged package resolves the same canonical
+Odroe checkout and reuses the full-stack initializer directly. The requested
+target is published only after the two child processes and initializer succeed.
+Initializer output is committed only after publication and names the final
+target instead of its private staging path. The default platform set is
 `android,ios,web`.
 
 Validation happens before staging. A failed Flutter create, dependency

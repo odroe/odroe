@@ -5,7 +5,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import 'initialize.dart';
 import 'no_replace_rename.dart';
+import 'project.dart';
 
 /// Runs one process used by [createProject].
 typedef CreateCommandRunner =
@@ -17,6 +19,10 @@ typedef CreateCommandRunner =
       required StringSink err,
       Map<String, String>? environment,
     });
+
+/// Initializes the staged application used by [createProject].
+typedef CreateProjectInitializer =
+    bool Function(Directory project, StringSink out, StringSink err);
 
 const _supportedPlatforms = <String>{
   'android',
@@ -38,6 +44,7 @@ Future<void> createProject({
   required StringSink out,
   required StringSink err,
   CreateCommandRunner? runCommand,
+  CreateProjectInitializer? initialize,
 }) async {
   final target = _targetDirectory(directory);
   final source = _odroeDirectory(odroePath);
@@ -133,20 +140,34 @@ Future<void> createProject({
       err: err,
       environment: flutter.environment,
     );
-    await _requireSuccess(
-      runner,
-      flutter.dartExecutable,
-      const <String>['run', 'odroe', 'init', '--full-stack'],
-      workingDirectory: staging.path,
-      stage: 'Odroe starter initialization',
-      out: out,
-      err: err,
-      environment: flutter.environment,
-    );
+    out.writeln('Odroe starter initialization...');
     _requireNotInterrupted(interruption);
+    final initializationOutput = StringBuffer();
+    final initialized = (initialize ?? _initializeFullStackProject)(
+      staging,
+      initializationOutput,
+      err,
+    );
+    // Deliver a signal queued while the synchronous initializer was running
+    // before its result can be accepted or the staging directory published.
+    await Future<void>.delayed(Duration.zero);
+    _requireNotInterrupted(interruption);
+    if (!initialized) {
+      throw ProcessException(
+        'odroe',
+        const <String>['init', '--full-stack'],
+        'Odroe starter initialization failed.',
+        1,
+      );
+    }
+    final committedOutput = initializationOutput.toString().replaceAll(
+      staging.path,
+      target.path,
+    );
     _publish(staging, target);
     published = true;
     interruption.complete();
+    out.write(committedOutput);
     out.writeln('Created the full-stack Odroe application at ${target.path}.');
   } on Object catch (error, stackTrace) {
     failure = error;
@@ -184,6 +205,17 @@ Future<void> createProject({
     Error.throwWithStackTrace(failure, failureStack!);
   }
 }
+
+bool _initializeFullStackProject(
+  Directory project,
+  StringSink out,
+  StringSink err,
+) => initializeProject(
+  CliProject.fromRoot(project.path),
+  out,
+  err,
+  fullStack: true,
+);
 
 Future<void> _requireSuccess(
   CreateCommandRunner runCommand,
@@ -398,28 +430,19 @@ void _reportSecondary(StringSink sink, String message) {
   }
 }
 
-({
-  String executable,
-  List<String> arguments,
-  Map<String, String>? environment,
-  String dartExecutable,
-})
+({String executable, List<String> arguments, Map<String, String>? environment})
 _flutterCommand() {
   final roots = _flutterRoots();
   if (!Platform.isWindows) {
     for (final root in roots) {
       final flutter = File(p.join(root, 'bin', 'flutter'));
-      final dart = File(
-        p.join(root, 'bin', 'cache', 'dart-sdk', 'bin', 'dart'),
-      );
-      if (flutter.existsSync() && dart.existsSync()) {
+      if (flutter.existsSync()) {
         return (
           executable: flutter.resolveSymbolicLinksSync(),
           arguments: const <String>[],
           environment: <String, String>{
             'FLUTTER_ROOT': Directory(root).resolveSymbolicLinksSync(),
           },
-          dartExecutable: dart.resolveSymbolicLinksSync(),
         );
       }
     }
@@ -427,7 +450,6 @@ _flutterCommand() {
       executable: 'flutter',
       arguments: const <String>[],
       environment: null,
-      dartExecutable: _dartExecutable,
     );
   }
 
@@ -469,7 +491,6 @@ _flutterCommand() {
           snapshot.resolveSymbolicLinksSync(),
         ],
         environment: environment,
-        dartExecutable: resolvedDart,
       );
     }
   }
@@ -599,11 +620,3 @@ String _unquote(String value) =>
     value.length >= 2 && value.startsWith('"') && value.endsWith('"')
     ? value.substring(1, value.length - 1)
     : value;
-
-String get _dartExecutable {
-  final resolved = Platform.resolvedExecutable;
-  if (p.basenameWithoutExtension(resolved).toLowerCase() == 'dart') {
-    return resolved;
-  }
-  return Platform.isWindows ? 'dart.exe' : 'dart';
-}

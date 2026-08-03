@@ -46,7 +46,8 @@ build hook 即使在入口未导入该 driver 时也会生成动态库。Odroe �
 ## 创建应用
 
 当前版本通过源码使用。`odroe create` 从空路径创建 Flutter 宿主、添加当前
-Odroe checkout，并由目标工程自己的 CLI 初始化完整全栈 starter：
+Odroe checkout，确认 staging 解析到同一 checkout 后在当前进程复用完整全栈
+初始化器：
 
 ```sh
 git clone https://github.com/odroe/odroe.git

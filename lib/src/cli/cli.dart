@@ -18,6 +18,7 @@ Future<int> runOdroe(
   StringSink? output,
   StringSink? errors,
   CreateCommandRunner? createCommandRunner,
+  CreateProjectInitializer? createProjectInitializer,
 }) async {
   final out = output ?? stdout;
   final err = errors ?? stderr;
@@ -172,6 +173,7 @@ Future<int> runOdroe(
         out: out,
         err: err,
         runCommand: createCommandRunner,
+        initialize: createProjectInitializer,
       );
       return 0;
     }

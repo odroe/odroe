@@ -27,10 +27,11 @@ cd ../my_app
 
 `create` requires a target that does not exist. It builds Flutter's empty
 Android, iOS, and Web scaffold in a private directory beside that target, adds
-the selected Odroe checkout, and runs the staged package's own
-`odroe init --full-stack`. Only the complete product is published to the
-requested path. A failed or interrupted stage removes the private staging
-directory; a target that appears meanwhile is preserved and publication stops.
+the selected Odroe checkout, confirms the staged project resolves that same
+checkout, and reuses the full-stack initializer in the current `create`
+process. Only the complete product is published to the requested path. A failed
+or interrupted stage removes the private staging directory; a target that
+appears meanwhile is preserved and publication stops.
 There is deliberately no `--force`. Use `--platforms`, `--org`, or
 `--project-name` when the Flutter host needs explicit values. Add `--offline`
 only when the package cache is already complete.

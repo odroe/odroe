@@ -252,6 +252,9 @@ void main() {
     final deployment = await File(
       'content/docs/guides/deployment.mdc',
     ).readAsString();
+    final cliReference = await File(
+      'content/docs/reference/cli-and-files.mdc',
+    ).readAsString();
     final readme = await File('../../README.md').readAsString();
 
     for (final source in <String>[readme, gettingStarted]) {
@@ -299,6 +302,14 @@ void main() {
     expect(gettingStarted, contains('NNNN_snake_case.sql'));
     expect(gettingStarted, contains('temporary database'));
     expect(gettingStarted, contains('serves the semantic handoff'));
+    expect(gettingStarted, contains('reuses the full-stack initializer'));
+    expect(tutorial, contains('in-process full-stack initializer'));
+    expect(cliReference, contains('two child processes and initializer'));
+    expect(cliReference, contains('committed only after publication'));
+    expect(
+      <String>[gettingStarted, tutorial, cliReference],
+      everyElement(isNot(contains("staged package's own"))),
+    );
     expect(gettingStarted, isNot(contains('cd ../odroe/example/app')));
     expect(gettingStarted, isNot(contains('/posts/42')));
 
