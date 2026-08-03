@@ -362,8 +362,9 @@ calls `SqliteDatabase.applyMigrations`. `ODROE_MIGRATIONS_PATH` may override
 that directory. Both default relative paths resolve from the server process's
 working directory.
 During native prerender the CLI overrides `ODROE_SQLITE_PATH` with a temporary
-database. `--sqlite-migrations` pins the selected project source, and the CLI
-deletes the database afterward, keeping builds independent of local state.
+database. `odroe.yaml` or `--sqlite-migrations` pins the selected project
+source, and the CLI deletes the database afterward, keeping builds independent
+of local state.
 
 The Cloudflare entry creates an invocation-owned D1 wrapper;
 Wrangler applies the same top-level SQL history instead of running DDL in the
@@ -376,7 +377,7 @@ its D1 path is:
 ```sh
 flutter pub get
 npm ci
-dart run odroe build --no-server --sqlite-migrations migrations web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```

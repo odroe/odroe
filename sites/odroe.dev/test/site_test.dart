@@ -261,13 +261,7 @@ void main() {
         contains('dart run odroe create ../my_app --odroe-path .'),
       );
       expect(source, contains('dart run odroe dev -- -d chrome'));
-      expect(
-        source,
-        contains(
-          'dart run odroe build --no-server '
-          '--sqlite-migrations migrations web',
-        ),
-      );
+      expect(source, contains('dart run odroe build --no-server web'));
       expect(
         source,
         contains('dart run odroe build --no-server -- web --wasm'),
@@ -330,7 +324,7 @@ void main() {
       );
       _expectInOrder(entry.key, entry.value, <String>[
         'npm ci',
-        'dart run odroe build --no-server --sqlite-migrations migrations web',
+        'dart run odroe build --no-server web',
         'npm run cloudflare:migrate:local',
         'npm run cloudflare:dev',
       ]);
@@ -481,20 +475,8 @@ void main() {
       contains(r'$ dart run odroe create ../my_app --odroe-path .'),
     );
     expect(homepage, contains(r'$ dart run odroe dev -- -d chrome'));
-    expect(
-      homepage,
-      contains(
-        r'$ dart run odroe build --no-server '
-        r'--sqlite-migrations migrations web',
-      ),
-    );
-    expect(
-      homepage,
-      contains(
-        r'$ dart run odroe build --server-only '
-        r'--sqlite-migrations migrations',
-      ),
-    );
+    expect(homepage, contains(r'$ dart run odroe build --no-server web'));
+    expect(homepage, contains(r'$ dart run odroe build --server-only'));
 
     for (final entry in <String, String>{
       'README': readme,
@@ -908,7 +890,7 @@ void main() {
     _expectInOrder('Database docs', fullStack, <String>[
       'flutter pub get',
       'npm ci',
-      'dart run odroe build --no-server --sqlite-migrations migrations web',
+      'dart run odroe build --no-server web',
       'npm run cloudflare:migrate:local',
       'npm run cloudflare:dev',
     ]);
@@ -933,6 +915,7 @@ void main() {
     final secondMigration = await File(
       '$example/migrations/0002_unify_posts.sql',
     ).readAsString();
+    final odroeConfig = await File('$example/odroe.yaml').readAsString();
     final exampleReadme = await File('$example/README.md').readAsString();
     final exampleFullStack = _shellBlockContaining(
       exampleReadme,
@@ -992,6 +975,7 @@ void main() {
     expect(migration, contains('ON CONFLICT (id) DO NOTHING'));
     expect(secondMigration, contains("SET title = 'Odroe post 42'"));
     expect(secondMigration, contains('CREATE INDEX posts_title'));
+    expect(odroeConfig, 'sqlite_migrations: migrations\n');
     expect(config['main'], './build/odroe/cloudflare/worker.mjs');
     expect(config[r'$schema'], './node_modules/wrangler/config-schema.json');
     expect(config['compatibility_date'], '2026-08-01');
@@ -1041,7 +1025,7 @@ void main() {
     _expectInOrder('Example README', exampleFullStack, <String>[
       'flutter pub get',
       'npm ci',
-      'dart run odroe build --no-server --sqlite-migrations migrations web',
+      'dart run odroe build --no-server web',
       'npm run cloudflare:migrate:local',
       'npm run cloudflare:dev',
     ]);

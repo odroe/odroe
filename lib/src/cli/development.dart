@@ -21,17 +21,19 @@ Future<int> runDevelopment(
     throw const FormatException('ODROE_MIGRATIONS_PATH must not be empty.');
   }
   final configuredMigrations = sqliteMigrations == null
-      ? inheritedMigrations ?? 'migrations'
+      ? inheritedMigrations ?? project.configuredSqliteMigrations
       : resolveProjectPath(
           project.root,
           sqliteMigrations,
           option: '--sqlite-migrations',
         );
-  final migrationsDirectory = Directory(
-    p.isAbsolute(configuredMigrations)
-        ? configuredMigrations
-        : p.join(project.root.path, configuredMigrations),
-  ).absolute;
+  final migrationsDirectory = configuredMigrations == null
+      ? null
+      : Directory(
+          p.isAbsolute(configuredMigrations)
+              ? configuredMigrations
+              : p.join(project.root.path, configuredMigrations),
+        ).absolute;
   final generated = generateRoutes(project, out, err);
   if (generated == null) return 1;
   final resolvedPort = port == 0 ? await _availablePort(host) : port;
@@ -96,7 +98,8 @@ Future<int> runDevelopment(
     'ODROE_PORT': '$resolvedPort',
     'ODROE_WEB_ROOT': publicDirectory.existsSync() ? publicDirectory.path : '',
     'ODROE_FLUTTER_ORIGIN_FILE': developmentOriginFile?.path ?? '',
-    'ODROE_MIGRATIONS_PATH': migrationsDirectory.path,
+    if (migrationsDirectory != null)
+      'ODROE_MIGRATIONS_PATH': migrationsDirectory.path,
   };
   Process server = await startProjectProcess(
     Platform.resolvedExecutable,
@@ -215,9 +218,9 @@ Future<int> runDevelopment(
       queueRestart(server: !flutterOnlyModification);
     }),
   );
-  if (migrationsDirectory.existsSync()) {
+  if (migrationsDirectory?.existsSync() ?? false) {
     changes.add(
-      migrationsDirectory.watch().listen((event) {
+      migrationsDirectory!.watch().listen((event) {
         if (event.path.endsWith('.sql')) queueRestart(server: true);
       }),
     );

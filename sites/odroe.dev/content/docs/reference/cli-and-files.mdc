@@ -64,7 +64,7 @@ owned paths, reject application source, and write transactionally. There is no
 destructive force mode.
 
 The small starter owns `lib/main.dart`, `lib/routes/route.dart`, and
-`lib/routes/page.dart`. Full-stack mode owns these 15 application files:
+`lib/routes/page.dart`. Full-stack mode owns these 16 application files:
 
 ```text
 lib/main.dart
@@ -79,6 +79,7 @@ lib/routes/page.dart
 lib/routes/server.dart
 migrations/0001_posts.sql
 migrations/0002_unify_posts.sql
+odroe.yaml
 package.json
 package-lock.json
 wrangler.jsonc
@@ -132,18 +133,28 @@ dart run odroe dev -- -d chrome
 The default `--server-target native` runs the Dart IO server and retains the
 Flutter integration above.
 
-For Native development, `--sqlite-migrations <path>` selects a project-relative
-SQLite history. Odroe passes the resolved directory to the server through
+For Native development, `odroe.yaml` can select one project-relative SQLite
+history:
+
+```yaml
+sqlite_migrations: migrations
+```
+
+This is the only supported key; unknown keys and unsafe paths fail before the
+command starts. Odroe passes the resolved directory through
 `ODROE_MIGRATIONS_PATH` and watches its top-level `.sql` files. A change
 regenerates routes and restarts the Native server, which validates and applies
-pending files before listening. Cloudflare development rejects this option;
-D1 migrations remain an explicit Wrangler command.
+pending files before listening. `--sqlite-migrations <path>` overrides the
+config for one command. Native development resolves
+`--sqlite-migrations` → inherited `ODROE_MIGRATIONS_PATH` → `odroe.yaml` in
+that order. Cloudflare development ignores the config and rejects the CLI
+option; D1 migrations remain an explicit Wrangler command.
 
 Cloudflare development is intentionally an explicit server-only path:
 
 ```sh
 npm ci
-dart run odroe build --no-server --sqlite-migrations migrations web
+dart run odroe build --no-server web
 dart run odroe dev --server-target cloudflare --server-only
 ```
 
@@ -172,7 +183,7 @@ explicit commands.
 | `--[no-]server` | on | Emit or skip a deployable server artifact |
 | `--server-target` | `native` | `native` or `cloudflare` |
 | `--server-artifact` | target-specific | Native bundle root or Cloudflare JavaScript path inside the project build directory |
-| `--sqlite-migrations` | off | SQLite source directory inside the project |
+| `--sqlite-migrations` | `odroe.yaml`, otherwise off | One-command SQLite source override inside the project |
 | `--[no-]prerender` | on | Generate static HTML where applicable |
 | `--prerender-output` | `build/web` | Static output inside the project |
 | `--prerender-concurrency` | `4` | Parallel prerender requests |
@@ -188,7 +199,7 @@ build/odroe/server/
 ├── bin/
 │   └── server
 ├── lib/
-└── migrations/  # only with --sqlite-migrations
+└── migrations/  # when SQLite history is selected
 ```
 
 Run it from that root with `./bin/server`, and deploy the whole directory so
@@ -197,16 +208,19 @@ instead and should run that file from the same root. Cloudflare keeps a file
 contract: it writes `build/odroe/cloudflare/server.js` and `worker.mjs`. Static
 Document and Flutter output lives under `build/web` unless changed explicitly.
 
-`--sqlite-migrations migrations` makes a Native build validate those
-`NNNN_snake_case.sql` files and emit a clean `migrations/` directory inside the
-selected bundle root. The opt-in avoids reserving a generic source path used by
-PostgreSQL or MySQL projects. The copy is byte-for-byte and nonrecursive;
+`odroe.yaml` makes the application's persistent selection explicit;
+`--sqlite-migrations <path>` overrides it for one build. Either selection makes
+a Native build validate those `NNNN_snake_case.sql` files and emit a clean
+`migrations/` directory inside the selected bundle root. With neither, Odroe
+does not reserve a generic source path used by PostgreSQL or MySQL projects.
+The copy is byte-for-byte and nonrecursive;
 invalid names, duplicate versions, symbolic links, and a non-directory target
 fail the build. A hidden ownership marker protects the complete bundle. Odroe
-refuses to replace an unmarked output, and a later build that omits the
-option fails instead of publishing a new bundle without its previously
-selected history. Cloudflare builds do not copy it because Wrangler reads the
-application directory directly. A legacy standalone executable is also
+refuses to replace an unmarked output. If neither config nor CLI selects a
+history, a later build also refuses to replace a bundle that already contains
+migrations. Cloudflare-only builds ignore `odroe.yaml` because Wrangler reads
+the application directory directly; passing `--sqlite-migrations` there is an
+error. A legacy standalone executable is also
 preserved rather than guessed into this layout; after retaining its migration
 history, move or remove that build output explicitly before the first bundle
 build.
@@ -222,12 +236,13 @@ reserved from those Odroe sources and server artifacts as well.
 
 For native prerender, `build` overrides the child server's
 `ODROE_SQLITE_PATH` with a temporary database path and removes that directory
-after shutdown. When `--sqlite-migrations` is present, it also pins
-`ODROE_MIGRATIONS_PATH` to the Native bundle's published `migrations/`
-directory, so the static output and deployable bundle consume the same
-validated snapshot. It does not pass the temporary database override when
-users run `bin/server` from the deployable bundle.
+after shutdown. When `odroe.yaml` or `--sqlite-migrations` selects a history,
+the build also pins `ODROE_MIGRATIONS_PATH`. A Native artifact prerenders from
+its published bundle snapshot; assets-only and Cloudflare builds prerender from
+the validated project source. It does not pass the temporary database override
+when users run `bin/server` from the deployable bundle.
 
-The application owns `pubspec.yaml`, platform hosts, `public/`, migrations,
-secrets, `wrangler.jsonc`, container files, and provider deployment policy.
+The application owns `pubspec.yaml`, `odroe.yaml`, platform hosts, `public/`,
+migrations, secrets, `wrangler.jsonc`, container files, and provider deployment
+policy.
 Odroe never deploys as a side effect of `build`.

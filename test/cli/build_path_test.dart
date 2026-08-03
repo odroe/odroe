@@ -19,6 +19,7 @@ void main() {
     expect(usage, contains('--[no-]server'));
     expect(usage, contains('Emit a deployable Odroe server artifact.'));
     expect(usage, contains('--sqlite-migrations'));
+    expect(usage, contains('Override odroe.yaml SQLite migrations'));
     expect(usage, contains('--prerender-crawl'));
     expect(usage, contains('Discover additional same-origin HTML links.'));
     expect(usage, contains('--prerender-concurrency'));
@@ -63,7 +64,9 @@ void main() {
     File(
       p.join(project.path, 'pubspec.yaml'),
     ).writeAsStringSync('name: migration_consumer_fixture\n');
-    Directory(p.join(project.path, 'lib', 'routes')).createSync(recursive: true);
+    Directory(
+      p.join(project.path, 'lib', 'routes'),
+    ).createSync(recursive: true);
 
     for (final arguments in <List<String>>[
       <String>[
@@ -97,6 +100,35 @@ void main() {
       );
       expect(errors.toString(), isNot(contains('does not exist')));
     }
+  });
+
+  test('build identifies a missing configured SQLite history', () async {
+    final project = await Directory.systemTemp.createTemp(
+      'odroe_build_configured_migrations_',
+    );
+    addTearDown(() => project.delete(recursive: true));
+    File(
+      p.join(project.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: configured_migrations_fixture\n');
+    File(
+      p.join(project.path, 'odroe.yaml'),
+    ).writeAsStringSync('sqlite_migrations: missing\n');
+    Directory(
+      p.join(project.path, 'lib', 'routes'),
+    ).createSync(recursive: true);
+    final errors = StringBuffer();
+
+    final code = await runOdroe(
+      <String>['build', '--project', project.path, '--server-only'],
+      output: StringBuffer(),
+      errors: errors,
+    );
+
+    expect(code, 1);
+    expect(
+      errors.toString(),
+      contains('odroe.yaml sqlite_migrations must be a regular directory.'),
+    );
   });
 
   test('build outputs cannot escape or replace project content', () async {

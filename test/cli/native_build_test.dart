@@ -12,7 +12,7 @@ import '../support/process.dart';
 
 void main() {
   test(
-    'native artifact serves SQLite RPC and routes outside the source tree',
+    'configured native artifact serves SQLite RPC outside the source tree',
     () async {
       final project = Directory('example/app').absolute;
       final artifact = Directory(
@@ -46,8 +46,6 @@ void main() {
           '--server-only',
           '--server-artifact',
           artifactPath,
-          '--sqlite-migrations',
-          'migrations',
         ], timeout: const Duration(minutes: 2)),
       );
       expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
@@ -68,7 +66,7 @@ void main() {
         final bundled = File(p.join(bundledMigrations.path, name));
         expect(bundled.readAsBytesSync(), source.readAsBytesSync());
       }
-      final staleBuild = await withDartCommandLock(
+      final rebuild = await withDartCommandLock(
         () => runTestProcess(dartExecutable, <String>[
           'run',
           'odroe',
@@ -81,14 +79,11 @@ void main() {
         ], timeout: const Duration(seconds: 30)),
       );
       expect(
-        staleBuild.exitCode,
-        1,
-        reason: '${staleBuild.stdout}\n${staleBuild.stderr}',
+        rebuild.exitCode,
+        0,
+        reason: '${rebuild.stdout}\n${rebuild.stderr}',
       );
-      expect(
-        staleBuild.stderr,
-        contains('Pass --sqlite-migrations again or remove the bundle'),
-      );
+      expect(rebuild.stdout, contains('Bundled 2 SQLite migrations'));
       expect(artifact.existsSync(), isTrue);
       expect(owner.readAsStringSync(), 'odroe-native-bundle-v1\n');
       final deployedBundle = Directory(p.join(deployment.path, 'server'));
@@ -365,7 +360,7 @@ void main() {
   test(
     'native build ignores an isolated unselected provider migration directory',
     () async {
-      final project = Directory('example/app').absolute;
+      final project = Directory('sites/odroe.dev').absolute;
       final fixture = _nativeBuildFixture(project, 'provider');
       final providerMigration = File(
         p.join(fixture.migrationSource.path, 'V1__postgres.sql'),
@@ -400,6 +395,83 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
+
+  test(
+    'native build CLI selection overrides odroe.yaml',
+    () async {
+      final project = Directory('example/app').absolute;
+      final fixture = _nativeBuildFixture(project, 'config-override');
+      File(
+        p.join(fixture.migrationSource.path, '0001_override.sql'),
+      ).writeAsStringSync('SELECT 1;');
+      addTearDown(() async {
+        if (fixture.root.existsSync()) {
+          await fixture.root.delete(recursive: true);
+        }
+      });
+
+      final build = await withDartCommandLock(
+        () => runTestProcess(dartExecutable, <String>[
+          'run',
+          'odroe',
+          'build',
+          '--project',
+          project.path,
+          '--server-only',
+          '--server-artifact',
+          p.relative(fixture.artifact.path, from: project.path),
+          '--sqlite-migrations',
+          p.relative(fixture.migrationSource.path, from: project.path),
+        ], timeout: const Duration(minutes: 2)),
+      );
+
+      expect(build.exitCode, 0, reason: '${build.stdout}\n${build.stderr}');
+      expect(build.stdout, contains('Bundled 1 SQLite migrations'));
+      expect(
+        Directory(
+          p.join(fixture.artifact.path, 'migrations'),
+        ).listSync().map((entry) => p.basename(entry.path)).toList(),
+        <String>['0001_override.sql'],
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test('native build refuses to drop a previously selected history', () async {
+    final project = Directory('sites/odroe.dev').absolute;
+    final fixture = _nativeBuildFixture(project, 'selected-history');
+    _writeTestBundle(fixture.artifact, 'old server');
+    File(p.join(fixture.artifact.path, 'migrations', '0001_selected.sql'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('SELECT 1;');
+    addTearDown(() async {
+      if (fixture.root.existsSync()) {
+        await fixture.root.delete(recursive: true);
+      }
+    });
+
+    final build = await withDartCommandLock(
+      () => runTestProcess(dartExecutable, <String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--server-only',
+        '--server-artifact',
+        p.relative(fixture.artifact.path, from: project.path),
+      ], timeout: const Duration(seconds: 30)),
+    );
+
+    expect(build.exitCode, 1, reason: '${build.stdout}\n${build.stderr}');
+    expect(build.stderr, contains('previous Native build bundled'));
+    expect(
+      File(
+        p.join(fixture.artifact.path, 'bin', _testNativeExecutableName),
+      ).readAsStringSync(),
+      'old server',
+    );
+  });
 
   test(
     'native build preserves an unowned bundle output',

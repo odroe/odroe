@@ -108,7 +108,7 @@ void main() {
       expect(output.toString(), contains('npm ci'));
       expect(
         output.toString(),
-        contains('build --no-server --sqlite-migrations migrations web'),
+        contains('dart run odroe build --no-server web'),
       );
       final ownedFiles = <File>[
         for (final path in _fullStackFiles) File(p.join(project.path, path)),
@@ -146,6 +146,10 @@ void main() {
                 File(p.join(project.path, 'package.json')).readAsStringSync(),
               )
               as Map<String, Object?>;
+      expect(
+        File(p.join(project.path, 'odroe.yaml')).readAsStringSync(),
+        'sqlite_migrations: migrations\n',
+      );
       final lock =
           jsonDecode(
                 File(
@@ -372,6 +376,9 @@ void main() {
             File(p.join(project.path, 'migrations', '0001_posts.sql'))
               ..createSync(recursive: true)
               ..writeAsStringSync('application owned\n'),
+        'custom config': (project, _) =>
+            File(p.join(project.path, 'odroe.yaml'))
+              ..writeAsStringSync('sqlite_migrations: database/migrations\n'),
         'directory at leaf': (project, _) =>
             Directory(p.join(project.path, 'package.json')).createSync(),
         'file at parent': (project, _) => File(
@@ -694,6 +701,7 @@ const _fullStackFiles = <String>[
   'lib/routes/server.dart',
   'migrations/0001_posts.sql',
   'migrations/0002_unify_posts.sql',
+  'odroe.yaml',
   'package.json',
   'package-lock.json',
   'wrangler.jsonc',

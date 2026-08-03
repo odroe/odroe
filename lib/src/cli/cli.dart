@@ -63,7 +63,7 @@ Future<int> runOdroe(
     )
     ..addOption(
       'sqlite-migrations',
-      help: 'SQLite migration directory relative to the project.',
+      help: 'Override odroe.yaml SQLite migrations for this Native run.',
     )
     ..addFlag(
       'server-only',
@@ -93,7 +93,7 @@ Future<int> runOdroe(
     )
     ..addOption(
       'sqlite-migrations',
-      help: 'Use this SQLite source for Native bundle and prerender.',
+      help: 'Override odroe.yaml SQLite migrations for this build.',
     )
     ..addFlag(
       'prerender',

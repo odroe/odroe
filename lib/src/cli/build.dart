@@ -68,7 +68,17 @@ Future<int> runBuild(
     );
     return 64;
   }
-  final migrationSource = _resolveSqliteMigrations(project, sqliteMigrations);
+  final selectedSqliteMigrations = buildsNativeServer || shouldPrerender
+      ? sqliteMigrations ?? project.configuredSqliteMigrations
+      : null;
+  final migrationOption = sqliteMigrations == null
+      ? 'odroe.yaml sqlite_migrations'
+      : '--sqlite-migrations';
+  final migrationSource = _resolveSqliteMigrations(
+    project,
+    selectedSqliteMigrations,
+    option: migrationOption,
+  );
   final generatedRouteOutputs = <String>[
     project.compiler.outputFile.path,
     project.compiler.serverOutputFile.path,
@@ -78,7 +88,7 @@ Future<int> runBuild(
         (path) => _pathsOverlap(migrationSource.path, path),
       )) {
     err.writeln(
-      '--sqlite-migrations and generated route outputs must not overlap.',
+      'SQLite migration source and generated route outputs must not overlap.',
     );
     return 64;
   }
@@ -103,7 +113,7 @@ Future<int> runBuild(
   if (migrationSource != null &&
       serverOutputs.any((path) => _pathsOverlap(migrationSource.path, path))) {
     err.writeln(
-      '--sqlite-migrations and server artifact outputs must not overlap.',
+      'SQLite migration source and server artifact outputs must not overlap.',
     );
     return 64;
   }
@@ -169,7 +179,7 @@ Future<int> runBuild(
     if (migrationSource != null &&
         _pathsOverlap(migrationSource.path, outputDirectory.path)) {
       err.writeln(
-        '--sqlite-migrations and --prerender-output must not overlap.',
+        'SQLite migration source and --prerender-output must not overlap.',
       );
       return 64;
     }
@@ -877,18 +887,22 @@ void verifySqliteMigrationSnapshot(
   }
 }
 
-Directory? _resolveSqliteMigrations(CliProject project, String? relativePath) {
+Directory? _resolveSqliteMigrations(
+  CliProject project,
+  String? relativePath, {
+  required String option,
+}) {
   if (relativePath == null) return null;
   final resolved = resolveProjectPath(
     project.root,
     relativePath,
-    option: '--sqlite-migrations',
+    option: option,
   );
   final directory = Directory(p.join(project.root.path, resolved)).absolute;
   if (FileSystemEntity.typeSync(directory.path, followLinks: false) !=
       FileSystemEntityType.directory) {
     throw FileSystemException(
-      'SQLite migrations must be a regular directory.',
+      '$option must be a regular directory.',
       directory.path,
     );
   }
@@ -964,7 +978,8 @@ Future<int> _prerenderBuild(
       arguments,
       workingDirectory: project.root.path,
       environment: <String, String>{
-        ...Platform.environment,
+        for (final entry in Platform.environment.entries)
+          if (entry.key != 'ODROE_MIGRATIONS_PATH') entry.key: entry.value,
         'ODROE_HOST': '127.0.0.1',
         'ODROE_PORT': '0',
         'ODROE_WEB_ROOT': '',
@@ -973,6 +988,7 @@ Future<int> _prerenderBuild(
         if (migrationSource != null)
           'ODROE_MIGRATIONS_PATH': migrationSource.path,
       },
+      includeParentEnvironment: false,
     );
   } on Object {
     await stateDirectory.delete(recursive: true);

@@ -350,17 +350,13 @@ HtmlElement _output() => element(
             element(
               'code',
               children: <HtmlNode>[
-                text(
-                  r'$ dart run odroe build --no-server --sqlite-migrations migrations web',
-                ),
+                text(r'$ dart run odroe build --no-server web'),
               ],
             ),
             element(
               'code',
               children: <HtmlNode>[
-                text(
-                  r'$ dart run odroe build --server-only --sqlite-migrations migrations',
-                ),
+                text(r'$ dart run odroe build --server-only'),
               ],
             ),
           ],

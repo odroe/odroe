@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add the application-owned `odroe.yaml` with one explicit
+  `sqlite_migrations` path. Full-stack starters now build and develop against
+  their SQLite history without repeating a CLI flag, while
+  `--sqlite-migrations` remains the one-command override. Keep projects without
+  this config unselected and ignore it for Cloudflare-only builds so generic
+  PostgreSQL or MySQL migration directories are never guessed.
 - Build Native servers with `dart build cli` so dependency build and link hooks
   run in clean consumer projects. Publish the complete `bin/`, `lib/`, and
   optional `migrations/` bundle as one owned, rollback-safe directory, run

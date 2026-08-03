@@ -362,6 +362,11 @@ dependencies:
     sdk: flutter
   odroe:
     path: ${Directory.current.absolute.path}
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
 ''');
   File(p.join(project.path, 'lib', 'main.dart'))
     ..createSync(recursive: true)

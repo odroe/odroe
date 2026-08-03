@@ -56,6 +56,7 @@ my_app/
 ├── migrations/
 │   ├── 0001_posts.sql         # create and seed
 │   └── 0002_unify_posts.sql   # evolve data and add an index
+├── odroe.yaml                  # SQLite source selected for dev/build
 ├── package.json
 ├── package-lock.json
 └── wrangler.jsonc
@@ -77,9 +78,12 @@ absolute path on writable persistent storage in production. The native entry
 applies pending files before listening and preserves existing rows across
 restarts. `ODROE_MIGRATIONS_PATH` overrides the default `migrations/` path.
 Both relative paths resolve from the server process's working directory.
-Native `odroe dev` watches that effective directory and restarts the server
-after a SQL file changes. Use `--sqlite-migrations migrations` to select the
-same source explicitly for build and prerender.
+The starter's application-owned `odroe.yaml` contains
+`sqlite_migrations: migrations`. Native `odroe dev` watches that source and
+restarts after a SQL file changes; build and prerender validate the same source.
+Use `--sqlite-migrations <path>` only to override one command. A project without
+either selection does not make the CLI reserve or guess a generic migration
+directory for build or watch.
 
 Migration files must use `NNNN_snake_case.sql`, stay top-level, and only move
 forward. Never edit, delete, or rename an applied file. Native SQLite records
@@ -137,7 +141,7 @@ bundle. Run these commands from `my_app`:
 
 ```sh
 npm ci
-dart run odroe build --no-server --sqlite-migrations migrations web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
@@ -167,8 +171,8 @@ dart run odroe build --no-server web
 # Flutter WebAssembly plus the same Document handoff
 dart run odroe build --no-server -- web --wasm
 
-# Native server plus the selected SQLite history
-dart run odroe build --server-only --sqlite-migrations migrations
+# Native server plus the configured SQLite history
+dart run odroe build --server-only
 
 # Cloudflare Worker only
 dart run odroe build --server-only --server-target cloudflare
@@ -177,7 +181,7 @@ dart run odroe build --server-only --server-target cloudflare
 The Native command publishes the complete bundle root at
 `build/odroe/server`: run `./bin/server` (`bin/server.exe` on Windows) from that
 directory and keep its `lib/` directory beside `bin/`. With
-`--sqlite-migrations`, the same root also
+the configured migration selection, the same root also
 contains `migrations/`. A custom Native `--server-artifact` selects this root,
 not the `bin/server` file.
 
@@ -186,7 +190,8 @@ not the `bin/server` file.
 
 Native prerender is isolated from runtime state. The CLI overrides
 `ODROE_SQLITE_PATH` for the prerender child with a temporary database and removes
-it after the child stops. `--sqlite-migrations` pins the source path. The
+it after the child stops. `odroe.yaml` or `--sqlite-migrations` pins the source
+path. The
 generated starter therefore never reads or writes the local `.odroe/app.sqlite3`
 file during a build.
 

@@ -83,6 +83,7 @@ my_app/
 ├── migrations/
 │   ├── 0001_posts.sql
 │   └── 0002_unify_posts.sql
+├── odroe.yaml              # app-owned SQLite build/dev selection
 ├── package.json
 ├── package-lock.json
 └── wrangler.jsonc
@@ -99,9 +100,10 @@ Native 默认把 SQLite 数据保存在项目的 `.odroe/app.sqlite3`，并在�
 `migrations/*.sql` 逐文件原子应用。初始化器会将 `.odroe/` 加入 `.gitignore`。
 `ODROE_SQLITE_PATH` 与 `ODROE_MIGRATIONS_PATH` 可分别覆盖数据和 migration 路径；
 生产环境应使用持久卷上的绝对数据库路径。相对路径以 server 进程的当前目录为
-基准。`odroe dev` 会监听实际 migration 目录并在 SQL 变化后重启 Native server；
-构建可搬运 bundle 时显式传入 `--sqlite-migrations migrations`，不会把其他数据库
-项目的同名目录误判为 SQLite history。
+基准。完整 starter 的 `odroe.yaml` 显式声明 `sqlite_migrations: migrations`，因此
+`odroe dev` 会监听该目录，Native 构建也会把同一份 history 发布进 bundle。
+`--sqlite-migrations <path>` 可覆盖本次命令；没有配置的项目保持未选择状态，不会
+把 PostgreSQL 或 MySQL 的同名目录猜成 SQLite history。
 
 只需要 Document 与 Router 时，改用 `dart run odroe init`；未修改的基础 starter
 可以随后原子升级为 `--full-stack`。
@@ -797,7 +799,7 @@ Cloudflare 入口在 `invocationModules` 中包装 D1 binding。Wrangler 消费�
 
 ```sh
 npm ci
-dart run odroe build --no-server --sqlite-migrations migrations web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
@@ -951,9 +953,9 @@ flutter devices
 dart run odroe dev -- -d <ios-device-id> --dart-define=ODROE_API_ORIGIN=https://api.example.com
 dart run odroe dev -- -d chrome
 dart run odroe build --no-server -- apk --dart-define=ODROE_API_ORIGIN=https://api.example.com
-dart run odroe build --no-server --sqlite-migrations migrations web
+dart run odroe build --no-server web
 dart run odroe build --no-server -- web --wasm
-dart run odroe build --sqlite-migrations migrations web
+dart run odroe build web
 dart run odroe build --server-only --server-target cloudflare
 dart run odroe build --server-target cloudflare web
 ```
@@ -967,18 +969,18 @@ Cloudflare target 的该选项仍指向编译后的 `server.js`。
 将 `<ios-device-id>` 替换为 `flutter devices` 返回的设备标识。`dev` 不默认
 Web；`--` 后参数原样交给 Flutter CLI。包含 RPC 的原生运行与构建必须传入
 `ODROE_API_ORIGIN`，Web 继续使用同源。开发 server 直接挂载源码 `public/`，
-不读取旧 `build/web`。带 migration 选项的 `build --no-server web` 只构建
-Flutter Web 与静态产物；
-带 `--sqlite-migrations migrations` 的 `build web` 还会生成包含 SQLite
-history 的 native server bundle。两者都会通过真实 server
+不读取旧 `build/web`。完整 starter 的 `build --no-server web` 只构建
+Flutter Web 与静态产物；`build web` 还会生成包含配置所选 SQLite history 的
+native server bundle。两者都会通过真实 server
 prerender 静态 route。纯 Document route 输出纯 HTML；
 带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样
 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
 `--no-server` 不生成可部署 server artifact，但仍运行生成的 Dart
 server 源码完成 prerender，适合只部署 `build/web` 的 assets-only SSG。
 CLI 会覆盖 native prerender 子进程的 `ODROE_SQLITE_PATH`，让它使用独立临时
-数据库，并在子进程结束后删除。`--sqlite-migrations` 同时固定本轮读取的 source，
-因此构建不读取或改写 `.odroe/app.sqlite3`，也不受继承环境中的 history 路径影响。
+数据库，并在子进程结束后删除。`odroe.yaml` 或显式
+`--sqlite-migrations` 同时固定本轮读取的 source，因此构建不读取或改写
+`.odroe/app.sqlite3`，也不受继承环境中的 history 路径影响。
 
 prerender 默认使用 4 个并发请求，最多处理 1000 个 route，每个 HTML 响应
 最多 1 MiB。`--prerender-concurrency`、`--prerender-max-routes` 与
@@ -989,10 +991,10 @@ artifact 的构建也复用生成的 Dart server 源码完成 prerender，不再
 prerender 期间 server 明确禁用静态根，旧产物与 `public/` 中的同名 HTML
 不会替代本轮真实 route 响应。
 
-`build --server-only --sqlite-migrations migrations` 生成的 native bundle 与构建
+`build --server-only` 生成的 native bundle 与构建
 OS/architecture 绑定。CLI 通过隐藏 ownership marker 管理整个 bundle root，不会
-覆盖未标记路径；后续若漏传 migration 选项也会在发布新 bundle 前失败，避免留下
-旧 history。发布会在进程锁内以完整目录替换 `bin/`、`lib/` 与可选
+覆盖未标记路径；配置或 CLI 选中的 history 会随每次构建重新验证。发布会在
+进程锁内以完整目录替换 `bin/`、`lib/` 与可选
 `migrations/`，失败时恢复上一份 bundle。
 旧版单文件产物不会被隐式升级；确认并保留旧 migration history 后，需显式移走或
 删除该构建产物再首次生成 bundle。

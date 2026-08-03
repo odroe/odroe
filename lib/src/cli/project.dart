@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import '../atomic_write.dart';
 
@@ -12,6 +13,7 @@ final class CliProject {
     required this.root,
     required this.packageName,
     required this.compiler,
+    required this.configuredSqliteMigrations,
   });
 
   /// Resolves a project from parsed command arguments.
@@ -87,6 +89,7 @@ final class CliProject {
         outputPath: resolvedOutputPath,
         serverOutputPath: resolvedServerOutputPath,
       ),
+      configuredSqliteMigrations: _configuredSqliteMigrations(root),
     );
   }
 
@@ -98,6 +101,9 @@ final class CliProject {
 
   /// The project's file-route compiler.
   final FileRouteCompiler compiler;
+
+  /// Application-selected SQLite history used by Native build and development.
+  final String? configuredSqliteMigrations;
 
   /// The project's `lib` directory.
   Directory get libDirectory => Directory(p.join(root.path, 'lib'));
@@ -139,6 +145,36 @@ final class CliProject {
     );
     _writeGenerated(fetchBootstrap, source);
   }
+}
+
+String? _configuredSqliteMigrations(Directory root) {
+  final file = File(p.join(root.path, 'odroe.yaml'));
+  final type = FileSystemEntity.typeSync(file.path, followLinks: false);
+  if (type == FileSystemEntityType.notFound) return null;
+  if (type != FileSystemEntityType.file) {
+    throw FileSystemException('odroe.yaml must be a regular file.', file.path);
+  }
+
+  final document = loadYaml(file.readAsStringSync(), sourceUrl: file.uri);
+  if (document is! YamlMap) {
+    throw const FormatException('odroe.yaml must contain a mapping.');
+  }
+  for (final key in document.keys) {
+    if (key != 'sqlite_migrations') {
+      throw FormatException('Unsupported odroe.yaml key: $key.');
+    }
+  }
+  final value = document['sqlite_migrations'];
+  if (value is! String || value.trim().isEmpty) {
+    throw const FormatException(
+      'odroe.yaml sqlite_migrations must be a non-empty path.',
+    );
+  }
+  return resolveProjectPath(
+    root,
+    value,
+    option: 'odroe.yaml sqlite_migrations',
+  );
 }
 
 Directory _absoluteDirectory(String path) =>

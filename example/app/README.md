@@ -12,7 +12,7 @@ flutter pub get
 dart run odroe generate
 dart run odroe dev -- -d chrome
 dart run odroe dev --server-only
-dart run odroe build --sqlite-migrations migrations web
+dart run odroe build web
 ```
 
 ## One query, two database runtimes
@@ -43,12 +43,13 @@ ID 使用严格 keyset predicate，读取 `limit + 1` 行后只返回 `items` �
 创建使用单条 typed `INSERT ... RETURNING`，由数据库生成 ID 并返回完整 `Post`。
 Native build 的 `--server-artifact` 指向完整 bundle root，默认是
 `build/odroe/server`。入口为 `bin/server`（Windows 为 `bin/server.exe`），
-运行所需的 native libraries 位于 `lib/`；仅在传入
-`--sqlite-migrations migrations` 时，才把这些文件原字节复制到
-同一根目录的 `migrations/`。从 bundle 根运行 `./bin/server`，部署时必须保留整个
+运行所需的 native libraries 位于 `lib/`。本应用的 `odroe.yaml` 选择
+`migrations`，因此 Native build 会验证这些文件并原字节复制到同一根目录的
+`migrations/`；`--sqlite-migrations <path>` 可覆盖本次命令。从 bundle 根运行
+`./bin/server`，部署时必须保留整个
 目录；进程管理器也应把该根目录设为工作目录。若 history 外置，再用
 `ODROE_MIGRATIONS_PATH` 指向其绝对路径。
-构建预渲染时，同一选项固定 source，Odroe CLI 会把数据库覆盖为一次性临时文件，
+构建预渲染时，同一选择固定 source，Odroe CLI 会把数据库覆盖为一次性临时文件，
 结束后删除临时数据库，因而不会读取或改写开发数据库。初始 migration 使用幂等
 建表与 seed，只用于接纳此前尚无 ledger 的未发布 Native starter；runner 不会为
 任意既有 schema 猜测 baseline。
@@ -65,7 +66,7 @@ Odroe 的 Dart 依赖图或应用产物。
 ```sh
 flutter pub get
 npm ci
-dart run odroe build --no-server --sqlite-migrations migrations web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```
@@ -75,7 +76,7 @@ npm run cloudflare:dev
 锁定的 Wrangler。后续 server 源码变化会自动 reload；成功启动后的生成或编译
 失败会继续运行上一份可用 Worker，修复后自动恢复。首次 route 生成或编译失败
 会退出。Flutter Web/static assets 不在这条 server-only watch 中，UI 变化后再次
-执行 `dart run odroe build --no-server --sqlite-migrations migrations web`。
+执行 `dart run odroe build --no-server web`。
 
 访问 `/posts?sort=newest`，加载下一个 typed cursor page，创建一条记录，再进入返回 ID 对应的详情页。Native
 与本地 D1 都从共享历史得到 `Odroe post 42`；两者都必须完成

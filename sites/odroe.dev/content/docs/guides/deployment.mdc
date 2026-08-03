@@ -42,11 +42,10 @@ The prerender server mounts no static root while generating pages, so neither
 an old build nor a same-path HTML file from `public/` can replace the current
 route response.
 
-When a full-stack deployment also needs the default Native server, include its
-SQLite history with
-`dart run odroe build --sqlite-migrations migrations web`. A Native product
-without SQLite migrations can omit that option. For a document-only product
-such as this website, no Flutter target is required:
+When a full-stack deployment also needs the default Native server, its
+`odroe.yaml` selection makes `dart run odroe build web` include the SQLite
+history. A Native product without SQLite migrations omits that config. For a
+document-only product such as this website, no Flutter target is required:
 
 ```sh
 dart run odroe build --no-server
@@ -59,7 +58,7 @@ deployment also needs the default native server.
 ## Native server
 
 ```sh
-dart run odroe build --server-only --sqlite-migrations migrations
+dart run odroe build --server-only
 ```
 
 The result is a native bundle rather than an isolated executable:
@@ -69,7 +68,7 @@ build/odroe/server/
 ├── bin/
 │   └── server
 ├── lib/
-└── migrations/  # only with --sqlite-migrations
+└── migrations/  # when SQLite history is selected
     ├── 0001_posts.sql
     └── 0002_unify_posts.sql
 ```
@@ -81,12 +80,12 @@ Migration files are copied byte-for-byte through a sibling staging directory;
 the complete `bin/`, `lib/`, and optional `migrations/` bundle replaces the
 previous root only after compilation and a final source recheck succeed. A
 hidden ownership marker keeps the CLI from overwriting an unrelated directory.
-After one build selects a history, a later build must select it again or fail
-before publication, so a new bundle cannot silently omit or retain stale
-migrations. Deploy the whole root; copying only `bin/server` can omit required
-native libraries. The migration option remains explicit: a PostgreSQL or MySQL
-application's generic migration directory is never interpreted as SQLite
-merely because it exists.
+The full-stack starter selects `migrations` in the application-owned
+`odroe.yaml`; `--sqlite-migrations <path>` can override one build. If neither
+config nor CLI selects a history, Odroe never interprets a PostgreSQL or MySQL
+application's generic migration directory as SQLite. It also refuses to replace
+an existing bundle that would silently lose its selected history. Deploy the
+whole root; copying only `bin/server` can omit required native libraries.
 
 `ODROE_HOST` and `ODROE_PORT` configure
 the listener; platforms that provide `PORT` are supported by the generated
@@ -241,7 +240,7 @@ local path from that application root:
 
 ```sh
 npm ci
-dart run odroe build --no-server --sqlite-migrations migrations web
+dart run odroe build --no-server web
 npm run cloudflare:migrate:local
 npm run cloudflare:dev
 ```

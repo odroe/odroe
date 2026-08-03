@@ -483,6 +483,7 @@ void main() {
           ],
           output: output,
           errors: errors,
+          createCommandRunner: _runRealCreateFixtureCommand,
         );
 
         expect(code, 0, reason: '${errors.toString()}\n${output.toString()}');
@@ -500,6 +501,10 @@ void main() {
           isTrue,
         );
         expect(File(p.join(target, 'wrangler.jsonc')).existsSync(), isTrue);
+        expect(
+          File(p.join(target, 'odroe.yaml')).readAsStringSync(),
+          'sqlite_migrations: migrations\n',
+        );
 
         final analyze = await Process.run(dartExecutable, const <String>[
           'analyze',
@@ -514,6 +519,37 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );
+}
+
+Future<int> _runRealCreateFixtureCommand(
+  String executable,
+  List<String> arguments, {
+  required String workingDirectory,
+  required StringSink out,
+  required StringSink err,
+  Map<String, String>? environment,
+}) async {
+  final result = await Process.run(
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
+    environment: environment,
+  );
+  out.write(result.stdout);
+  err.write(result.stderr);
+  if (result.exitCode == 0 &&
+      arguments.contains('pub') &&
+      arguments.contains('add')) {
+    // This test validates create/init/analyze, not sqlite3's network download.
+    File(p.join(workingDirectory, 'pubspec.yaml')).writeAsStringSync('''
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
+''', mode: FileMode.append);
+  }
+  return result.exitCode;
 }
 
 typedef _Command = ({

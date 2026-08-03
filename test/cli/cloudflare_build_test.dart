@@ -76,6 +76,23 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
     timeout: const Timeout(Duration(minutes: 3)),
   );
 
+  test('Cloudflare-only build ignores configured Native history', () async {
+    final project = await _createDocumentFixture();
+    addTearDown(() => project.delete(recursive: true));
+    File(
+      p.join(project.path, 'odroe.yaml'),
+    ).writeAsStringSync('sqlite_migrations: missing\n');
+
+    await _buildWorker(project, 'build/odroe/cloudflare/server.js');
+
+    expect(
+      File(
+        p.join(project.path, 'build', 'odroe', 'cloudflare', 'server.js'),
+      ).existsSync(),
+      isTrue,
+    );
+  });
+
   test('prerender route limits fail before replacing build output', () async {
     final project = Directory('sites/odroe.dev').absolute;
     final output = Directory(
@@ -257,7 +274,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       expect(code, 64, reason: '$buildCase');
       expect(
         errors.toString(),
-        '--sqlite-migrations and --prerender-output must not overlap.\n',
+        'SQLite migration source and --prerender-output must not overlap.\n',
         reason: '$buildCase',
       );
       expect(
@@ -330,7 +347,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
       expect(code, 64, reason: '$buildCase');
       expect(
         errors.toString(),
-        '--sqlite-migrations and server artifact outputs must not overlap.\n',
+        'SQLite migration source and server artifact outputs must not overlap.\n',
         reason: '$buildCase',
       );
       expect(migration.readAsStringSync(), 'SELECT 1;');
@@ -384,7 +401,7 @@ if (!body.includes('"location":"/posts/42?preview=true"')) {
         expect(code, 64, reason: '$option $output');
         expect(
           errors.toString(),
-          '--sqlite-migrations and generated route outputs must not '
+          'SQLite migration source and generated route outputs must not '
           'overlap.\n',
           reason: '$option $output',
         );
@@ -1040,6 +1057,47 @@ Server createServer() {
     expect(p.equals(migrationMarker.group(1)!, inheritedMigrations), isFalse);
   });
 
+  test('prerender ignores inherited migrations without selection', () async {
+    final project = await _createDocumentFixture();
+    addTearDown(() => project.delete(recursive: true));
+    await File(p.join(project.path, 'lib', 'server.dart')).writeAsString(r'''
+import 'dart:io';
+
+import 'package:odroe/server.dart';
+
+import 'routes.server.dart' as generated;
+
+Server createServer() {
+  final migrations = Platform.environment['ODROE_MIGRATIONS_PATH'];
+  stderr.writeln('ODROE_TEST_MIGRATIONS=${migrations ?? 'unset'}');
+  if (migrations != null) {
+    throw StateError('Inherited migrations reached prerender.');
+  }
+  return generated.createServer();
+}
+''');
+
+    final build = await _runDart(
+      <String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--no-server',
+      ],
+      environment: <String, String>{
+        ...Platform.environment,
+        'ODROE_MIGRATIONS_PATH': p.join(project.path, 'inherited-migrations'),
+      },
+    );
+    final logs = '${build.stdout}\n${build.stderr}';
+
+    expect(build.exitCode, 0, reason: logs);
+    expect(build.stderr, contains('ODROE_TEST_MIGRATIONS=unset'));
+    expect(build.stdout, contains('Prerendered 1 routes.'));
+  });
+
   test(
     'native prerender consumes the published bundle migrations',
     () async {
@@ -1660,6 +1718,7 @@ Future<Directory> _createDocumentFixture() async {
   );
   try {
     final root = Directory.current.absolute;
+    // Prerender fixtures exercise Odroe, not sqlite3's network downloader.
     await File(p.join(project.path, 'pubspec.yaml')).writeAsString('''
 name: odroe_prerender_fixture
 publish_to: none
@@ -1668,6 +1727,11 @@ environment:
 dependencies:
   odroe:
     path: ${jsonEncode(root.path)}
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
 ''');
     final routes = Directory(p.join(project.path, 'lib', 'routes'));
     await routes.create(recursive: true);
