@@ -1294,6 +1294,108 @@ Server createServer() {
   );
 
   test(
+    'failed combined Cloudflare prerender preserves the complete previous build',
+    () async {
+      final project = await _createDocumentFixture();
+      addTearDown(() => project.delete(recursive: true));
+      final server = Directory(p.join(project.path, 'build', 'worker'))
+        ..createSync(recursive: true);
+      final previous = <String, String>{
+        'server.js': 'previous server',
+        'server.js.deps': 'previous dependencies',
+        'worker.mjs': 'previous worker',
+        'unrelated.txt': 'unrelated asset',
+      };
+      for (final entry in previous.entries) {
+        File(p.join(server.path, entry.key)).writeAsStringSync(entry.value);
+      }
+      final web = Directory(p.join(project.path, 'build', 'web'))
+        ..createSync(recursive: true);
+      File(
+        p.join(web.path, '.odroe-prerender'),
+      ).writeAsStringSync('odroe-prerender-v1:odroe_prerender_fixture\n');
+      File(
+        p.join(web.path, 'index.html'),
+      ).writeAsStringSync('previous website');
+      final build = await _runDart(<String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--server-target',
+        'cloudflare',
+        '--server-artifact',
+        'build/worker/server.js',
+        '--prerender-output',
+        'build/web',
+        '--prerender-max-response-bytes',
+        '1',
+      ]);
+      final logs = '${build.stdout}\n${build.stderr}';
+      expect(build.exitCode, 1, reason: logs);
+      expect(logs, contains('exceeds the 1 byte prerender limit'));
+      for (final entry in previous.entries) {
+        expect(
+          File(p.join(server.path, entry.key)).readAsStringSync(),
+          entry.value,
+        );
+      }
+      expect(
+        File(p.join(web.path, 'index.html')).readAsStringSync(),
+        'previous website',
+      );
+      expect(
+        server.listSync().map((file) => p.basename(file.path)),
+        unorderedEquals(previous.keys),
+      );
+      final successfulBuild = await _runDart(<String>[
+        'run',
+        'odroe',
+        'build',
+        '--project',
+        project.path,
+        '--server-target',
+        'cloudflare',
+        '--server-artifact',
+        'build/worker/server.js',
+        '--prerender-output',
+        'build/web',
+      ]);
+      final successfulLogs =
+          '${successfulBuild.stdout}\n${successfulBuild.stderr}';
+      expect(successfulBuild.exitCode, 0, reason: successfulLogs);
+      expect(
+        successfulLogs,
+        contains('Built Cloudflare Worker -> build/worker/worker.mjs'),
+      );
+      expect(
+        File(p.join(web.path, 'index.html')).readAsStringSync(),
+        contains('fresh route'),
+      );
+      for (final name in <String>[
+        'server.js',
+        'server.js.deps',
+        'worker.mjs',
+      ]) {
+        expect(
+          File(p.join(server.path, name)).readAsStringSync(),
+          isNot(previous[name]),
+        );
+      }
+      expect(
+        File(p.join(server.path, 'unrelated.txt')).readAsStringSync(),
+        'unrelated asset',
+      );
+      expect(
+        server.listSync().map((file) => p.basename(file.path)),
+        unorderedEquals(previous.keys),
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 4)),
+  );
+
+  test(
     'failed artifact-free prerender preserves the previous website output',
     () async {
       final project = Directory('sites/odroe.dev').absolute;

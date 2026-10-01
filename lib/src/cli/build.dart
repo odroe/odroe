@@ -317,6 +317,7 @@ Future<int> _runBuildLocked(
     }
   }
   _NativeBundleStage? nativeStage;
+  Directory? cloudflareStage;
   Directory? flutterWebStage;
   Directory? prerenderStage;
   var prerenderSharesFlutterOutput = false;
@@ -332,10 +333,18 @@ Future<int> _runBuildLocked(
         if (result.code != 0) return result.code;
         nativeStage = result.stage!;
       } else {
+        final artifact = File(artifactPath!);
+        artifact.parent.createSync(recursive: true);
+        cloudflareStage = artifact.parent.createTempSync(
+          '.odroe-worker-stage-',
+        );
         final code = await buildCloudflareServer(
           project,
-          artifact: File(artifactPath!),
+          artifact: File(
+            p.join(cloudflareStage.path, p.basename(artifact.path)),
+          ),
           out: out,
+          report: false,
         );
         if (code != 0) return code;
       }
@@ -436,6 +445,9 @@ Future<int> _runBuildLocked(
         if (prerenderStage != null)
           (source: prerenderStage, target: outputDirectory),
       ],
+      cloudflareOutputs: cloudflareStage == null
+          ? const <BuildFilePublication>[]
+          : _cloudflareOutputs(cloudflareStage, File(artifactPath!)),
       nativeStage: nativeStage,
       nativeBundle: nativeStage == null ? null : Directory(artifactPath!),
       out: out,
@@ -453,13 +465,17 @@ Future<int> _runBuildLocked(
         );
       }
     }
-    for (final stage in <Directory?>[flutterWebStage, prerenderStage]) {
+    for (final stage in <Directory?>[
+      cloudflareStage,
+      flutterWebStage,
+      prerenderStage,
+    ]) {
       if (stage != null && stage.existsSync()) {
         try {
           stage.deleteSync(recursive: true);
         } on FileSystemException catch (error) {
           out.writeln(
-            'Warning: Web build staging remains at '
+            'Warning: Build staging remains at '
             '${stage.path}: ${error.message}',
           );
         }
@@ -788,6 +804,7 @@ typedef _DirectoryReplacement = ({
 void _publishBuildOutputs(
   CliProject project, {
   required List<BuildDirectoryPublication> webOutputs,
+  required List<BuildFilePublication> cloudflareOutputs,
   required _NativeBundleStage? nativeStage,
   required Directory? nativeBundle,
   required StringSink out,
@@ -795,15 +812,119 @@ void _publishBuildOutputs(
   if (nativeStage != null) _validateNativeStage(nativeStage);
   final nativeWarning = replaceBuildDirectories<String?>(
     outputs: webOutputs,
-    commit: () => nativeStage == null
-        ? null
-        : _publishNativeServer(nativeStage, nativeBundle!),
+    commit: () => replaceBuildFiles<String?>(
+      outputs: cloudflareOutputs,
+      commit: () => nativeStage == null
+          ? null
+          : _publishNativeServer(nativeStage, nativeBundle!),
+      out: out,
+    ),
     out: out,
   );
   if (nativeWarning != null) out.writeln(nativeWarning);
+  if (cloudflareOutputs.isNotEmpty) {
+    _reportCloudflareServer(project, cloudflareOutputs.last.target, out);
+  }
   if (nativeStage != null) {
     _reportNativeServer(project, nativeStage, nativeBundle!, out);
   }
+}
+
+/// One staged file and its managed final build output.
+typedef BuildFilePublication = ({File source, File target});
+
+List<BuildFilePublication> _cloudflareOutputs(Directory stage, File artifact) =>
+    <BuildFilePublication>[
+      (
+        source: File(p.join(stage.path, p.basename(artifact.path))),
+        target: artifact,
+      ),
+      (
+        source: File(p.join(stage.path, '${p.basename(artifact.path)}.deps')),
+        target: File('${artifact.path}.deps'),
+      ),
+      (
+        source: File(p.join(stage.path, 'worker.mjs')),
+        target: File(p.join(artifact.parent.path, 'worker.mjs')),
+      ),
+    ];
+
+/// Publishes only the selected files, preserving unrelated sibling assets.
+/// A failed publication or [commit] restores every previous selected file.
+T replaceBuildFiles<T>({
+  required List<BuildFilePublication> outputs,
+  required T Function() commit,
+  required StringSink out,
+}) {
+  final replacements = <({File target, File backup, bool hadPrevious})>[];
+  late T result;
+  try {
+    for (final output in outputs) {
+      final type = FileSystemEntity.typeSync(
+        output.target.path,
+        followLinks: false,
+      );
+      if (type != FileSystemEntityType.notFound &&
+          type != FileSystemEntityType.file) {
+        throw FileSystemException(
+          'Worker output must be a regular file.',
+          output.target.path,
+        );
+      }
+      if (FileSystemEntity.typeSync(output.source.path, followLinks: false) !=
+          FileSystemEntityType.file) {
+        throw FileSystemException(
+          'Staged Worker output must be a regular file.',
+          output.source.path,
+        );
+      }
+      final backup = File(
+        '${output.target.path}.odroe-backup-${pid}_${DateTime.now().microsecondsSinceEpoch}',
+      );
+      final hadPrevious = type == FileSystemEntityType.file;
+      if (hadPrevious) output.target.renameSync(backup.path);
+      // Record the backup before moving the staged file so this operation's
+      // failure also participates in rollback.
+      replacements.add((
+        target: output.target,
+        backup: backup,
+        hadPrevious: hadPrevious,
+      ));
+      output.source.renameSync(output.target.path);
+    }
+    result = commit();
+  } on Object catch (error, stackTrace) {
+    for (final replacement in replacements.reversed) {
+      try {
+        if (replacement.target.existsSync()) replacement.target.deleteSync();
+        if (replacement.hadPrevious) {
+          replacement.backup.renameSync(replacement.target.path);
+        }
+      } on Object catch (rollbackError) {
+        out.writeln(
+          'Warning: Could not restore Worker output ${replacement.target.path}; previous output remains at ${replacement.backup.path}: $rollbackError',
+        );
+      }
+    }
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+  for (final replacement in replacements) {
+    if (!replacement.backup.existsSync()) continue;
+    try {
+      replacement.backup.deleteSync();
+    } on Object catch (error) {
+      out.writeln(
+        'Warning: Worker output was published, but previous output remains at ${replacement.backup.path}: $error',
+      );
+    }
+  }
+  return result;
+}
+
+void _reportCloudflareServer(CliProject project, File worker, StringSink out) {
+  out.writeln(
+    'Built Cloudflare Worker -> ${p.relative(worker.path, from: project.root.path)}',
+  );
 }
 
 /// Replaces related build directories and restores all of them if [commit]
@@ -967,7 +1088,7 @@ String resolveBuildOutputPath(
   return resolved;
 }
 
-/// Compiles and atomically replaces one Cloudflare Worker artifact.
+/// Compiles and transactionally replaces the Cloudflare Worker file family.
 ///
 /// Compilation happens beside the final artifact. A failed compile leaves the
 /// previous runnable Worker untouched, which lets local development keep its
@@ -977,6 +1098,7 @@ Future<int> buildCloudflareServer(
   required File artifact,
   required StringSink out,
   Future<void>? cancelled,
+  bool report = true,
 }) async {
   if (p.extension(artifact.path) != '.js') {
     throw const FormatException(
@@ -1001,23 +1123,34 @@ Future<int> buildCloudflareServer(
     final code = await _compilerExitCode(process, cancelled);
     if (code != 0) return code;
 
-    final stagedDependencies = File('${stagedArtifact.path}.deps');
-    if (stagedDependencies.existsSync()) {
-      stagedDependencies.renameSync('${artifact.path}.deps');
-    }
-    stagedArtifact.renameSync(artifact.path);
-    final worker = File(p.join(artifact.parent.path, 'worker.mjs'));
+    final worker = File(p.join(staging.path, 'worker.mjs'));
     writeStringIfChanged(
       worker,
       _cloudflareWorkerSource(p.basename(artifact.path)),
     );
-    out.writeln(
-      'Built Cloudflare Worker -> '
-      '${p.relative(worker.path, from: project.root.path)}',
+    replaceBuildFiles<void>(
+      outputs: _cloudflareOutputs(staging, artifact),
+      commit: () {},
+      out: out,
     );
+    if (report) {
+      _reportCloudflareServer(
+        project,
+        File(p.join(artifact.parent.path, 'worker.mjs')),
+        out,
+      );
+    }
     return 0;
   } finally {
-    if (staging.existsSync()) staging.deleteSync(recursive: true);
+    if (staging.existsSync()) {
+      try {
+        staging.deleteSync(recursive: true);
+      } on FileSystemException catch (error) {
+        out.writeln(
+          'Warning: Worker build staging remains at ${staging.path}: ${error.message}',
+        );
+      }
+    }
   }
 }
 

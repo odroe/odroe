@@ -412,6 +412,27 @@ void main() {
     expect(repeatedEtagResponse.statusCode, HttpStatus.notModified);
     expect(await repeatedEtagResponse.toList(), isEmpty);
 
+    for (final method in <String>['GET', 'HEAD']) {
+      final malformedDate = await client.openUrl(method, uri);
+      malformedDate.headers.set(
+        HttpHeaders.ifModifiedSinceHeader,
+        'not a date',
+      );
+      final malformedResponse = await malformedDate.close();
+      expect(malformedResponse.statusCode, HttpStatus.ok, reason: method);
+      expect(
+        await malformedResponse.transform(utf8.decoder).join(),
+        method == 'HEAD' ? '' : 'version one',
+      );
+    }
+    final malformedWithEtag = await client.getUrl(uri);
+    malformedWithEtag.headers
+      ..set(HttpHeaders.ifNoneMatchHeader, etag)
+      ..set(HttpHeaders.ifModifiedSinceHeader, 'not a date');
+    final malformedEtagResponse = await malformedWithEtag.close();
+    expect(malformedEtagResponse.statusCode, HttpStatus.notModified);
+    expect(await malformedEtagResponse.toList(), isEmpty);
+
     final byDate = await client.getUrl(uri);
     byDate.headers.set(HttpHeaders.ifModifiedSinceHeader, lastModified!);
     final dateResponse = await byDate.close();

@@ -22,6 +22,6 @@
     "cloudflare:dev": "dart run odroe dev --server-target cloudflare --server-only"
   },
   "devDependencies": {
-    "wrangler": "4.118.0"
+    "wrangler": "4.146.0"
   }
 }

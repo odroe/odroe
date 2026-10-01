@@ -18,7 +18,7 @@ npm run deploy:check
 ```
 
 `npm run build` executes the assets-only `dart run odroe build --no-server`
-path. `deploy:check` runs the locked Wrangler 4.118.0 dry-run against
+path. `deploy:check` runs the locked Wrangler 4.146.0 dry-run against
 `wrangler.jsonc` and `build/web`; it does not authenticate or upload.
 
 Preview Cloudflare's static-asset routing locally:

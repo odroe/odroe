@@ -550,7 +550,7 @@ dependencies:
 
   test(
     'create removes only its staging path after an interrupt',
-    () async {
+    () => withDartCommandLock(() async {
       final parent = await Directory.systemTemp.createTemp(
         'odroe_create_interrupt_',
       );
@@ -580,7 +580,8 @@ dependencies:
         ),
         isEmpty,
       );
-    },
+    }),
+    timeout: const Timeout(Duration(minutes: 4)),
     skip: Platform.isWindows
         ? 'Windows Process.kill does not emit a console SIGINT event.'
         : false,
@@ -588,7 +589,7 @@ dependencies:
 
   test(
     'create does not publish after an initializer interrupt',
-    () async {
+    () => withDartCommandLock(() async {
       for (final initializerResult in <String>['success', 'failure']) {
         final parent = await Directory.systemTemp.createTemp(
           'odroe_create_initializer_interrupt_',
@@ -629,7 +630,8 @@ dependencies:
           isEmpty,
         );
       }
-    },
+    }),
+    timeout: const Timeout(Duration(minutes: 4)),
     skip: Platform.isWindows
         ? 'Windows Process.kill does not emit a console SIGINT event.'
         : false,
@@ -799,7 +801,7 @@ typedef _Command = ({
 });
 
 Future<void> _waitForFile(File file) async {
-  for (var attempt = 0; attempt < 200; attempt++) {
+  for (var attempt = 0; attempt < 1200; attempt++) {
     if (file.existsSync()) return;
     await Future<void>.delayed(const Duration(milliseconds: 50));
   }

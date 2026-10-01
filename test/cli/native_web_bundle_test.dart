@@ -122,6 +122,97 @@ void main() {
     );
   });
 
+  test(
+    'Worker publication failure rolls back the complete Web and file group',
+    () {
+      final state = Directory.systemTemp.createTempSync(
+        'odroe-worker-publication-',
+      );
+      addTearDown(() => state.deleteSync(recursive: true));
+      final web = Directory(p.join(state.path, 'web'))..createSync();
+      final webStage = Directory(p.join(state.path, 'web-stage'))..createSync();
+      File(p.join(web.path, 'index.html')).writeAsStringSync('old web');
+      File(p.join(webStage.path, 'index.html')).writeAsStringSync('new web');
+      final outputs = <BuildFilePublication>[];
+      for (final name in <String>[
+        'server.js',
+        'server.js.deps',
+        'worker.mjs',
+      ]) {
+        final source = File(p.join(state.path, '$name.stage'))
+          ..writeAsStringSync('new $name');
+        final target = File(p.join(state.path, name));
+        if (name == 'worker.mjs') {
+          // A directory at a selected file path makes the last swap fail after
+          // the earlier files and the Web directory have already been swapped.
+          Directory(target.path).createSync();
+        } else {
+          target.writeAsStringSync('old $name');
+        }
+        outputs.add((source: source, target: target));
+      }
+      final unrelated = File(p.join(state.path, 'unrelated'))
+        ..writeAsStringSync('keep');
+      expect(
+        () => replaceBuildDirectories<void>(
+          outputs: <BuildDirectoryPublication>[(source: webStage, target: web)],
+          commit: () => replaceBuildFiles<void>(
+            outputs: outputs,
+            commit: () => fail('An invalid Worker output cannot be committed.'),
+            out: StringBuffer(),
+          ),
+          out: StringBuffer(),
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(
+        File(p.join(web.path, 'index.html')).readAsStringSync(),
+        'old web',
+      );
+      for (final name in <String>['server.js', 'server.js.deps']) {
+        expect(File(p.join(state.path, name)).readAsStringSync(), 'old $name');
+      }
+      expect(Directory(p.join(state.path, 'worker.mjs')).existsSync(), isTrue);
+      expect(unrelated.readAsStringSync(), 'keep');
+      expect(
+        state.listSync().where((entry) => entry.path.contains('.odroe-')),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'Worker commit failure restores existing files and removes new files',
+    () {
+      final state = Directory.systemTemp.createTempSync('odroe-worker-commit-');
+      addTearDown(() => state.deleteSync(recursive: true));
+      final previous = File(p.join(state.path, 'server.js'))
+        ..writeAsStringSync('old');
+      final added = File(p.join(state.path, 'worker.mjs'));
+      final outputs = <BuildFilePublication>[
+        for (final target in <File>[previous, added])
+          (
+            source: File('${target.path}.stage')..writeAsStringSync('new'),
+            target: target,
+          ),
+      ];
+      final failure = StateError('final validation failed');
+      expect(
+        () => replaceBuildFiles<void>(
+          outputs: outputs,
+          commit: () => throw failure,
+          out: StringBuffer(),
+        ),
+        throwsA(same(failure)),
+      );
+      expect(previous.readAsStringSync(), 'old');
+      expect(added.existsSync(), isFalse);
+      expect(state.listSync().map((entry) => p.basename(entry.path)), <String>[
+        'server.js',
+      ]);
+    },
+  );
+
   test('Native Web staging preserves case-distinct layers when supported', () {
     final state = Directory.systemTemp.createTempSync('odroe-native-web-case-');
     addTearDown(() => state.deleteSync(recursive: true));

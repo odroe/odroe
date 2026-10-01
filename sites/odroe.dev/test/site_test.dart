@@ -658,10 +658,10 @@ void main() {
     expect(package['private'], isTrue);
     expect(package['engines'], <String, Object?>{'node': '>=22.0.0'});
     expect(await File('.npmrc').readAsString(), 'engine-strict=true\n');
-    expect(dependencies, <String, Object?>{'wrangler': '4.118.0'});
+    expect(dependencies, <String, Object?>{'wrangler': '4.146.0'});
     expect(root['devDependencies'], dependencies);
     expect(root['engines'], package['engines']);
-    expect(wrangler['version'], '4.118.0');
+    expect(wrangler['version'], '4.146.0');
     expect(scripts['build'], 'dart run odroe build --no-server');
     expect(scripts['preview'], 'wrangler dev --local');
     expect(
@@ -1043,7 +1043,7 @@ void main() {
       },
     });
     expect(package['devDependencies'], <String, Object?>{
-      'wrangler': '4.118.0',
+      'wrangler': '4.146.0',
     });
     expect(package['scripts'], <String, Object?>{
       'cloudflare:migrate:local': 'wrangler d1 migrations apply DB --local',
@@ -1053,7 +1053,7 @@ void main() {
     expect(packageLock['lockfileVersion'], 3);
     expect(lockedRoot['devDependencies'], package['devDependencies']);
     expect(lockedRoot['engines'], package['engines']);
-    expect(lockedWrangler['version'], '4.118.0');
+    expect(lockedWrangler['version'], '4.146.0');
     expect(pubIgnore, contains('node_modules/'));
     expect(pubIgnore, contains('.wrangler/'));
     expect(pubIgnore, contains('.odroe/'));
