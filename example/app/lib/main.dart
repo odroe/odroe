@@ -8,11 +8,14 @@ import 'package:odroe/rpc.dart';
 import 'routes.dart';
 
 void main() {
+  const rpcOrigin = String.fromEnvironment('ODROE_RPC_ORIGIN');
   runApp(
     App(
       modules: <Module>[
         QueryModule(),
-        RpcModule.http(),
+        RpcModule.http(
+          baseUri: rpcOrigin.isEmpty ? null : Uri.parse(rpcOrigin),
+        ),
         DocumentModule(),
         RouterModule(routes: routeTree),
       ],
