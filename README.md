@@ -181,4 +181,15 @@ dart run odroe build web
 
 `dev` 不默认 Web；`--` 后参数原样交给 Flutter CLI。`build web` 会构建 Flutter Web 与 server artifact，再通过真实 server prerender 静态 route。纯 Document route 输出纯 HTML；带 Flutter page 的 route 输出可读语义 HTML、handoff state 与原样 `/flutter_bootstrap.js`，随后由已加载的 Flutter app 承接导航。
 
+`--prerender-output` must be a relative directory strictly inside the project's
+`build/` tree. Absolute paths, parent traversal, symbolic links, and overlaps
+with route sources, public assets, or the server artifact are rejected before
+compilation. Document-only builds render into a temporary sibling directory and
+publish only after every route succeeds. An existing document-only output must
+contain Odroe's `.odroe-prerender` ownership marker for this project; older or
+unrelated output directories are preserved. Choose a new output path to migrate
+an existing build. Successful rebuilds replace the previous owned output,
+including stale generated files. Flutter Web builds keep Flutter's assets and
+write prerendered HTML into that output.
+
 可运行应用见 [`example/app`](example/app)。官网与正式文档将由 Odroe 自身构建在 `sites/odroe.dev`，仓库不提交研究过程文档。

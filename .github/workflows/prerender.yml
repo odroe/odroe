@@ -1,0 +1,28 @@
+name: Prerender safety
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prerender-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib/src/cli/build.dart test/cli/build_output_test.dart
+      - run: dart analyze lib/src/cli/build.dart test/cli/build_output_test.dart
+      - run: dart test test/cli/build_output_test.dart test/server/prerender_test.dart

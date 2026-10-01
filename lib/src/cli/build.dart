@@ -44,6 +44,14 @@ Future<int> runBuild(
     err.writeln('Prerendering requires the Odroe server artifact.');
     return 64;
   }
+  final outputDirectory = shouldPrerender
+      ? _validateOutput(
+          project,
+          prerenderOutput,
+          serverArtifact,
+          hasFlutter: generated.hasFlutter,
+        )
+      : null;
   late final File artifact;
   if (buildServer) {
     artifact = File(p.join(project.root.path, serverArtifact)).absolute;
@@ -65,24 +73,126 @@ Future<int> runBuild(
     if (code != 0) return code;
   }
   if (!shouldPrerender) return 0;
-  final outputDirectory = Directory(
-    p.join(project.root.path, prerenderOutput),
-  ).absolute;
-  if (!generated.hasFlutter && outputDirectory.existsSync()) {
-    outputDirectory.deleteSync(recursive: true);
+  final output = outputDirectory!;
+  output.parent.createSync(recursive: true);
+  final staging = generated.hasFlutter
+      ? output
+      : output.parent.createTempSync('.odroe-prerender-');
+  try {
+    staging.createSync(recursive: true);
+    final assets = await _copyPublicAssets(project, staging);
+    if (assets > 0) out.writeln('Copied $assets public assets.');
+    final code = await _prerenderBuild(
+      project,
+      artifact: artifact,
+      routes: generated.staticRoutes,
+      outputDirectory: staging,
+      concurrency: prerenderConcurrency,
+      out: out,
+      err: err,
+    );
+    if (code != 0 || generated.hasFlutter) return code;
+    // Recheck ownership before replacing an output that may have changed.
+    _validateOutput(
+      project,
+      prerenderOutput,
+      serverArtifact,
+      hasFlutter: false,
+    );
+    File(
+      p.join(staging.path, _outputMarker),
+    ).writeAsStringSync('odroe-prerender-v1:${project.packageName}\n');
+    Directory? backup;
+    if (output.existsSync()) {
+      backup = output.parent.createTempSync('.odroe-prerender-backup-');
+      backup.deleteSync();
+      output.renameSync(backup.path);
+    }
+    try {
+      staging.renameSync(output.path);
+    } on Object {
+      if (backup != null) backup.renameSync(output.path);
+      rethrow;
+    }
+    if (backup != null) backup.deleteSync(recursive: true);
+    return 0;
+  } finally {
+    if (!generated.hasFlutter && staging.existsSync()) {
+      staging.deleteSync(recursive: true);
+    }
   }
-  outputDirectory.createSync(recursive: true);
-  final assets = await _copyPublicAssets(project, outputDirectory);
-  if (assets > 0) out.writeln('Copied $assets public assets.');
-  return _prerenderBuild(
-    project,
-    artifact: artifact,
-    routes: generated.staticRoutes,
-    outputDirectory: outputDirectory,
-    concurrency: prerenderConcurrency,
-    out: out,
-    err: err,
-  );
+}
+
+const _outputMarker = '.odroe-prerender';
+
+Directory _validateOutput(
+  CliProject project,
+  String relative,
+  String serverArtifact, {
+  required bool hasFlutter,
+}) {
+  final root = p.normalize(project.root.absolute.path);
+  final path = p.normalize(p.join(root, relative));
+  if (relative.isEmpty ||
+      p.isAbsolute(relative) ||
+      p.split(relative).contains('..') ||
+      !p.isWithin(p.join(root, 'build'), path)) {
+    throw const FormatException(
+      '--prerender-output must be a relative path inside build/.',
+    );
+  }
+  var current = root;
+  for (final component in p.split(p.relative(path, from: root))) {
+    current = p.join(current, component);
+    if (FileSystemEntity.typeSync(current, followLinks: false) ==
+        FileSystemEntityType.link) {
+      throw const FormatException(
+        '--prerender-output cannot traverse a symbolic link.',
+      );
+    }
+  }
+  bool overlaps(String other) {
+    final normalized = p.normalize(p.absolute(other));
+    return p.equals(path, normalized) ||
+        p.isWithin(path, normalized) ||
+        p.isWithin(normalized, path);
+  }
+
+  if (<String>[
+    p.join(root, 'public'),
+    project.compiler.routesDirectory.path,
+    project.compiler.outputFile.path,
+    project.compiler.serverOutputFile.path,
+    p.join(root, serverArtifact),
+  ].any(overlaps)) {
+    throw const FormatException(
+      'Prerender output must not overlap sources or server artifacts.',
+    );
+  }
+  if (FileSystemEntity.typeSync(p.join(root, 'public'), followLinks: false) ==
+      FileSystemEntityType.link) {
+    throw const FormatException('Public assets must not be a symbolic link.');
+  }
+  final type = FileSystemEntity.typeSync(path, followLinks: false);
+  if (type != FileSystemEntityType.notFound &&
+      type != FileSystemEntityType.directory) {
+    throw const FormatException(
+      'Prerender output must be a regular directory.',
+    );
+  }
+  final output = Directory(path);
+  if (!hasFlutter && output.existsSync()) {
+    final marker = File(p.join(path, _outputMarker));
+    if (FileSystemEntity.typeSync(marker.path, followLinks: false) !=
+            FileSystemEntityType.file ||
+        marker.readAsStringSync() !=
+            'odroe-prerender-v1:${project.packageName}\n') {
+      throw const FormatException(
+        'Existing prerender output is not owned by this Odroe project; choose a new output directory.',
+      );
+    }
+  }
+  return output;
 }
 
 Future<int> _copyPublicAssets(CliProject project, Directory output) async {

@@ -55,7 +55,7 @@ Future<int> runOdroe(
     ..addOption(
       'prerender-output',
       defaultsTo: 'build/web',
-      help: 'Static output directory relative to the project.',
+      help: 'Static output directory inside build/ (relative to the project).',
     )
     ..addOption(
       'prerender-concurrency',
