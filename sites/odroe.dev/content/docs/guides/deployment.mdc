@@ -1,0 +1,369 @@
+---
+title: Deployment
+description: Build static, native, and Cloudflare Preview artifacts with explicit verification limits.
+order: 34
+language: en
+---
+# Deployment
+
+Odroe builds product artifacts; the platform configuration remains owned by
+your application.
+
+## Static web
+
+```sh
+dart run odroe build --no-server web
+```
+
+For a Flutter WebAssembly client, pass Flutter's target and flag after `--`:
+
+```sh
+dart run odroe build --no-server -- web --wasm
+```
+
+JavaScript and WebAssembly builds use the same browser DOM path for Document
+handoff, streamed frames, semantic HTML transition, and external Router
+navigation.
+
+Document routes are rendered through the real server. Pure document routes
+produce semantic HTML; Flutter routes also keep their bootstrap and handoff
+state. Files from `public/` are copied without a bundler.
+
+Odroe-managed Flutter Web output must resolve inside the project's `build/`
+tree. The CLI rewrites Flutter's `--output` to a clean hidden sibling during the
+build, then atomically swaps each requested directory as part of one grouped
+publication. If a later Web target or the final Native validation fails, Odroe
+restores every earlier directory before returning the failure. Removed routes
+and assets therefore do not survive from a previous successful build. Source
+directories, `public/`, and absolute external outputs are never managed
+replacement roots.
+
+Static file routes and locations returned from `lib/prerender.dart` are the
+default source of truth. Link discovery is opt-in with `--prerender-crawl`.
+Builds use 4 concurrent requests and stop at 1000 routes or 1 MiB of HTML per
+route unless `--prerender-concurrency`, `--prerender-max-routes`, or
+`--prerender-max-response-bytes` changes that budget.
+The optional crawler follows same-origin, query-free links whose paths are
+extensionless or end in `.html`.
+Document-only builds assemble in a sibling staging directory and replace the
+previous static output only after every route succeeds.
+The prerender server mounts no static root while generating pages, so neither
+an old build nor a same-path HTML file from `public/` can replace the current
+route response.
+
+When a full-stack deployment also needs the default Native server, its
+`odroe.yaml` selection makes `dart run odroe build web` include the SQLite
+history, Flutter client, and prerendered routes in one deployable bundle. A
+Native product without SQLite migrations omits that config. For a
+document-only product such as this website, no Flutter target is required:
+
+```sh
+dart run odroe build --no-server
+```
+
+`--no-server` still starts the generated Dart server from source for
+prerendering; it only skips the deployable server artifact. Omit it when the
+deployment also needs the default native server.
+
+## Native server
+
+```sh
+dart run odroe build --server-only
+```
+
+The result is a native bundle rather than an isolated executable:
+
+```text
+build/odroe/server/
+├── .odroe-native-bundle
+├── bin/
+│   └── server
+├── lib/
+└── migrations/  # when SQLite history is selected
+    ├── 0001_posts.sql
+    └── 0002_unify_posts.sql
+```
+
+Windows names the executable `bin/server.exe`; the bundle root and the rest of
+the layout stay the same.
+
+A full-stack build uses the same root and adds the complete Web application:
+
+```sh
+dart run odroe build web
+```
+
+```text
+build/odroe/server/
+├── bin/
+├── lib/
+├── migrations/  # when selected
+└── build/
+    └── web/
+        ├── flutter_bootstrap.js
+        ├── main.dart.js
+        └── posts/42/index.html  # example prerendered route
+```
+
+This is the deployment boundary: move the one bundle, not a server directory
+plus an unrelated static build.
+
+Migration files are copied byte-for-byte through a sibling staging directory;
+the AOT server remains staged while Flutter and prerender run. Odroe layers the
+actual Flutter output and `--prerender-output` into `<bundle>/build/web`, checks
+the migration source again, and replaces the previous root once. A failed
+Flutter build, prerender, Web copy, or migration recheck leaves the previous
+server and client together. `--server-only` intentionally publishes no
+`build/web`, including when it replaces an earlier full-stack bundle, so stale
+client code cannot masquerade as the current release. Nested Flutter/prerender
+roots and symbolic links inside either Web tree fail closed instead of copying
+an ambiguous or external artifact. A
+hidden ownership marker keeps the CLI from overwriting an unrelated directory.
+One project build lock covers route generation, AOT and Flutter compilation,
+prerendering, Web assembly, migration validation, and publication, so concurrent
+Odroe build commands cannot cross-pair one server with another client's output.
+The generated bootstrap also uses that marker to identify an owned bundle. It
+derives the root from the resolved executable and changes the runtime working
+directory before application creation, so the entry may be invoked from any
+caller working directory. A compiled entry requires an exact, regular marker
+file; a missing marker, directory, symbolic link, or changed content fails
+before application state is opened. Non-product source and development runs
+keep the project working directory and do not require a bundle marker.
+CLI-managed prerender explicitly retains the project working directory so
+build-time source resources keep their source semantics, but only after the
+compiled entry validates the marker. This does not weaken the deployed bundle
+contract.
+
+The full-stack starter selects `migrations` in the application-owned
+`odroe.yaml`; `--sqlite-migrations <path>` can override one build. If neither
+config nor CLI selects a history, Odroe never interprets a PostgreSQL or MySQL
+application's generic migration directory as SQLite. It also refuses to replace
+an existing bundle that would silently lose its selected history. Deploy the
+whole root; copying only `bin/server` can omit required native libraries.
+
+`ODROE_HOST` and `ODROE_PORT` configure
+the listener; platforms that provide `PORT` are supported by the generated
+bootstrap. In an owned bundle, static files default to `<bundle>/build/web`
+regardless of the caller working directory. Set `ODROE_WEB_ROOT` to an explicit
+directory, or to an empty string to disable the static root. `build web` already
+places assets in the default location. A server-only image must add an explicit
+static tree, set another path, or disable static serving.
+
+The generated full-stack starter defaults SQLite to `.odroe/app.sqlite3`
+relative to the effective runtime root. In an owned bundle that is the bundle
+root; in source and development runs it remains the project process directory.
+This default is local state, not durable production storage. Native production
+must use one process and an explicit absolute path on a writable persistent
+volume:
+
+```sh
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 \
+/app/server/bin/server
+```
+
+The self-located bundle root makes the default `migrations/` path resolve to the
+validated history without a supervisor `cwd` setting. When history is mounted
+elsewhere, override it explicitly:
+
+```sh
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 \
+ODROE_MIGRATIONS_PATH=/app/server/migrations \
+/app/server/bin/server
+```
+
+The server validates the complete append-only history and applies pending files
+before listening. Do not edit, remove, rename, or backfill an applied file;
+publish a higher-numbered file. Back up the data volume before a production
+migration. A failed file is rolled back, but an operational rollback still uses
+your volume backup and application release process—there is no generated down
+migration.
+
+Do not share the starter's single SQLite connection across
+multiple service replicas; use a server database such as PostgreSQL for
+horizontal scaling.
+
+Native static files are contained by their resolved public root on every
+request. Every name uses `no-cache` with ETag and Last-Modified revalidation
+instead of guessed immutable caching. Eligible text, JavaScript, JSON, SVG, and
+Wasm files of at least 1 KiB stream with gzip when content encoding negotiation
+selects it. Custom `IoServer.bind` callers can set
+`compressStaticAssets: false` when an upstream proxy owns content encoding.
+Exact files win. When no exact file exists, the request resolves to
+`index.html` below that path. Generated indexes therefore serve route URLs
+such as `/docs`, `/docs/`, and `/docs.v1` without running the dynamic
+handler again for HTML-compatible requests. Explicit
+`Accept: application/json` requests still reach the dynamic Document handoff;
+responses vary by `Accept`.
+
+The generated bootstrap creates the application `Server` once and forwards
+both `handler` and `onError` to `IoServer.bind`, so native static, proxy,
+metadata, and framing failures use the application reporter without
+duplicating Server-owned handler or source-stream failures. Handwritten native
+entrypoints should preserve the same ownership:
+
+```dart
+final appServer = await createServer();
+final nativeServer = await IoServer.bind(
+  appServer.handler,
+  onError: appServer.onError,
+);
+
+// After the host stops accepting traffic:
+await IoServer.close(nativeServer);
+await appServer.close();
+```
+
+An IO callback starts only after the server-side response close attempt
+settles, and its returned future is observed by a detached request task.
+`HttpServer.close` does not await that task; `IoServer.close` does. Only after
+the adapter drains should `Server.close` release process-owned pools and
+telemetry through `onClose`. The generated bootstrap performs this order for
+SIGINT on every platform and SIGTERM where supported. The first signal drains
+in-flight requests gracefully; a second signal during that drain escalates to
+a forced socket close. Binding failures also close the application. Keep
+reporting bounded; delivery that must survive process shutdown belongs in an
+application-owned durable queue.
+
+The Native bundle is OS- and architecture-specific. Build on the target OS and
+architecture, or in a compatible builder. For a Linux container, compile in a
+Linux build stage. Do not copy a macOS bundle into the image, and do not detach
+`bin/server` from its sibling `lib/` directory.
+
+## Edge
+
+Build the Cloudflare Workers target explicitly:
+
+```sh
+dart run odroe build --server-only --server-target cloudflare
+```
+
+For a Cloudflare Worker with Flutter Web and static HTML:
+
+```sh
+dart run odroe build --server-target cloudflare web
+```
+
+A Document-only Worker with static HTML does not need a Flutter target:
+
+```sh
+dart run odroe build --server-target cloudflare
+```
+
+If `wrangler.jsonc` declares an assets directory such as `build/web`, a
+server-only Worker artifact does not create that directory. Build the assets
+explicitly before local Wrangler or deployment validation, or remove the
+assets binding when the application truly has no static output.
+
+Odroe writes `build/odroe/cloudflare/server.js` and a thin `worker.mjs`.
+Your application continues to own `wrangler.jsonc`; the build never overwrites
+platform configuration. A non-server-only Cloudflare build runs the generated
+Dart server source for prerendering instead of compiling a second temporary
+Native bundle. An assets-only Flutter SSG instead uses
+`build --no-server web` and deploys only `build/web`; a Document-only SSG can
+omit the Flutter target.
+
+The Fetch runtime has no reliable process-shutdown event, so its generated
+bootstrap does not call `Server.close` or `onClose`. Durable bindings and D1
+wrappers remain scoped to the host invocation instead of pretending to own an
+isolate lifetime.
+
+```json
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "my-odroe-app",
+  "main": "./build/odroe/cloudflare/worker.mjs",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["enable_request_signal"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "assets": {
+    "directory": "./build/web",
+    "html_handling": "drop-trailing-slash"
+  }
+}
+```
+
+When the Worker reads D1, keep schema changes in reviewable migration files and
+apply them explicitly before local runtime verification. A project created by
+`odroe init --full-stack` already owns a locked Wrangler toolchain. Run the safe
+local path from that application root:
+
+```sh
+npm ci
+dart run odroe build --no-server web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+Applications should own this toolchain instead of relying on an unversioned
+global executable. Node is only a deployment-development dependency; it does
+not enter the Dart application or Worker bundle.
+
+The generated `cloudflare:dev` script calls
+`odroe dev --server-target cloudflare --server-only`. Odroe compiles the current
+Dart server into a temporary sibling, atomically replaces the server JavaScript
+only after success, and passes that exact `worker.mjs` to local Wrangler. Source errors
+in the initial generation or compile therefore exit before Wrangler starts.
+After startup, source errors keep the last-known-good server JavaScript until
+the next successful edit. The watcher neither rebuilds Flutter Web nor applies
+D1 migrations; keep both explicit as shown.
+
+The server entry should wrap `DB` through `D1SqlDatabase` in
+`invocationModules`; it must not open SQLite or run asynchronous DDL during
+Fetch bootstrap. Removing `--local` changes the remote database and therefore
+belongs to the authorized deployment procedure, not the local smoke path.
+
+`enable_request_signal` lets a real incoming client disconnect abort the Fetch
+`Request.signal`, which completes `ServerRequest.cancelled`. A Node test can
+abort a synthetic `Request` without proving this Cloudflare runtime
+configuration.
+
+The generated Fetch bootstrap creates the application `Server` once and
+forwards both its invocation handler and reporter. Handwritten entrypoints
+should preserve the same ownership. Unlike the native bootstrap, Fetch rejects
+a `Future`-returning `createServer()` because the host export must be installed
+synchronously; keep binding wrappers request-scoped instead of doing startup
+I/O.
+
+```dart
+final appServer = createServer();
+exportFetchHandler(
+  appServer.invocationHandler,
+  onError: appServer.onError,
+);
+```
+
+The adapter reports its own status, header, `Response` construction, and
+response-byte conversion failures once. Handler and source-stream failures
+remain `Server`-owned. A bounded asynchronous reporter is registered through
+the host `waitUntil` and does not delay the response.
+
+`drop-trailing-slash` keeps generated directory indexes on canonical URLs such
+as `/docs`. This hybrid configuration deliberately leaves
+`not_found_handling` unset so browser navigation misses can reach dynamic
+Document routes in the Worker.
+
+For a fully prerendered SSG where every public navigation URL exists in
+`build/web`, add `"not_found_handling": "404-page"` to serve the generated
+`404.html`. With a compatibility date of `2025-04-01` or newer, Cloudflare
+otherwise skips the Worker for navigation misses. Hybrid applications that
+retain a static 404 can opt into `assets_navigation_has_no_effect` or scope
+`run_worker_first` to their dynamic paths. See
+[Cloudflare navigation routing](https://developers.cloudflare.com/workers/static-assets/routing/static-site-generation/#navigation-requests).
+
+The target follows these rules:
+
+- static assets remain asset-first to avoid unnecessary Worker invocations;
+- the platform, rather than the Worker adapter, owns asset caching and encoding;
+- dynamic routes use the standard Fetch `Request` and `Response` contract;
+- D1 is passed as an explicit request binding;
+- `waitUntil` tasks keep request modules alive until background work settles.
+
+The required Node smoke covers streaming, synthetic cancellation, concurrency,
+and the compiled artifact. Optional local Wrangler/Workerd and D1 integration
+tests run when `ODROE_WRANGLER` is configured. This remains Preview support. No
+remote Cloudflare deployment has been verified.

@@ -1,0 +1,25 @@
+import 'package:odroe/database.dart';
+
+import 'type_fixture.dart';
+
+void invalidTypeFixture() {
+  final table = TypeFixtureTable();
+
+  table.email.set(42);
+  table.email.set(null);
+  table.active.equals('yes');
+  table.email.equalsColumn(table.active);
+  table.email.isIn(<int>[42]);
+  table.email.isIn(<String?>['ada@example.com', null]);
+  table.id.isNotIn(<String>['42']);
+  table.email.optional.set('write');
+  table.email.incrementBy(1);
+  table.ownerId.incrementBy(1);
+  insertAssignmentFixture(table, table.id.incrementBy(1));
+
+  SqlProjection<String>(
+    columns: [table.active],
+    decode: (row) => row.read(table.active),
+  );
+  SqlProjection<String>(columns: [table.email], decode: (row) => row.read(0));
+}

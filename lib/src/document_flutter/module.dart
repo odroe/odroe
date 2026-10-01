@@ -7,14 +7,20 @@ import '../app/module.dart';
 import '../app/registry.dart';
 import '../app_flutter/binding.dart';
 import '../query/module.dart';
+import '../router/load.dart';
 import '../router_flutter/module.dart';
+import '../router_flutter/router.dart';
 import '../rpc/serializer.dart';
 import 'browser.dart';
+import 'browser_location.dart';
 import 'handoff.dart';
 
 /// Installs server-rendered document handoff into a Flutter application.
 final class DocumentModule extends Module {
   /// Creates a document handoff module.
+  ///
+  /// Custom [serializer] adapters must match the server serializer used to
+  /// render this application's handoff state.
   DocumentModule({Serializer? serializer})
     : handoff = Handoff(serializer: serializer);
 
@@ -23,15 +29,34 @@ final class DocumentModule extends Module {
 
   Map<String, Object?>? _initial;
   StreamSubscription<Map<String, Object?>>? _frames;
+  bool _acceptHandoff = true;
 
   @override
   void register(ModuleRegistry registry) {
     final initial = readBrowserHandoff();
     _initial = initial;
     if (initial != null) {
-      handoff.apply(initial);
-      final state = handoff.routerState;
-      if (state != null) registry.provide(routerInitialStateKey, state);
+      final browserLocation = readFlutterBrowserLocation();
+      final renderedLocation = _readInitialLocation(initial);
+      if (browserLocation != null &&
+          renderedLocation != null &&
+          browserLocation != renderedLocation) {
+        _initial = null;
+        _acceptHandoff = false;
+        routerInitialStateKey.provide(
+          registry,
+          RouterInitialState(
+            location: browserLocation,
+            loads: const <RouteLoadResult>[],
+          ),
+        );
+      } else {
+        handoff.apply(initial);
+        final state = handoff.routerState;
+        if (state != null) {
+          routerInitialStateKey.provide(registry, state);
+        }
+      }
     }
     registry.bind(const _DocumentFlutterBinding());
   }
@@ -43,24 +68,33 @@ final class DocumentModule extends Module {
     if (initial != null && query != null) {
       handoff.apply(initial, query: query);
     }
-    _frames = browserHandoffFrames().listen(
-      (frame) => handoff.apply(frame, query: query),
-      onError: (Object error, StackTrace stackTrace) {
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: error,
-            stack: stackTrace,
-            library: 'document handoff',
-          ),
-        );
-      },
-    );
+    if (_acceptHandoff) {
+      _frames = browserHandoffFrames().listen(
+        (frame) => handoff.apply(frame, query: query),
+        onError: (Object error, StackTrace stackTrace) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'document handoff',
+            ),
+          );
+        },
+      );
+    }
   }
 
   @override
   Future<void> dispose(AppContext context) async {
     await _frames?.cancel();
   }
+}
+
+Uri? _readInitialLocation(Map<String, Object?> frame) {
+  final data = frame['type'] == 'initial' ? frame['data'] : frame;
+  if (data is! Map) return null;
+  final location = data['location'];
+  return location is String ? Uri.tryParse(location) : null;
 }
 
 final class _DocumentFlutterBinding extends FlutterBinding {

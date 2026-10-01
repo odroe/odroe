@@ -27,10 +27,17 @@ final class RouteMetadata {
 /// A typed key used by optional packages to extend a route definition.
 final class RouteCapability<T extends Object> {
   /// Creates a capability key with a diagnostic [name].
-  const RouteCapability(this.name);
+  ///
+  /// Capabilities use instance identity. Keep one key and reuse that exact
+  /// instance when attaching and reading a value.
+  RouteCapability(this.name);
 
   /// The name shown in diagnostics.
   final String name;
+
+  /// Returns [route] with [value] attached under this capability.
+  AppRoute<P, S, D> attach<P, S, D>(AppRoute<P, S, D> route, T value) =>
+      route._withCapability<T>(this, value);
 
   @override
   String toString() => 'RouteCapability<$T>($name)';
@@ -326,8 +333,7 @@ final class AppRoute<P, S, D> implements TypedRoute<P, S, D> {
   T? capability<T extends Object>(RouteCapability<T> key) =>
       _capabilities[key] as T?;
 
-  /// Returns a copy carrying [value] under [key].
-  AppRoute<P, S, D> withCapability<T extends Object>(
+  AppRoute<P, S, D> _withCapability<T extends Object>(
     RouteCapability<T> key,
     T value,
   ) => AppRoute<P, S, D>._(

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import '../app/context.dart';
-import '../app/key.dart';
+import '../app/registry.dart';
 import '../router/codec.dart';
 import '../router/match.dart';
 import '../router/path.dart';
@@ -245,8 +245,8 @@ extension AppRouteServer<P, S, D> on AppRoute<P, S, D> {
   }) => ServerRoute<P, S, D>._(
     definition: this,
     load: load,
-    middleware: List<Middleware>.of(middleware, growable: false),
-    handlers: Map<HttpMethod, ServerRouteHandler<P, S>>.of(
+    middleware: List<Middleware>.unmodifiable(middleware),
+    handlers: Map<HttpMethod, ServerRouteHandler<P, S>>.unmodifiable(
       handlers ?? <HttpMethod, ServerRouteHandler<P, S>>{},
     ),
   );

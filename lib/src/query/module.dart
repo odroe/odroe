@@ -1,12 +1,11 @@
 import '../app/context.dart';
-import '../app/key.dart';
 import '../app/module.dart';
 import '../app/registry.dart';
 import 'client.dart';
 import 'managers.dart';
 
 /// The application context key used to read the registered [QueryClient].
-const queryClientKey = ContextKey<QueryClient>('queryClient');
+final queryClientKey = ContextKey<QueryClient>('queryClient');
 
 /// Installs a Query client into an application context.
 class QueryClientModule extends Module {
@@ -31,7 +30,7 @@ class QueryClientModule extends Module {
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provide(queryClientKey, client);
+    queryClientKey.provide(registry, client);
   }
 
   @override

@@ -1,13 +1,13 @@
 import '../app/context.dart';
-import '../app/key.dart';
 import '../app/module.dart';
 import '../app/registry.dart';
 import 'client.dart';
 import 'http.dart';
+import 'path.dart';
 import 'serializer.dart';
 
 /// The application context key used to read the configured [RpcClient].
-const rpcClientKey = ContextKey<RpcClient>('rpcClient');
+final rpcClientKey = ContextKey<RpcClient>('rpcClient');
 
 /// Installs an RPC client into an application context.
 final class RpcModule extends Module {
@@ -19,21 +19,42 @@ final class RpcModule extends Module {
   /// Creates an HTTP-backed client and owns its default transport.
   ///
   /// [baseUri] must be an absolute HTTP(S) URI with a host and no user
-  /// information. Omit it only for same-origin Web RPC, where [Uri.base]
-  /// supplies the browser location. Native applications must pass their
-  /// server URI explicitly. Validation happens before creating a transport.
+  /// information. It may be omitted only for same-origin Web RPC, where
+  /// [Uri.base] supplies the current browser location. Native applications
+  /// must pass their server URI explicitly. Validation precedes client creation.
+  ///
+  /// [headersProvider] runs once immediately before each request. Its result is
+  /// copied before Odroe applies protocol-owned headers.
+  /// [maxRequestBodyBytes] configures the owned default [HttpTransport]. Pass
+  /// a preconfigured [transport] instead when transport ownership stays with
+  /// the caller; the two options are mutually exclusive.
+  /// [maxResponseFrameBytes] limits one typed value or stream frame, not the
+  /// cumulative size of a streaming response.
   factory RpcModule.http({
     Uri? baseUri,
     HttpTransport? transport,
     Serializer? serializer,
+    RpcHeadersProvider? headersProvider,
     String functionPath = '/__odroe/functions',
+    int? maxRequestBodyBytes,
+    int maxResponseFrameBytes = RpcClient.defaultMaxResponseFrameBytes,
   }) {
+    if (maxResponseFrameBytes <= 0) {
+      throw ArgumentError.value(
+        maxResponseFrameBytes,
+        'maxResponseFrameBytes',
+        'Must be greater than zero.',
+      );
+    }
+    if (transport != null && maxRequestBodyBytes != null) {
+      throw ArgumentError.value(
+        maxRequestBodyBytes,
+        'maxRequestBodyBytes',
+        'Cannot configure the body budget of a caller-owned transport.',
+      );
+    }
     final resolvedBaseUri = baseUri ?? Uri.base;
-    if (!resolvedBaseUri.hasAuthority ||
-        resolvedBaseUri.host.isEmpty ||
-        (resolvedBaseUri.scheme != 'http' &&
-            resolvedBaseUri.scheme != 'https') ||
-        resolvedBaseUri.userInfo.isNotEmpty) {
+    if (!_isValidHttpBaseUri(resolvedBaseUri)) {
       throw ArgumentError.value(
         resolvedBaseUri,
         'baseUri',
@@ -41,13 +62,24 @@ final class RpcModule extends Module {
             'Omit only for same-origin Web RPC.',
       );
     }
-    final resolved = transport ?? HttpTransport();
+    final resolvedFunctionPath = normalizeFunctionPath(
+      functionPath,
+      allowRelative: true,
+    );
+    final resolved =
+        transport ??
+        HttpTransport(
+          maxRequestBodyBytes:
+              maxRequestBodyBytes ?? HttpTransport.defaultMaxRequestBodyBytes,
+        );
     return RpcModule._(
       RpcClient(
         baseUri: resolvedBaseUri,
         transport: resolved,
         serializer: serializer,
-        functionPath: functionPath,
+        headersProvider: headersProvider,
+        functionPath: resolvedFunctionPath,
+        maxResponseFrameBytes: maxResponseFrameBytes,
       ),
       transport == null ? resolved : null,
     );
@@ -60,7 +92,7 @@ final class RpcModule extends Module {
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provide(rpcClientKey, client);
+    rpcClientKey.provide(registry, client);
   }
 
   @override
@@ -68,3 +100,9 @@ final class RpcModule extends Module {
     _transport?.close();
   }
 }
+
+bool _isValidHttpBaseUri(Uri value) =>
+    value.hasAuthority &&
+    value.host.isNotEmpty &&
+    (value.scheme == 'http' || value.scheme == 'https') &&
+    value.userInfo.isEmpty;

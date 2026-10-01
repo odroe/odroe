@@ -1,0 +1,504 @@
+---
+title: Full-stack vertical slice
+description: Build bounded post pages from typed SQL through RPC and Infinite Query, then create and read records.
+order: 10
+language: en
+---
+# Build one complete post feature
+
+Start from the project created in [First product](/docs/getting-started).
+`odroe create` finishes with its in-process full-stack initializer, which
+generates one root page with bounded post pages and create; it does not generate
+a `/posts` route or a detail page. This tutorial first explains that generated
+slice, then follows the repository's reference app as the evolution path:
+cursor pages and create move to `/posts`, and `/posts/[postId]` adds a typed
+detail read.
+
+Both shapes keep the same owners visible instead of demonstrating each library
+in isolation:
+
+```text
+Post, PostPage, CreatePost, ListPostsInput records, and PostSort enum
+  → generated typed RPC codecs
+  → ServerFunction handlers
+  → typed SQL
+  → SQLite or D1
+  → Infinite Query and Mutation
+  → Flutter paged list and create UI
+  → reference app detail UI
+```
+
+The generated starter can append bounded cursor pages, create one post with a
+database-generated ID, refresh the collection, and retain it after a native
+server restart. The reference app additionally reads that returned ID through
+its detail route. No repository, annotation processor, identity map, or
+handwritten JSON layer is needed.
+
+## Define the client-safe domain records
+
+Put only cross-runtime data in `lib/posts.dart`:
+
+```dart
+typedef Post = ({int id, String title});
+typedef CreatePost = ({String title});
+typedef PostPage = ({List<Post> items, int? nextCursor});
+enum PostSort { newest, oldest }
+typedef ListPostsInput = ({
+  int? cursor,
+  List<int> ids,
+  int limit,
+  PostSort sort,
+});
+```
+
+This library can be imported by Flutter and by route server files. Keep SQL
+drivers, IO, Fetch bindings, and secrets out of it. The record field names and
+types become part of the RPC contract.
+
+## Map the complete database row
+
+`lib/posts_database.dart` owns the relational shape. It imports the domain
+record but stays independent of a concrete database driver:
+
+```dart
+import 'package:odroe/database.dart';
+
+import 'posts.dart';
+
+final class Posts extends SqlTable<Post> {
+  Posts() : super('posts');
+
+  late final SqlTableColumn<int> id = column<int>('id', sqlInt);
+  late final SqlTableColumn<String> title = column<String>('title', sqlText);
+
+  @override
+  late final SqlProjection<Post> projection = SqlProjection<Post>(
+    columns: [id, title],
+    decode: (row) => (id: row.read(id), title: row.read(title)),
+  );
+}
+
+final posts = Posts();
+const postQueries = SqlQueries(SqlDialect.sqlite);
+```
+
+`posts.title.set(42)` fails analysis. The projection decodes an entire `Post`
+through the declared selection objects, so there are no numeric result indices
+to keep synchronized with the column list. Missing or repeated selections fail
+before a value reaches the product. This is a typed relational layer, not an
+identity-map ORM: schema ownership, SQL operations, migrations, and resource
+lifetimes remain visible.
+
+## Add page and create functions
+
+The generated starter declares these functions on its root route with a
+`ListPostsInput` containing `cursor` and `limit`. The reference app evolves them
+under `/posts`, adds typed sort and optional ID filtering, and imports the same
+domain source with a prefix. The route compiler uses that prefix to forward only
+client-safe types into `routes.dart`:
+
+```dart
+import 'package:odroe/database.dart';
+import 'package:odroe/server.dart';
+
+import '../../posts.dart' as models;
+import '../../posts_database.dart';
+import 'route.dart' as definition;
+
+final route = definition.route.server();
+
+final listPosts = ServerFunction<models.ListPostsInput, models.PostPage>(
+  id: 'posts.list',
+  method: HttpMethod.get,
+  handler: (context) async {
+    final input = context.data;
+    if (input.ids.length > 100) {
+      throw const HttpError(
+        400,
+        'Post ID filter cannot contain more than 100 values.',
+      );
+    }
+    if (input.limit < 1 || input.limit > 50) {
+      throw const HttpError(400, 'Post page limit must be between 1 and 50.');
+    }
+    final order = switch (input.sort) {
+      models.PostSort.newest => posts.id.descending,
+      models.PostSort.oldest => posts.id.ascending,
+    };
+    final cursor = input.cursor;
+    final cursorPredicate = cursor == null
+        ? null
+        : input.sort == models.PostSort.newest
+        ? posts.id.lessThan(cursor)
+        : posts.id.greaterThan(cursor);
+    final idPredicate = input.ids.isEmpty ? null : posts.id.isIn(input.ids);
+    final where = switch ((idPredicate, cursorPredicate)) {
+      (final ids?, final after?) => ids.and(after),
+      (final ids?, null) => ids,
+      (null, final after?) => after,
+      (null, null) => null,
+    };
+    final rows = await postQueries
+        .selectTable(
+          posts,
+          where: where,
+          orderBy: <SqlOrder>[order],
+          limit: input.limit + 1,
+        )
+        .all(context.request.read(databaseKey));
+    final hasNextPage = rows.length > input.limit;
+    final items = rows.take(input.limit).toList(growable: false);
+    return (items: items, nextCursor: hasNextPage ? items.last.id : null);
+  },
+);
+
+final createPost = ServerFunction<models.CreatePost, models.Post>(
+  id: 'posts.create',
+  method: HttpMethod.post,
+  handler: (context) {
+    final title = context.data.title.trim();
+    if (title.isEmpty) {
+      throw const HttpError(400, 'Post title is required.');
+    }
+    return postQueries
+        .insert(posts, <SqlAssignment>[posts.title.set(title)])
+        .returning(posts.projection)
+        .one(context.request.read(databaseKey));
+  },
+);
+```
+
+The product rejects a limit outside `1..50` and more than 100 filtered IDs
+before SQL construction. An unknown wire sort is rejected by the generated enum
+decoder before this handler can run. For newest-first pages it selects
+`id < cursor`; for oldest-first pages it selects `id > cursor`. Both directions
+order by the same unique ID and read one extra row. That row is never returned:
+it only proves whether `nextCursor` should contain the last returned ID. This is
+a small, indexable product query, not a generic paginator or an implicit count.
+
+Creation is one statement. The application does not guess the next ID and does
+not insert followed by an unrelated select. `one` requires exactly one returned
+row; if a driver cannot satisfy that contract, the operation fails visibly.
+
+The reference app then adds a detail route using the same projection. This
+route is an evolution example, not a file emitted by `init --full-stack`:
+
+```dart
+final readPost = ServerFunction<int, models.Post>(
+  id: 'posts.read',
+  method: HttpMethod.get,
+  handler: (context) async {
+    final post = await postQueries
+        .selectTable(posts, where: posts.id.equals(context.data))
+        .oneOrNull(context.request.read(databaseKey));
+    if (post == null) throw const NotFound('Post not found.');
+    return post;
+  },
+);
+```
+
+The three explicit IDs are released wire contracts. Changing a variable or
+moving a file does not change them. Changing an input or output shape under an
+existing ID still requires a coordinated compatibility decision.
+
+## Let Odroe generate the record boundary
+
+Run generation after changing a function or shared record:
+
+```sh
+dart run odroe generate
+dart analyze --fatal-infos
+```
+
+For `CreatePost`, `ListPostsInput`, `PostSort`, `PostPage`, `Post`, and
+`List<Post>`, the compiler emits four symmetric operations: client input
+encoding, server input decoding, server output encoding, and client output
+decoding. Records use field-name objects on the wire, while `PostSort.newest`
+uses the string `"newest"`. Collections such as `ListPostsInput.ids` and
+`PostPage.items` recurse into their element codec.
+
+The generated source remains ordinary Dart and is analyzed with the rest of
+the application. Do not edit `lib/routes.dart` or `lib/routes.server.dart`.
+Malformed input fails with HTTP 400 before the handler starts. Malformed typed
+output becomes `RpcProtocolException` on the client.
+
+See [Typed RPC records and enums](/docs/guides/typed-rpc-records) for supported
+nested shapes and compatibility rules.
+
+## Keep database ownership at the host
+
+The native entry opens one process-owned file database before it starts the
+listener. It lends that database to requests and closes it with the server:
+
+```dart
+FutureOr<Server> createServer() => createNativeServer(
+  databasePath:
+      Platform.environment['ODROE_SQLITE_PATH'] ?? '.odroe/app.sqlite3',
+  migrationsPath:
+      Platform.environment['ODROE_MIGRATIONS_PATH'] ?? 'migrations',
+);
+
+Future<Server> createNativeServer({
+  required String databasePath,
+  String migrationsPath = 'migrations',
+}) async {
+  if (databasePath.isEmpty) {
+    throw ArgumentError.value(databasePath, 'databasePath', 'must not be empty');
+  }
+  if (migrationsPath.isEmpty) {
+    throw ArgumentError.value(
+      migrationsPath,
+      'migrationsPath',
+      'must not be empty',
+    );
+  }
+  final migrations = readSqliteMigrations(migrationsPath);
+  final databaseFile = File(databasePath).absolute;
+  await databaseFile.parent.create(recursive: true);
+  final database = SqliteDatabase.open(databaseFile.path);
+  try {
+    await database.applyMigrations(migrations);
+    return generated.createServer(
+      modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
+      onClose: database.close,
+    );
+  } on Object {
+    await database.close();
+    rethrow;
+  }
+}
+```
+
+`readSqliteMigrations` performs the filesystem preflight before the database is
+opened. It accepts only top-level regular files named `NNNN_snake_case.sql`,
+orders them by numeric version, and rejects duplicate versions. The database
+runner then proves that its ledger is an exact prefix of that history before it
+executes a pending file.
+
+The starter's initial file uses `CREATE TABLE IF NOT EXISTS` and a
+conflict-ignoring seed so the previous unreleased Native starter, which had the
+same table but no ledger, can be adopted without deleting user rows. This is a
+specific starter transition; the runner never infers a baseline for arbitrary
+existing schemas.
+
+```sql
+-- migrations/0002_unify_posts.sql
+UPDATE posts
+SET title = 'Odroe post 42'
+WHERE id = 42 AND title IN ('D1 post 42', 'SQLite post 42');
+
+CREATE INDEX posts_title ON posts(title);
+```
+
+After taking a `BEGIN IMMEDIATE` write lock, the runner revalidates the complete
+source and applied history. SQLite's own parser then advances statement by
+statement instead of Odroe splitting text on semicolons; the complete file and
+its ledger row still commit in one transaction. A failure rolls back only that
+file. Native stores the exact SQL string and fails if an applied file is edited,
+deleted, renamed, or backfilled below a later version. The canonical
+`main._odroe_migrations` ledger is reserved and verified before commit. There is
+no schema diff, down migration, or generated entity layer. Migration scripts
+must not contain transaction or connection control.
+
+`.odroe/app.sqlite3` is ignored local state; production should set
+`ODROE_SQLITE_PATH` to a persistent absolute path. A Native build publishes the
+complete bundle root at `build/odroe/server` by default, with `bin/server`,
+`lib/`, and optional `migrations/`; Windows names the entry `bin/server.exe`.
+Invoke the platform entry from any working directory and deploy the bundle as
+one directory. Its ownership marker makes the executable select the bundle root
+before application creation. Keep the immutable history in that root, or set
+`ODROE_MIGRATIONS_PATH` when it is mounted elsewhere.
+
+Cloudflare has a different lifetime. Each Fetch invocation wraps its `DB`
+binding in `D1SqlDatabase`. Before starting the Worker, explicitly run the
+Wrangler migration command against the intended local or remote database;
+`cloudflare:dev` does not apply migrations. Native and D1 keep separate ledgers
+because they are separate databases, but review the same source history. No
+SQLite FFI object or startup migration runner is reachable from the Worker
+artifact.
+
+## Append pages with Infinite Query
+
+The Flutter page gives each sort order one infinite-query cache entry. Every RPC
+call receives the current page cursor, while cancellation continues through the
+underlying Query context:
+
+```dart
+PostSort _parsePostSort(String value) {
+  for (final sort in PostSort.values) {
+    if (EnumName(sort).name == value) return sort;
+  }
+  return PostSort.newest;
+}
+
+final postSort = _parsePostSort(sort);
+final QueryKey<InfiniteData<PostPage, int?>> listKey =
+    QueryKey<InfiniteData<PostPage, int?>>(
+      'posts.list',
+      <Object?>[EnumName(postSort).name],
+    );
+
+final listOptions = InfiniteQueryOptions<PostPage, int?>(
+  key: listKey,
+  initialPageParam: null,
+  getNextPageParam: (lastPage, _, _, _) => lastPage.nextCursor,
+  query: (page) => generated.routes.posts.listPosts(
+    rpc,
+    (
+      cursor: page.pageParam,
+      ids: const <int>[],
+      limit: 20,
+      sort: postSort,
+    ),
+    cancelled: page.query.cancelToken.whenCancelled.then<void>((_) {}),
+  ),
+);
+
+InfiniteQueryBuilder<PostPage, int?>(
+  options: listOptions,
+  builder: (context, result, fetchNextPage, _) {
+    final query = result.query;
+    if (!query.hasData && query.isFetching) {
+      return const CircularProgressIndicator();
+    }
+    if (query.isError && !query.hasData) {
+      return FilledButton(
+        onPressed: () => QueryClientProvider.of(context).invalidateQueries(
+          QueryFilter(key: listKey, exact: true),
+        ),
+        child: const Text('Retry'),
+      );
+    }
+    final posts = <Post>[
+      for (final page in query.requireData.pages) ...page.items,
+    ];
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: ListView(
+            children: <Widget>[
+              for (final post in posts) ListTile(title: Text(post.title)),
+            ],
+          ),
+        ),
+        if (result.hasNextPage)
+          FilledButton.tonal(
+            onPressed: result.isFetchingNextPage ? null : fetchNextPage,
+            child: const Text('Load more'),
+          ),
+      ],
+    );
+  },
+)
+```
+
+The route search schema deliberately remains a URL string contract. The page
+normalizes that value to `PostSort` before constructing the widget; an unknown
+URL value falls back to `PostSort.newest`, matching the route default. The
+widget, Query callback, and server handler then stay exhaustive and string-free.
+Use `EnumName(sort).name` when a cache key or URL needs the declaration name so
+an enhanced enum field cannot silently replace the protocol identity.
+
+Initial loading, actionable failure, empty data, and loaded data are distinct
+states. `getNextPageParam` returns `null` when the server has no next cursor, so
+the builder removes Load more instead of guessing from list length. Options are
+stored in the widget's `State` and replaced only when sort or RPC client changes.
+A retry invalidates this exact sort. Leaving the final observer can cancel an
+active page request; it cannot undo a mutation already accepted by the server.
+If invalidation fails after a successful create, the starter keeps the stale
+list visible, marks it as possibly out of date, and exposes a retry; it never
+presents the old list as a successful refresh.
+
+## Create, then invalidate server truth
+
+Keep creation in a mutation lifecycle. Disable duplicate submission and
+invalidate every sorted post list only after success:
+
+```dart
+MutationBuilder<Post, CreatePost, void>(
+  options: MutationOptions<Post, CreatePost, void>(
+    key: QueryKey('posts.create'),
+    mutation: (input, _) => generated.routes.posts.createPost(rpc, input),
+    onSuccess: (_, _, _, mutation) => mutation.client.invalidateQueries(
+      QueryFilter(key: QueryKey<Object?>('posts.list')),
+    ),
+  ),
+  builder: (_, state, mutate, _) => FilledButton(
+    onPressed: state.isPending
+        ? null
+        : () => mutate((title: titleController.text)),
+    child: Text(state.isPending ? 'Creating…' : 'Create'),
+  ),
+)
+```
+
+The starter does not perform an optimistic insert because it does not own the
+database ID. The server-returned `Post` proves the write, and invalidation then
+refreshes collection order from server truth.
+
+## Verify native persistence
+
+Run the native development path:
+
+```sh
+dart run odroe dev -- -d chrome
+```
+
+Create a post, stop the command, and start it again. The post must remain in the
+list because the same `.odroe/app.sqlite3` file is reopened. A restart that
+only shows the seed indicates an ownership or path error, not a Query issue.
+
+For an isolated run:
+
+```sh
+ODROE_SQLITE_PATH=/tmp/odroe-tutorial.sqlite3 \
+  dart run odroe dev --server-only
+```
+
+Remove that disposable file yourself when finished. Odroe never deletes a
+configured runtime database.
+
+## Verify D1 through local Workerd
+
+Use the project-owned, locked Cloudflare toolchain:
+
+```sh
+npm ci
+dart run odroe build --no-server web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+The final command uses Odroe's Cloudflare server-only watcher rather than
+starting Wrangler against an unchecked artifact. Initial route generation and
+compilation must succeed before Wrangler starts. After startup it watches Dart
+server sources and preserves the last-known-good Worker when generation or
+compilation fails. Rebuild Flutter Web explicitly after page or asset changes.
+
+The generated starter must read a bounded first page, create a post through D1
+`INSERT ... RETURNING`, and refresh it. The reference app additionally reads a
+second cursor page, filters through typed ID membership, and reads the created ID through
+`posts.read`. An empty title must return controlled HTTP
+400 without adding a row. These checks prove the Fetch host,
+invocation-scoped D1 adapter, generated RPC codecs, and typed SQL path. They
+do not prove a remote deployment.
+
+## Evolve the feature without hiding ownership
+
+Adding an `excerpt` field is a vertical change:
+
+1. Add it to `Post` and, if accepted from the client, `CreatePost`.
+2. Add the typed table column and projection decoder.
+3. Append one reviewable SQL migration consumed by both Native and D1.
+4. Decide whether the existing RPC IDs remain compatible.
+5. Regenerate routes and fix compiler diagnostics.
+6. Update Query keys only if resource identity changed.
+7. Verify SQLite persistence and local D1 before documenting support.
+
+Do not edit an applied migration, and do not add a repository or universal
+entity base class until repeated product code demonstrates the same problem.
+The visible path stays reviewable because each layer owns exactly one concern.
+
+Continue with [Database providers](/docs/guides/database-providers),
+[Query workflows](/docs/guides/query-workflows), and
+[Server operations](/docs/guides/server-operations).

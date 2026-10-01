@@ -1,0 +1,576 @@
+---
+title: Database providers
+description: Connect typed SQL to SQLite, PostgreSQL, MySQL, MariaDB, and D1.
+order: 33
+language: en
+---
+# Database providers
+
+Odroe starts with a small typed SQL transport instead of pretending one driver
+behaves identically on every runtime.
+
+```dart
+abstract interface class SqlExecutor {
+  Future<List<T>> query<T>(
+    BoundSql statement,
+    T Function(SqlRow row) decode,
+  );
+
+  Future<SqlWriteResult> execute(BoundSql statement);
+}
+
+abstract interface class SqlDatabase implements SqlExecutor {
+  Future<List<SqlWriteResult>> atomicWrite(
+    List<BoundSql> statements,
+  );
+
+  Future<void> close();
+}
+```
+
+`TransactionalSqlDatabase` is a separate capability. Edge databases that only
+support atomic batches do not claim interactive transactions.
+
+## Typed relational queries
+
+```dart
+final class Authors extends SqlTable<String> {
+  Authors() : super('authors');
+
+  late final id = column<int>('id', sqlInt);
+  late final displayName = column<String>('display_name', sqlText);
+
+  @override
+  late final projection = SqlProjection.column(displayName);
+}
+
+typedef Post = ({int id, int? authorId, String title});
+
+final class Posts extends SqlTable<Post> {
+  Posts() : super('posts');
+
+  late final id = column<int>('id', sqlInt);
+  late final authorId = column<int?>('author_id', nullable(sqlInt));
+  late final title = column<String>('title', sqlText);
+
+  @override
+  late final projection = SqlProjection<Post>(
+    columns: [id, authorId, title],
+    decode: (row) => (
+      id: row.read(id),
+      authorId: row.read(authorId),
+      title: row.read(title),
+    ),
+  );
+}
+
+final posts = Posts();
+final authors = Authors();
+const sql = SqlQueries(SqlDialect.postgres);
+
+final post = await sql
+    .selectTable(posts, where: posts.id.equals(42))
+    .oneOrNull(database);
+
+final selected = await sql
+    .selectTable(
+      posts,
+      where: posts.id.isIn(<int>[42, 44]),
+      orderBy: <SqlOrder>[posts.id.ascending],
+      limit: 20,
+    )
+    .all(database);
+
+final authorName = authors.displayName.optional.as('author_name');
+final postsWithAuthors = SqlProjection<({String title, String? authorName})>(
+  columns: [posts.title, authorName],
+  decode: (row) => (
+    title: row.read(posts.title),
+    authorName: row.read(authorName),
+  ),
+);
+final rows = await sql.select(
+  from: posts,
+  joins: <SqlJoin>[
+    SqlJoin.left(
+      authors,
+      on: posts.authorId.equalsColumn(authors.id),
+    ),
+  ],
+  projection: postsWithAuthors,
+).all(database);
+
+await sql
+    .insertOnConflictDoNothing(
+      posts,
+      <SqlAssignment>[
+        posts.id.set(42),
+        posts.title.set('Hello'),
+      ],
+      target: [posts.id],
+    )
+    .execute(database);
+
+final inserted = await sql
+    .insertMany(posts, <List<SqlAssignment>>[
+      <SqlAssignment>[posts.id.set(43), posts.title.set('First')],
+      <SqlAssignment>[posts.id.set(44), posts.title.set('Second')],
+    ])
+    .returning(posts.projection)
+    .all(database);
+final insertedById = <int, Post>{
+  for (final post in inserted) post.id: post,
+};
+
+await sql.updateAll(
+  posts,
+  <SqlUpdateAssignment>[posts.title.set('Archived')],
+  confirm: allRows,
+).execute(database);
+
+await sql.updateWhere(
+  counters,
+  <SqlUpdateAssignment>[counters.value.incrementBy(1)],
+  where: counters.id.equals(42),
+).execute(database);
+```
+
+`SqlProjectionRow.read(selection)` resolves the exact selection object rather
+than a caller-maintained result index. Reordering projection columns therefore
+does not exchange same-name JOIN values. Reading an undeclared selection or
+reusing the same selection object twice is rejected; create an explicit
+`.as(...)` result selection when one physical column must appear twice. Raw
+`SqlRow.read(index, codec)` remains available for handwritten `BoundSql`.
+
+The dialect is explicit. `posts.title.set(42)` is an analyzer error.
+`updateAll` and `deleteAll` also require the `allRows` confirmation token.
+Joined reads qualify every column automatically. For a `LEFT JOIN`, use the
+result-only `.optional` selection to decode a non-null schema column as
+nullable; it cannot be used for INSERT or UPDATE. Mutations remain single-table.
+In the final update, `counters.value` is a non-null `SqlTableColumn<int>`.
+
+`incrementBy` is available only on a non-null `SqlTableColumn<T extends num>`.
+It emits one bound `column = column + ?` assignment, so concurrent writers do
+not race through an application-side read-modify-write. Negative values
+subtract; numeric zero, including `-0.0`, is rejected before SQL construction.
+The column codec still validates and encodes the delta. UPDATE accepts
+`SqlUpdateAssignment`, which includes both constant `set` assignments and
+numeric increments; INSERT continues to accept only `SqlAssignment`. Duplicate
+assignments to one column and assignments owned by another table fail before
+database I/O.
+
+`isIn` and `isNotIn` bind each non-null candidate through the receiving
+column's codec and snapshot the iterable structure immediately. Empty `isIn`
+compiles to a predicate that never matches; empty `isNotIn` throws
+`ArgumentError` before it can turn a guarded mutation into a full-table
+operation. A Dart `null` candidate is normalized to an explicit `IS NULL` or
+`IS NOT NULL` branch instead of being placed inside the membership list. The
+column codec remains authoritative for non-null Dart candidates and may encode
+one as SQL `NULL`. Without a Dart null candidate, nullable rows retain SQL's
+three-valued behavior and match neither operator. Inputs are not deduplicated
+or auto-chunked, so callers own every provider's parameter limit. Use the
+explicit `updateAll` / `deleteAll` plus `allRows` path when all rows are
+intended.
+
+`insertOnConflictDoNothing` requires non-empty values and an explicit conflict
+target. Every target column must belong to the table, and the column list must
+match a conflict arbiter accepted by the selected database. Other index shapes
+remain explicit `BoundSql`. SQLite, D1, and PostgreSQL compile the exact
+target-aware operation. MySQL rejects it before reading either iterable or
+touching the database; Odroe does not substitute `INSERT IGNORE` or a different
+conflict contract.
+
+`insertMany` compiles one multi-row `INSERT`. It requires at least one row and
+at least one assignment per row. Every row must use the same table columns,
+objects, and order; duplicate or foreign columns are rejected during preflight,
+before SQL construction or I/O. It is not an `atomicWrite` batch of separate
+statements. Odroe does not auto-chunk, so split large inputs according to the
+selected provider's bound-parameter limit.
+
+SQLite, D1, and PostgreSQL can append `RETURNING`; correlate the result through
+a stable business key such as `id`, because the database does not promise input
+order. MySQL/MariaDB executes the multi-row write with `.execute(database)` and
+has no `RETURNING`; read back by stable keys when rows are needed.
+
+`SqlQueries` preserves its selected dialect on every generated `BoundSql`.
+SQLite and D1 accept `SqlDialect.sqlite`, PostgreSQL accepts
+`SqlDialect.postgres`, and MySQL/MariaDB accepts `SqlDialect.mysql`. An explicit
+mismatch throws `SqlException` with `SqlErrorCode.unsupported` before that
+statement reaches the database.
+
+## BoundSql escape hatch
+
+Use `BoundSql.parts` for SQL outside the typed relational surface.
+
+```dart
+final statement = BoundSql.parts(
+  <String>['SELECT "title" FROM "posts" WHERE "id" = ', ''],
+  <SqlValue>[sqlInt.encode(42)],
+  kind: SqlStatementKind.rowReturning,
+  dialect: SqlDialect.postgres,
+);
+final titles = await database.query(
+  statement,
+  (row) => row.read(0, sqlText),
+);
+```
+
+Fragments are trusted source. Values are bound. Drivers insert native
+placeholders between fragments without parsing or rewriting their contents.
+Handwritten `BoundSql.raw` and `BoundSql.parts` statements default to
+`dialect: null`: no compatibility is claimed, so drivers continue to accept
+them. This does not prove that the SQL is portable. Pin database-specific SQL
+with `dialect:` to opt into the same preflight protection as typed queries.
+
+Top-level calls may leave handwritten SQL as `unknown`, but a wrong terminal
+may then be detected only after the database executes it. Declare the kind
+when it is known. `atomicWrite` and transaction callbacks require an explicit
+`write` or `rowReturning` kind, so transaction control and implicitly
+committing DDL stay outside framework-managed transactions.
+
+D1 additionally requires `rowReturning` on every `query` call because its raw
+result cannot distinguish an empty query from a write. `SqlQueries` supplies
+that marker automatically.
+
+## Application ownership
+
+`DatabaseModule` makes ownership explicit. An application-level Flutter
+context may own a native database:
+
+```dart
+App(
+  modules: <DatabaseModule>[
+    DatabaseModule.owned(
+      SqliteDatabase.open(appWritableDatabasePath),
+    ),
+  ],
+  builder: (app) => Product(database: app.read(databaseKey)),
+);
+```
+
+A native server instead creates one database or pool for the process and lets
+each request borrow it:
+
+```dart
+final database = PostgresDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+);
+
+Server createServer() => generated.createServer(
+  modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
+  onClose: database.close,
+);
+```
+
+Handlers, loaders, and server functions read `databaseKey`. Request disposal
+does not close the shared pool; `Server.close()` drains requests first and then
+runs `onClose` once. Using `DatabaseModule.owned(database)` in
+`Server.modules` is incorrect because modules are request-scoped. Edge D1
+bindings have no reliable process shutdown event and remain invocation-owned;
+the Fetch bootstrap does not manufacture an `onClose` callback.
+
+`appWritableDatabasePath` above is an absolute writable path resolved by the
+Flutter application for its platform; a relative process working directory is
+not a portable mobile persistence location. The ownership boundary for every
+driver is:
+
+| Driver | Resource scope | Module and close contract |
+| --- | --- | --- |
+| SQLite in Flutter | Application | `DatabaseModule.owned`, closed with `AppContext` |
+| SQLite, PostgreSQL, MySQL/MariaDB on a native server | Process | request `borrowed`, then `Server` `onClose` |
+| Cloudflare D1 | Invocation | invocation `owned` wrapper; runtime still owns the binding |
+
+The generated native bootstrap awaits either a synchronous or asynchronous
+`createServer`, so MySQL can connect before the listener starts:
+
+```dart
+Future<Server> createServer() async {
+  final database = await MysqlDatabase.open(
+    host: 'localhost',
+    database: 'app',
+    username: 'app',
+    password: secret,
+  );
+  return generated.createServer(
+    modules: () => <DatabaseModule>[
+      DatabaseModule.borrowed(database),
+    ],
+    onClose: database.close,
+  );
+}
+```
+
+In a Cloudflare-only server entry, wrap D1 once per invocation instead of
+putting it in process modules:
+
+```dart
+@JS()
+library;
+
+import 'dart:js_interop';
+
+import 'package:odroe/database_d1.dart';
+import 'package:odroe/server_fetch.dart';
+
+import 'routes.server.dart' as generated;
+
+extension type WorkerEnvironment(JSObject _) implements JSObject {
+  external JSObject get DB;
+}
+
+Server createServer() => generated.createServer(
+  invocationModules: (invocation) {
+    final bindings = invocation.requireBindings<FetchBindings>();
+    final environment = WorkerEnvironment(bindings.raw);
+    return <DatabaseModule>[
+      DatabaseModule.owned(D1SqlDatabase.fromBinding(environment.DB)),
+    ];
+  },
+);
+```
+
+## One query, two runtimes
+
+The repository example makes `/posts/42` cross the complete product path:
+Flutter page → Query → generated typed RPC → HTTP → Server → `DatabaseModule`
+→ typed SQL. Its shared handler imports only `package:odroe/database.dart`:
+
+```dart
+final post = await postQueries
+    .selectTable(
+      posts,
+      where: posts.id.equals(context.data),
+    )
+    .oneOrNull(context.request.read(databaseKey));
+if (post == null) throw const NotFound('Post not found.');
+return post.title;
+```
+
+`oneOrNull` accepts exactly zero or one decoded row. It returns `null` for no
+row and rejects multiple rows instead of silently selecting one.
+
+One conditional export keeps platform drivers out of the wrong artifact:
+
+```dart
+export 'server_cloudflare.dart'
+    if (dart.library.io) 'server_native.dart'
+    show createServer;
+```
+
+The native entry opens one process-owned file SQLite database, defaulting to
+`.odroe/app.sqlite3`. Initialization completes before the listener can bind,
+requests borrow it, and `Server.close()` closes it. `ODROE_SQLITE_PATH` may
+override the file; production should use an absolute path on writable persistent
+storage. Before opening the listener, the entry loads `migrations/*.sql` and
+calls `SqliteDatabase.applyMigrations`. `ODROE_MIGRATIONS_PATH` may override
+that directory. Source and development runs resolve relative paths from the
+project process directory. An owned Native bundle first selects its bundle root
+from the executable and marker, so its defaults and relative overrides do not
+depend on the caller working directory.
+During native prerender the CLI overrides `ODROE_SQLITE_PATH` with a temporary
+database. `odroe.yaml` or `--sqlite-migrations` pins the selected project
+source, and the CLI deletes the database afterward, keeping builds independent
+of local state.
+
+The Cloudflare entry creates an invocation-owned D1 wrapper;
+Wrangler applies the same top-level SQL history instead of running DDL in the
+Fetch bootstrap. Shared source does not mean shared state: Native records exact
+source in `_odroe_migrations`, while Wrangler owns `d1_migrations` in D1.
+
+The example owns a locked local Wrangler toolchain. With Node 22+ and npm 10.9+,
+its D1 path is:
+
+```sh
+flutter pub get
+npm ci
+dart run odroe build --no-server web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+`cloudflare:dev` compiles the current Dart Worker before it starts local
+Wrangler and watches later server changes. Initial route generation and compile
+must succeed; after startup, a failed generation or compile leaves the previous
+Worker live. The command never applies migrations or touches remote D1.
+Flutter Web and static assets remain an explicit build step.
+
+Native and local D1 both return `Odroe post 42`. A missing ID
+returns a typed RPC 404. Applying a remote migration or deploying the Worker is
+a separate state-changing operation.
+
+## PostgreSQL connections
+
+Keep `PostgresDatabase.open(...)` when one serialized connection is the right
+boundary. Server workloads can choose a lazy pool instead:
+
+```dart
+import 'package:odroe/database_postgres.dart';
+
+final database = PostgresDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+  settings: const PoolSettings(maxConnectionCount: 4),
+);
+```
+
+The default `pool(...)` settings use
+`PoolSettings(maxConnectionCount: 4)`. Treat that limit as a database-cost
+control and size it for the deployment. Set it explicitly when passing custom
+`PoolSettings`; the underlying default for a null limit is one connection.
+`poolUrl(...)` has the same one-connection default unless the URL sets
+`max_connection_count`. Construction does not open a connection; the first
+operation leases one.
+
+Top-level operations may run concurrently. Each `transaction` and
+`atomicWrite` operation leases one connection for its complete lifetime.
+Concurrency remains bounded by the configured connection limit. Separate
+top-level calls are not guaranteed to reuse one session. Temporary tables,
+`SET`, and other session-local work are outside the Odroe pool contract. Use
+single-connection `open(...)` when that state must span statements, or complete
+the whole unit directly inside a caller-owned `Pool.run(...)` callback.
+
+`PostgresDatabase.fromPool(pool)` borrows the pool by default. Closing the
+database leaves that pool open. Pass `ownsPool: true` when the database should
+close it. Pools created by `pool(...)` and `poolUrl(...)` are owned and released
+by `close()`. `Connection`, `ConnectionSettings`, `Pool`, and `PoolSettings`
+are all exported from `package:odroe/database_postgres.dart`. Applications only
+need a direct `package:postgres` dependency for advanced APIs that are not part
+of Odroe's public constructor signatures.
+
+## MySQL and MariaDB connections
+
+`MysqlDatabase.open(...)` owns one eager, serialized connection. It is the
+lowest-cost choice for a small process or a workload that needs one stable
+session. A concurrent server can instead create an owned lazy pool:
+
+```dart
+import 'package:odroe/database_mysql.dart';
+
+final database = MysqlDatabase.pool(
+  host: 'localhost',
+  database: 'app',
+  username: 'app',
+  password: secret,
+  maxConnections: 4,
+  maxPendingOperations: 32,
+  queueTimeout: Duration(seconds: 10),
+);
+```
+
+The defaults allow four physical connections and 32 operations waiting for
+capacity. Treat `maxConnections` as the concurrency and database-cost ceiling;
+`maxPendingOperations` bounds in-process memory and shutdown backlog. Once the
+queue is full, another operation fails immediately with
+`SqlErrorCode.unavailable`. `queueTimeout` defaults to ten seconds and covers
+only time still waiting for capacity. After an opening starts, `connectTimeout`
+bounds its handshake and UTC session setup. Construction itself opens nothing.
+`transaction` and `atomicWrite` keep one connection for their complete
+lifetime. The pool does not retry operations, so a failed write is never
+silently replayed.
+
+`close()` first drains every operation accepted before closing, including pool
+waiters, and then closes all owned connections. A failed connection open frees
+capacity and advances the queue. If transaction start or rollback leaves the
+session state uncertain, Odroe destroys that physical connection instead of
+returning it to another request.
+
+Separate top-level calls can use different sessions. Do not send manual
+transaction control or rely on temporary tables and session-level `SET` across
+calls. Use `transaction(...)` for a multi-statement unit, or use `open(...)`
+when session identity itself is the application requirement.
+
+## Runtime matrix
+
+| Entrypoint | Runtime | Status | Current boundary |
+| --- | --- | --- | --- |
+| `database_sqlite.dart` | Native SQLite | Verified | Real CRUD, `RETURNING`, batches, transactions, and append-only migrations |
+| `database_postgres.dart` | Dart VM + PostgreSQL | Verified | Real single-connection, pooled concurrency, and transaction suite |
+| `database_d1.dart` | Cloudflare D1 | Preview | Local Wrangler/Workerd contract; atomic batches, no interactive transaction |
+| `database_mysql.dart` | Dart VM + MySQL/MariaDB | Preview | Single connection: MySQL 8.4 + MariaDB 11.8; bounded pool: MariaDB 11.8 |
+| RPC | Flutter Web | Available | Calls a server-owned database; no browser SQL driver |
+
+The MySQL/MariaDB driver does not support nested transactions, multiple result
+sets, portable `TIME` decoding, or `RETURNING` through `SqlDialect.mysql`.
+
+MySQL statements without bound values reject `;` before I/O so the driver's
+text protocol cannot execute multiple statements. Omit trailing semicolons.
+Statements with bound values use the prepared protocol.
+
+D1 maps Cloudflare's documented network loss, storage reset, code-update reset,
+and transient remote-node errors to `SqlErrorCode.unavailable`. Capacity,
+overload, resource-limit, and large-write timeout errors remain `driver` because
+they require application or schema changes rather than blind retries. The Odroe
+adapter adds no retries; the Cloudflare runtime may still retry read-only
+queries under its own contract. An application may add a retry only when its
+operation is idempotent. See Cloudflare's [retry guidance](https://developers.cloudflare.com/d1/best-practices/retry-queries/)
+for the provider signals and backoff requirements. D1 has not been verified in a
+remote Cloudflare deployment.
+
+All drivers live in the same Dart package. Entrypoints keep driver APIs and
+reachable Dart code separate, but pub still resolves the shared dependency
+graph. With SQLite's default configuration, its Native build hook contributes a
+dynamic library even when an application does not import that driver; Dart tree
+shaking does not undo dependency resolution or build hooks. Odroe therefore
+uses [`dart build cli`](https://dart.dev/tools/dart-build) and publishes the
+complete Native bundle instead of only its executable. Inspect each target's
+real artifact when binary size matters.
+
+## Schema and migrations
+
+Native `SqliteDatabase.open` and `openInMemory` enable and read back
+`PRAGMA foreign_keys = ON` before migrations or application SQL can use the
+connection. A connection that cannot confirm the setting is closed instead of
+being returned. Later foreign-key violations use `SqlErrorCode.constraint`.
+Opening does not run `PRAGMA foreign_key_check`, scan, reject, or repair
+historical orphan rows. Caller-authored raw `PRAGMA` can still change this
+trusted connection setting; do not turn it off. D1 keeps its provider-owned
+runtime semantics; this native connection check is not evidence about a remote
+D1 deployment. Native migrations cannot change `PRAGMA foreign_keys`; the
+connection owns that safety setting.
+
+Native SQLite and D1 can consume one application-owned, append-only SQL history:
+
+```text
+migrations/
+├── 0001_posts.sql
+└── 0002_unify_posts.sql
+```
+
+Names must match `NNNN_snake_case.sql`; versions are unique and gaps are
+allowed. Always pass the complete history. Once a file has been applied, never
+edit, delete, or rename it, and never insert a lower version below an applied
+higher one. Append a new file instead.
+
+```dart
+final migrations = readSqliteMigrations(migrationsPath);
+final applied = await database.applyMigrations(migrations);
+```
+
+The native runner returns the number applied by this call. It serializes with
+normal driver work, takes a cross-connection write lock with `BEGIN IMMEDIATE`,
+uses SQLite's parser to execute every statement without naïvely splitting on
+semicolons, and records the complete file in the same transaction. Connections
+wait briefly for a competing SQLite writer. After taking that lock, the runner
+revalidates the complete source and applied history so two processes cannot
+accept incompatible histories. A failed current file rolls back while earlier
+files remain applied. Its reserved `main._odroe_migrations` ledger stores the
+exact SQL string; the runner verifies its canonical schema and rejects direct
+or trigger-based changes without a hash dependency.
+
+Wrangler reads the same files for D1 and maintains its own ledger. Run it as an
+explicit deployment step; do not apply migrations during a Fetch invocation.
+Wrangler records names rather than source, so immutable artifacts and review are
+still required to catch D1 history edits. Keep scripts inside the SQLite/D1
+common subset. Omit transaction and connection controls: `BEGIN`, `COMMIT`,
+`END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `ATTACH`, `DETACH`, and `VACUUM`.
+`writable_schema` and the reserved ledger name are also rejected.
+
+This is a small application-SQL runner, not a cross-provider migration
+framework. PostgreSQL and MySQL/MariaDB continue to use an application-owned
+provider path; Odroe does not generate schema diffs, entities, or down
+migrations.

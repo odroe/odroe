@@ -5,7 +5,8 @@ enum InvalidSearchBehavior {
   /// Use the route's default search state.
   fallback,
 
-  /// Surface the parsing failure to the route error boundary.
+  /// Surface the parsing failure to Flutter's router error boundary or as a
+  /// controlled HTTP 400 from server dispatch.
   error,
 }
 
@@ -25,6 +26,15 @@ final class ParameterFormatException implements FormatException {
 
   @override
   String toString() => 'ParameterFormatException: $message';
+}
+
+/// A strict search-parameter decoding failure.
+///
+/// This remains a [ParameterFormatException] for router error boundaries while
+/// allowing server dispatch to distinguish invalid input from codec failures.
+final class SearchParameterFormatException extends ParameterFormatException {
+  SearchParameterFormatException._(ParameterFormatException error)
+    : super(error.message, source: error.source, offset: error.offset);
 }
 
 /// Read-only access to raw path parameters.
@@ -401,9 +411,14 @@ final class SearchParams<S> {
       final value = decode(input);
       _validateReads(input);
       return DecodedSearch<S>(value: value, keys: _keys!);
-    } on ParameterFormatException catch (error) {
+    } on ParameterFormatException catch (error, stackTrace) {
       _validateReads(input);
-      if (invalid == InvalidSearchBehavior.error) rethrow;
+      if (invalid == InvalidSearchBehavior.error) {
+        Error.throwWithStackTrace(
+          SearchParameterFormatException._(error),
+          stackTrace,
+        );
+      }
       return DecodedSearch<S>(value: defaults, keys: _keys!, error: error);
     }
   }

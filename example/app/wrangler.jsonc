@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "odroe-example",
+  "main": "./build/odroe/cloudflare/worker.mjs",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["enable_request_signal"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "assets": {
+    "directory": "./build/web",
+    "html_handling": "drop-trailing-slash"
+  }
+}

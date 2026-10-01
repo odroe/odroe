@@ -1,17 +1,16 @@
 import 'package:odroe/document.dart';
-import 'package:odroe/odroe.dart';
 import 'package:odroe/router.dart';
 import 'package:odroe/server.dart';
 import 'package:test/test.dart';
 
-const _greetingKey = ContextKey<String>('greeting');
+final _greetingKey = ContextKey<String>('greeting');
 
 final class _GreetingModule extends Module {
   const _GreetingModule();
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provide(_greetingKey, 'Hello');
+    _greetingKey.provide(registry, 'Hello');
   }
 }
 
@@ -75,6 +74,7 @@ void main() {
     final html = await response.readText();
 
     expect(response.headers.value('content-type'), contains('text/html'));
+    expect(response.headers.value('vary'), 'Accept');
     expect(html, contains('<html lang="en">'));
     expect(html, contains('<base href="/docs/">'));
     expect(html, contains('<title>Child</title>'));
@@ -119,5 +119,65 @@ void main() {
     expect(html, contains('<title>Hello Odroe</title>'));
     expect(html, isNot(contains('__odroe_state__')));
     expect(html, isNot(contains('flutter_bootstrap.js')));
+  });
+
+  test('document responses honor media quality and wildcards', () async {
+    final route = AppRoute<NoParams, NoSearch, NoData>(
+      path: '/',
+    ).document((_) => const RouteDocument(title: 'Negotiated'));
+    final app = Server(
+      routes: <RouteNode>[route],
+      renderer: const DocumentRenderer().call,
+    );
+
+    Future<ServerResponse> request(String accept) => app.handle(
+      ServerRequest.bytes(
+        method: HttpMethod.get,
+        uri: Uri.parse('http://localhost/'),
+        headers: Headers.single(<String, String>{'accept': accept}),
+      ),
+    );
+
+    final json = await request('application/json;q=0.9, text/html;q=0.1');
+    expect(json.headers.value('content-type'), contains('application/json'));
+    await json.readText();
+
+    final textWildcard = await request('application/json;q=0.4, text/*;q=0.5');
+    expect(textWildcard.headers.value('content-type'), contains('text/html'));
+    await textWildcard.readText();
+
+    final any = await request('*/*');
+    expect(any.headers.value('content-type'), contains('text/html'));
+    await any.readText();
+  });
+
+  test('dynamic HTML and JSON failures vary by Accept', () async {
+    final route = AppRoute<NoParams, NoSearch, NoData>(
+      path: '/',
+    ).document((_) => const RouteDocument(title: 'Home'));
+    final app = Server(
+      routes: <RouteNode>[route],
+      renderer: const DocumentRenderer().call,
+    );
+
+    Future<ServerResponse> request(String accept) => app.handle(
+      ServerRequest.bytes(
+        method: HttpMethod.get,
+        uri: Uri.parse('http://localhost/missing'),
+        headers: Headers.single(<String, String>{'accept': accept}),
+      ),
+    );
+
+    final html = await request('text/html');
+    expect(html.status, 404);
+    expect(html.headers.value('content-type'), contains('text/html'));
+    expect(html.headers.value('vary'), 'Accept');
+    expect(await html.readText(), contains('<title>Page not found</title>'));
+
+    final json = await request('application/json;q=0.9, text/html;q=0.1');
+    expect(json.status, 404);
+    expect(json.headers.value('content-type'), contains('application/json'));
+    expect(json.headers.value('vary'), 'Accept');
+    expect(await json.readText(), contains('"type":"notFound"'));
   });
 }

@@ -1,12 +1,55 @@
-# Odroe Full-stack App
+# Odroe full-stack reference app
 
-这是由 Flutter CLI 创建的标准 Odroe 应用，展示显式 modules、文件路由、强类型 params/search、Server Function、语义 HTML、SSG 与 Flutter 首屏交接。Flutter 构建 Android、iOS、Web 或桌面端，始终由应用自己的 Flutter CLI 目标决定。
+A Flutter product using explicit modules, typed file routes, Query/Mutation,
+generated record and enum RPC codecs, typed SQL, semantic HTML, and prerendering.
+The post list uses bounded keyset pagination; post creation refreshes the list
+from server state. Query cancellation propagates to the underlying RPC request.
 
 ```sh
+flutter pub get
 dart run odroe generate
-dart run odroe dev
+dart run odroe dev -- -d chrome
 dart run odroe dev --server-only
 dart run odroe build web
 ```
 
-`lib/main.dart` 手动选择 Query、RPC、Document 与 Router modules。`lib/routes.dart` 与 `lib/routes.server.dart` 由 `lib/routes/` 生成；前者只包含客户端代码，后者拥有 server route、RPC binding 与可组合的 `createServer()`。
+Native Flutter clients must pass
+`--dart-define=ODROE_RPC_ORIGIN=https://api.example.com` with their real server
+origin. Web keeps same-origin RPC. The define must contain an HTTP(S) origin
+without credentials, path, query, or fragment.
+
+## Database and runtime
+
+Shared route handlers import `database.dart`. Native startup opens a
+process-owned SQLite file, applies the configured append-only migrations, and
+closes it with the server. The default `.odroe/app.sqlite3` persists across
+restarts. Use `ODROE_SQLITE_PATH` and `ODROE_MIGRATIONS_PATH` for explicit runtime
+paths. Production data should live on an absolute writable persistent volume.
+Editing, removing, or renaming applied migration files stops startup.
+
+The native build is a complete owned directory with its executable, native
+libraries, migrations, and optional Web output. Deploy the whole directory.
+The compiled server locates the bundle root independently of the launch working
+directory and rejects a missing, damaged, or symbolic-link ownership marker.
+`build --server-only` deliberately excludes Web assets.
+
+The Fetch entrypoint uses D1 through the same provider-neutral handlers. To try
+that preview locally, install the locked Node toolchain, initialize local D1,
+and keep every Wrangler command local:
+
+```sh
+flutter pub get
+dart run odroe generate
+npm ci
+dart run odroe build --no-server web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+A successful local Workerd test or bundle build does not establish a remote
+Cloudflare deployment or mobile release. See the repository's
+[full-stack tutorial](../../sites/odroe.dev/content/docs/tutorials/full-stack.mdc)
+and [deployment guide](../../sites/odroe.dev/content/docs/guides/deployment.mdc).
+
+The locked Node toolchain declares `engines` and `devEngines`; install the
+required versions before running the local preview.

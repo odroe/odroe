@@ -1,0 +1,36 @@
+/packages/oref https://oref.medz.dev/ 301
+/packages/alien-signals https://github.com/medz/alien-signals-dart/blob/main/docs/guide.md 301
+/packages/oinject https://pub.dev/packages/oinject 301
+/packages/oinject/ https://pub.dev/packages/oinject 301
+/packages/oncecall https://pub.dev/packages/oncecall 301
+
+/zh/packages/oref https://oref.medz.dev/zh/ 301
+/zh/packages/alien-signals https://github.com/medz/alien-signals-dart/blob/main/docs/guide.md 301
+/zh/packages/oinject https://pub.dev/packages/oinject 301
+/zh/packages/oncecall https://pub.dev/packages/oncecall 301
+/zh/ / 301
+
+/docs/oinject https://pub.dev/packages/oinject 301
+/docs/oncecall https://pub.dev/packages/oncecall 301
+/docs/oref/ https://oref.medz.dev/zh/guide/getting-started 301
+/docs/oref/introduction https://oref.medz.dev/guide/getting-started 301
+/docs/oref/get-started https://oref.medz.dev/guide/getting-started 301
+/docs/oref/core https://oref.medz.dev/guide/core-concepts 301
+/docs/oref/advanced https://oref.medz.dev/guide/effects 301
+/docs/oref/utils https://pub.dev/documentation/oref/latest/oref/ 301
+
+/zh/docs/oinject https://pub.dev/packages/oinject 301
+/zh/docs/oncecall https://pub.dev/packages/oncecall 301
+/zh/docs/oref/introduction https://oref.medz.dev/zh/guide/getting-started 301
+/zh/docs/oref/get-started https://oref.medz.dev/zh/guide/getting-started 301
+/zh/docs/oref/core https://oref.medz.dev/zh/guide/core-concepts 301
+/zh/docs/oref/advanced https://oref.medz.dev/zh/guide/effects 301
+/zh/docs/oref/utils https://pub.dev/documentation/oref/latest/oref/ 301
+
+/docs/core/app /docs/concepts/application 301
+/docs/core/routing /docs/concepts/routing 301
+/docs/core/query /docs/concepts/query 301
+/docs/web/document /docs/concepts/content 301
+/docs/server /docs/concepts/server-rpc 301
+/docs/data/database /docs/concepts/database 301
+/docs/deploy /docs/guides/deployment 301

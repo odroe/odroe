@@ -41,6 +41,37 @@ void main() {
     expect(client.closes, 0);
   });
 
+  test('invalid function paths fail before default client creation', () {
+    var creations = 0;
+    http.runWithClient(
+      () {
+        for (final path in [
+          '',
+          '/',
+          'https:rpc',
+          '//other/rpc',
+          '/rpc?x=1',
+          '/rpc#fragment',
+          '../rpc',
+          '/rpc/../other',
+        ]) {
+          expect(
+            () => RpcModule.http(
+              baseUri: Uri.parse('https://api.example.com'),
+              functionPath: path,
+            ),
+            throwsArgumentError,
+          );
+        }
+      },
+      () {
+        creations++;
+        return _RecordingClient();
+      },
+    );
+    expect(creations, 0);
+  });
+
   test('invalid base URI leaves a caller-owned transport untouched', () {
     final client = _RecordingClient();
     final transport = HttpTransport(client: client);

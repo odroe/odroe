@@ -1,0 +1,208 @@
+---
+title: First product
+description: Create and run one Odroe product from Flutter to SQLite and local Cloudflare D1.
+order: 2
+language: en
+---
+# Build your first product
+
+This path starts with a nonexistent application path and ends with one working
+vertical slice: Flutter → Query → typed RPC → Server → typed SQL → SQLite.
+The same append-only SQL history initializes native SQLite and local D1, while
+the project keeps a locked Cloudflare toolchain. No global Wrangler install is
+required.
+
+## Create the application
+
+Odroe is currently consumed from source. Let its create command own the complete
+source-stage setup while the next public package release is prepared:
+
+```sh
+git clone https://github.com/odroe/odroe.git
+cd odroe
+flutter pub get
+dart run odroe create ../my_app --odroe-path .
+cd ../my_app
+```
+
+`create` requires a target that does not exist. It builds Flutter's empty
+Android, iOS, and Web scaffold in a private directory beside that target, adds
+the selected Odroe checkout, confirms the staged project resolves that same
+checkout, and reuses the full-stack initializer in the current `create`
+process. Only the complete product is published to the requested path. A failed
+or interrupted stage removes the private staging directory; a target that
+appears meanwhile is preserved and publication stops.
+There is deliberately no `--force`. Use `--platforms`, `--org`, or
+`--project-name` when the Flutter host needs explicit values. Add `--offline`
+only when the package cache is already complete.
+
+## Know what was created
+
+```text
+my_app/
+├── lib/
+│   ├── main.dart              # one-import Flutter composition root
+│   ├── posts.dart             # client-safe post, page, and input records
+│   ├── posts_database.dart    # shared schema and typed query builder
+│   ├── rpc_origin.dart        # browser/native origin policy
+│   ├── server.dart            # conditional server export
+│   ├── server_native.dart     # process-owned SQLite
+│   ├── server_cloudflare.dart # invocation-scoped D1
+│   ├── routes/
+│   │   ├── route.dart         # shared route and semantic document
+│   │   ├── page.dart          # infinite query and create mutation
+│   │   └── server.dart        # typed cursor-page/create RPC + SQL
+│   ├── routes.dart            # generated client references
+│   └── routes.server.dart     # generated server manifest
+├── migrations/
+│   ├── 0001_posts.sql         # create and seed
+│   └── 0002_unify_posts.sql   # evolve data and add an index
+├── odroe.yaml                  # SQLite source selected for dev/build
+├── package.json
+├── package-lock.json
+└── wrangler.jsonc
+```
+
+The root page loads bounded cursor pages and creates a new post. Native execution and local D1
+both reach `Odroe post 42` after applying the same two SQL files. `Post` and `CreatePost`
+remain Dart named records across Flutter, generated RPC, the server handler,
+and the complete SQL projection. Odroe generates the record wire codecs—there
+is no handwritten map, annotation, or adapter in application code.
+
+Application creation omits the ID and uses one typed `INSERT ... RETURNING` statement. The
+database owns the generated ID, and the returned `Post` is the value shown to
+the client.
+
+Native SQLite persists at `.odroe/app.sqlite3` by default, and the initializer
+adds `.odroe/` to `.gitignore`. Set `ODROE_SQLITE_PATH` to override it; use an
+absolute path on writable persistent storage in production. The native entry
+applies pending files before listening and preserves existing rows across
+restarts. `ODROE_MIGRATIONS_PATH` overrides the default `migrations/` path.
+In source and development runs, relative paths resolve from the project process
+directory. An owned Native bundle self-locates from its executable before
+application creation, so its defaults and relative overrides resolve from the
+bundle root regardless of the caller working directory.
+The starter's application-owned `odroe.yaml` contains
+`sqlite_migrations: migrations`. Native `odroe dev` watches that source and
+restarts after a SQL file changes; build and prerender validate the same source.
+Use `--sqlite-migrations <path>` only to override one command. A project without
+either selection does not make the CLI reserve or guess a generic migration
+directory for build or watch.
+
+Migration files must use `NNNN_snake_case.sql`, stay top-level, and only move
+forward. Never edit, delete, or rename an applied file. Native SQLite records
+the exact SQL string and rejects divergent history; Wrangler owns a separate D1
+ledger and cannot detect edited source, so code review and immutable deployment
+artifacts remain part of the contract.
+
+Run the initializer again at any time. An unchanged starter produces no file
+changes. The smaller `dart run odroe init` remains available when a product
+needs only Document and Router; an untouched small starter can later upgrade
+atomically with `--full-stack`.
+
+## Run on Flutter and the native server
+
+Start both the Odroe development server and Flutter Web:
+
+```sh
+dart run odroe dev -- -d chrome
+```
+
+Open the reported Flutter URL. Infinite Query calls the generated `posts.list`
+reference with a page size of 20 and renders `Odroe post 42`. When another page
+exists, Load more passes its typed `nextCursor` back to the same function. Enter a title and choose Create;
+Mutation calls `posts.create`, invalidates the post-list key, and renders the
+database-returned record. Stop the command with Ctrl-C; Odroe drains the
+listener before closing the process-owned database. Starting the command again
+reopens the same `.odroe/app.sqlite3` file, including posts you created.
+
+To inspect only the semantic server response, run:
+
+```sh
+dart run odroe dev --server-only
+```
+
+Visit `http://127.0.0.1:3000/`. Development reads `public/` directly and never
+reuses stale HTML from `build/web`.
+
+Browser RPC is same-origin. A native device cannot use the browser's relative
+origin, so pass the server origin explicitly:
+
+```sh
+flutter devices
+dart run odroe dev -- -d <device-id> \
+  --dart-define=ODROE_RPC_ORIGIN=https://api.example.com
+```
+
+The generated `rpc_origin.dart` rejects a missing or malformed native origin at
+startup rather than failing on the first request.
+
+## Run the edge path locally
+
+Node 22+ and npm 10.9+ are used only by the project-owned Cloudflare toolchain.
+They do not enter the Dart dependency graph, Flutter artifact, or Worker
+bundle. Run these commands from `my_app`:
+
+```sh
+npm ci
+dart run odroe build --no-server web
+npm run cloudflare:migrate:local
+npm run cloudflare:dev
+```
+
+The migration command and Odroe's Cloudflare development runtime both keep
+Wrangler local. `cloudflare:dev` regenerates routes, compiles the current
+Worker, atomically replaces its server JavaScript, and then starts the
+project-local Wrangler. Dart server changes recompile without restarting the
+CLI. After a successful start, a failed
+generation or compile leaves the last-known-good Worker serving requests until
+the source is fixed. An initial route generation or compile failure exits
+instead of running an old artifact.
+
+`/` serves the semantic handoff and the same typed cursor-page/create RPC uses the
+invocation's `DB` binding. Creating a post exercises D1 `INSERT ... RETURNING`
+and refreshes the same typed list. This server-only watch does not rebuild
+Flutter Web or static assets; run `build --no-server web` again after UI or
+asset changes. Removing `--local` or deploying changes remote state and is a
+separate operation.
+
+## Build only what you need
+
+```sh
+# Flutter Web plus prerendered HTML; no deployable server
+dart run odroe build --no-server web
+
+# Flutter WebAssembly plus the same Document handoff
+dart run odroe build --no-server -- web --wasm
+
+# Native server plus the configured SQLite history
+dart run odroe build --server-only
+
+# Cloudflare Worker only
+dart run odroe build --server-only --server-target cloudflare
+```
+
+The Native command publishes the complete bundle root at
+`build/odroe/server`: invoke `bin/server` (`bin/server.exe` on Windows) from any
+working directory and keep its `lib/` directory beside `bin/`. The owned bundle
+marker makes the executable select this root before application creation. A
+compiled entry rejects a missing, non-regular, or changed marker before opening
+application state. With the configured migration selection, the same root also
+contains `migrations/`. A custom Native `--server-artifact` selects this root,
+not the `bin/server` file.
+
+`dev` and `build` regenerate route targets automatically. Use
+`dart run odroe generate` for a fast explicit compiler check.
+
+Native prerender is isolated from runtime state. The CLI overrides
+`ODROE_SQLITE_PATH` for the prerender child with a temporary database and removes
+it after the child stops. `odroe.yaml` or `--sqlite-migrations` pins the source
+path. The CLI also retains the project working directory for build-time source
+resources. The generated starter therefore never reads or writes the local
+`.odroe/app.sqlite3` file during a build.
+
+Next, follow the [full-stack tutorial](/docs/tutorials/full-stack) to change the
+model, query, function, and UI as one coherent feature. Use the
+[CLI and generated files reference](/docs/reference/cli-and-files) when choosing
+artifacts, and the [deployment guide](/docs/guides/deployment) before publishing
+anything.

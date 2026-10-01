@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odroe/odroe_flutter.dart';
 import 'package:odroe/router_flutter.dart';
+import 'package:odroe/rpc.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 
 // ignore: avoid_relative_lib_imports
@@ -36,16 +39,60 @@ void main() {
     );
     expect(
       output.serverSource,
-      contains("import 'routes/posts/[postId]/server.dart'"),
+      contains('import "routes/posts/[postId]/server.dart"'),
     );
     expect(output.source, contains("import 'package:odroe/router.dart';"));
     expect(output.source, isNot(contains("package:odroe/route.dart")));
     expect(output.source, contains("import 'package:odroe/rpc.dart';"));
-    expect(output.serverSource, contains("import 'package:odroe/rpc.dart';"));
+    expect(
+      RegExp('import "posts.dart"').allMatches(output.source),
+      hasLength(1),
+    );
+    expect(
+      RegExp('import "posts.dart"').allMatches(output.serverSource),
+      hasLength(1),
+    );
+    expect(
+      output.serverSource,
+      isNot(contains("import 'package:odroe/rpc.dart';")),
+    );
     expect(output.serverSource, contains('Server createServer('));
+    expect(
+      RegExp(r': ServerFunctionBinding\(').allMatches(output.serverSource),
+      hasLength(3),
+      reason: 'The reference app exposes list, create, and detail RPCs.',
+    );
     expect(
       output.serverSource,
       contains('Iterable<Module> Function()? modules'),
+    );
+    expect(
+      output.serverSource,
+      contains('InvocationModuleFactory? invocationModules'),
+    );
+    expect(output.serverSource, contains('ServerErrorHandler? onError'));
+    expect(output.serverSource, contains('onError: onError'));
+    expect(output.serverSource, contains('ServerCloseHandler? onClose'));
+    expect(output.serverSource, contains('onClose: onClose'));
+    expect(
+      output.serverSource,
+      contains('int maxFunctionPayload = Server.defaultMaxFunctionPayload'),
+    );
+    expect(
+      output.serverSource,
+      contains('int maxFunctionResponseFrameBytes ='),
+    );
+    expect(
+      output.serverSource,
+      contains('Server.defaultMaxFunctionResponseFrameBytes'),
+    );
+    expect(
+      output.serverSource,
+      contains('maxFunctionPayload: maxFunctionPayload'),
+    );
+    expect(
+      output.serverSource,
+      contains('maxFunctionResponseFrameBytes: maxFunctionResponseFrameBytes'),
     );
     expect(output.serverSource, contains('flutterRoutes: <RouteNode>['));
     expect(output.serverSource, contains('path: ":postId"'));
@@ -57,13 +104,28 @@ void main() {
   });
 
   testWidgets('push crosses a real filesystem shell', (tester) async {
-    final router = AppRouter(
-      routes: fixture.routeTree,
-      initialLocation: Uri.parse('/'),
+    late AppRouter router;
+    await tester.pumpWidget(
+      App(
+        modules: <Module>[
+          QueryModule(),
+          RpcModule(
+            RpcClient(
+              baseUri: Uri.parse('https://api.example.com'),
+              transport: const _FixtureTransport(),
+            ),
+          ),
+          RouterModule(
+            routes: fixture.routeTree,
+            initialLocation: Uri.parse('/'),
+          ),
+        ],
+        builder: (app) {
+          router = app.read(routerKey);
+          return MaterialApp.router(routerConfig: router);
+        },
+      ),
     );
-    addTearDown(router.dispose);
-
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
 
     final result = router.push<Object?>(
@@ -81,4 +143,23 @@ void main() {
     expect(await result, isNull);
     expect(router.location.path, '/');
   });
+}
+
+final class _FixtureTransport implements RpcTransport {
+  const _FixtureTransport();
+
+  @override
+  Future<ServerResponse> send(ServerRequest request) async {
+    final payload =
+        jsonDecode(request.uri.queryParameters['payload']!)
+            as Map<String, Object?>;
+    return ServerResponse.json(<String, Object?>{
+      'version': 1,
+      'type': 'data',
+      'data': <String, Object?>{
+        'id': payload['data'],
+        'title': 'Post ${payload['data']}',
+      },
+    });
+  }
 }

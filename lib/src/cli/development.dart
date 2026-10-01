@@ -12,9 +12,28 @@ Future<int> runDevelopment(
   required int port,
   required bool serverOnly,
   required List<String> flutterArguments,
+  required String? sqliteMigrations,
   required StringSink out,
   required StringSink err,
 }) async {
+  final inheritedMigrations = Platform.environment['ODROE_MIGRATIONS_PATH'];
+  if (sqliteMigrations == null && inheritedMigrations == '') {
+    throw const FormatException('ODROE_MIGRATIONS_PATH must not be empty.');
+  }
+  final configuredMigrations = sqliteMigrations == null
+      ? inheritedMigrations ?? project.configuredSqliteMigrations
+      : resolveProjectPath(
+          project.root,
+          sqliteMigrations,
+          option: '--sqlite-migrations',
+        );
+  final migrationsDirectory = configuredMigrations == null
+      ? null
+      : Directory(
+          p.isAbsolute(configuredMigrations)
+              ? configuredMigrations
+              : p.join(project.root.path, configuredMigrations),
+        ).absolute;
   final generated = generateRoutes(project, out, err);
   if (generated == null) return 1;
   final resolvedPort = port == 0 ? await _availablePort(host) : port;
@@ -72,14 +91,15 @@ Future<int> runDevelopment(
       ).toString(),
     );
   }
+  final publicDirectory = Directory(p.join(project.root.path, 'public'));
   final environment = <String, String>{
     ...Platform.environment,
     'ODROE_HOST': host,
     'ODROE_PORT': '$resolvedPort',
-    if (developmentOriginFile != null) ...<String, String>{
-      'ODROE_FLUTTER_ORIGIN_FILE': developmentOriginFile.path,
-      'ODROE_WEB_ROOT': '',
-    },
+    'ODROE_WEB_ROOT': publicDirectory.existsSync() ? publicDirectory.path : '',
+    'ODROE_FLUTTER_ORIGIN_FILE': developmentOriginFile?.path ?? '',
+    if (migrationsDirectory != null)
+      'ODROE_MIGRATIONS_PATH': migrationsDirectory.path,
   };
   Process server = await startProjectProcess(
     Platform.resolvedExecutable,
@@ -139,12 +159,18 @@ Future<int> runDevelopment(
         server.kill(ProcessSignal.sigterm);
         await server.exitCode;
         if (stopping) break;
-        server = await startProjectProcess(
+        final nextServer = await startProjectProcess(
           Platform.resolvedExecutable,
           <String>['run', project.bootstrap.path],
           project: project,
           environment: environment,
         );
+        if (stopping) {
+          nextServer.kill(ProcessSignal.sigterm);
+          await nextServer.exitCode;
+          break;
+        }
+        server = nextServer;
         observeServer(server);
       } while (restartQueued && !stopping);
     } finally {
@@ -152,27 +178,53 @@ Future<int> runDevelopment(
     }
   }
 
-  final changes = project.libDirectory.watch(recursive: true).listen((event) {
-    if (!event.path.endsWith('.dart')) return;
-    if (p.equals(event.path, project.compiler.outputFile.path) ||
-        p.equals(event.path, project.compiler.serverOutputFile.path)) {
-      return;
-    }
-    final name = p.basename(event.path);
-    final flutterOnlyModification =
-        event.type == FileSystemEvent.modify &&
-        (name == 'page.dart' || name == 'shell.dart');
-    serverRestartNeeded |= !flutterOnlyModification;
+  Future<void>? restartFuture;
+  void queueRestart({required bool server}) {
+    serverRestartNeeded |= server;
     debounce?.cancel();
     debounce = Timer(const Duration(milliseconds: 120), () {
-      unawaited(
-        restart().catchError((Object error, StackTrace stackTrace) {
-          err.writeln(error);
-          if (!done.isCompleted) done.complete(1);
-        }),
-      );
+      if (restartFuture != null) {
+        restartQueued = true;
+        return;
+      }
+      late final Future<void> trackedRestart;
+      trackedRestart = restart()
+          .catchError((Object error, StackTrace stackTrace) {
+            err.writeln(error);
+            if (!done.isCompleted) done.complete(1);
+          })
+          .whenComplete(() {
+            if (identical(restartFuture, trackedRestart)) {
+              restartFuture = null;
+            }
+          });
+      restartFuture = trackedRestart;
+      unawaited(trackedRestart);
     });
-  });
+  }
+
+  final changes = <StreamSubscription<FileSystemEvent>>[];
+  changes.add(
+    project.libDirectory.watch(recursive: true).listen((event) {
+      if (!event.path.endsWith('.dart')) return;
+      if (p.equals(event.path, project.compiler.outputFile.path) ||
+          p.equals(event.path, project.compiler.serverOutputFile.path)) {
+        return;
+      }
+      final name = p.basename(event.path);
+      final flutterOnlyModification =
+          event.type == FileSystemEvent.modify &&
+          (name == 'page.dart' || name == 'shell.dart');
+      queueRestart(server: !flutterOnlyModification);
+    }),
+  );
+  if (migrationsDirectory?.existsSync() ?? false) {
+    changes.add(
+      migrationsDirectory!.watch().listen((event) {
+        if (event.path.endsWith('.sql')) queueRestart(server: true);
+      }),
+    );
+  }
 
   final signals = <StreamSubscription<ProcessSignal>>[];
   void stop(ProcessSignal _) {
@@ -188,10 +240,14 @@ Future<int> runDevelopment(
   final result = await done.future;
   stopping = true;
   debounce?.cancel();
-  await changes.cancel();
+  for (final change in changes) {
+    await change.cancel();
+  }
   for (final signal in signals) {
     await signal.cancel();
   }
+  final pendingRestart = restartFuture;
+  if (pendingRestart != null) await pendingRestart;
   server.kill(ProcessSignal.sigterm);
   flutter?.kill(ProcessSignal.sigterm);
   await Future.wait<void>(<Future<void>>[

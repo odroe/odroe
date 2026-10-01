@@ -28,4 +28,5 @@ jobs:
       - run: flutter pub get --directory example/app
       - run: dart format --output=none --set-exit-if-changed lib/src/rpc/module.dart test/rpc/http_module_test.dart example/app/lib/main.dart
       - run: dart analyze lib/src/rpc/module.dart test/rpc/http_module_test.dart example/app/lib/main.dart
-      - run: dart test --platform vm,chrome test/rpc
+      - run: dart test test/rpc
+      - run: dart test --platform chrome test/rpc/http_module_test.dart test/rpc/rpc_test.dart test/rpc/client_test.dart test/rpc/query_cancellation_test.dart

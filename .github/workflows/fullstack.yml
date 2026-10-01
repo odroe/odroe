@@ -1,0 +1,58 @@
+name: Full-stack integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fullstack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  product:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ODROE_WRANGLER: ${{ github.workspace }}/example/app/node_modules/.bin/wrangler
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+      - run: flutter pub get
+      - run: flutter pub get --directory example/app
+      - run: flutter pub get --directory sites/odroe.dev
+      - run: npm ci --prefix example/app
+      - name: Select disposable PostgreSQL test binaries
+        run: echo "ODROE_POSTGRES_BIN_DIR=$(pg_config --bindir)" >> "$GITHUB_ENV"
+      - run: dart format --output=none --set-exit-if-changed lib test benchmark example/app/lib example/app/test sites/odroe.dev/lib sites/odroe.dev/test
+      - run: dart analyze --fatal-infos
+      - name: Verify native and Flutter contracts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          vm, flutter = [], []
+          for path in sorted(Path('test').rglob('*_test.dart')):
+              source = path.read_text()
+              if "@TestOn('browser')" in source:
+                  continue
+              group = flutter if any(value in source for value in
+                  ['package:flutter_test', 'package:flutter/', 'dart:ui']) else vm
+              group.append(str(path))
+          subprocess.run(['dart', 'test', '--concurrency=2', *vm], check=True)
+          subprocess.run(['flutter', 'test', '--no-pub', '--concurrency=2', *flutter], check=True)
+          PY
+      - run: flutter test --no-pub --concurrency=2 test
+        working-directory: example/app
+      - run: dart test --platform chrome test/web/browser_platform_test.dart
+      - run: flutter test --no-pub --platform chrome --concurrency=1 test/web/flutter_browser_handoff_test.dart test/web/flutter_hash_handoff_test.dart test/web/flutter_preserve_url_strategy_test.dart
+      - run: dart test
+        working-directory: sites/odroe.dev

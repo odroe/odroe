@@ -2,10 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:args/args.dart';
+import 'package:odroe/server_io.dart';
 import 'package:odroe/src/router_compiler/compiler.dart';
 
 import 'build.dart';
+import 'cloudflare_development.dart';
+import 'create.dart';
 import 'development.dart';
+import 'initialize.dart';
 import 'project.dart';
 
 /// Runs the Odroe command-line product and returns a process exit code.
@@ -13,9 +17,17 @@ Future<int> runOdroe(
   List<String> arguments, {
   StringSink? output,
   StringSink? errors,
+  CreateCommandRunner? createCommandRunner,
+  CreateProjectInitializer? createProjectInitializer,
 }) async {
   final out = output ?? stdout;
   final err = errors ?? stderr;
+  final init = _projectParser()
+    ..addFlag(
+      'full-stack',
+      negatable: false,
+      help: 'Create a Query, RPC, typed SQL, SQLite, and Cloudflare starter.',
+    );
   final generate = _generationParser()
     ..addFlag(
       'watch',
@@ -23,9 +35,37 @@ Future<int> runOdroe(
       negatable: false,
       help: 'Recompile when route files change.',
     );
+  final create = ArgParser()
+    ..addFlag('help', abbr: 'h', negatable: false)
+    ..addOption(
+      'platforms',
+      defaultsTo: 'android,ios,web',
+      help: 'Comma-separated Flutter platforms.',
+    )
+    ..addOption('org', help: 'Reverse-domain organization identifier.')
+    ..addOption('project-name', help: 'Dart package name for the project.')
+    ..addOption(
+      'odroe-path',
+      help: 'Odroe package checkout to use as a path dependency.',
+    )
+    ..addFlag(
+      'offline',
+      negatable: false,
+      help: 'Resolve the Odroe dependency from the local package cache.',
+    );
   final dev = _generationParser()
     ..addOption('host', defaultsTo: '127.0.0.1')
     ..addOption('port', defaultsTo: '3000')
+    ..addOption(
+      'server-target',
+      allowed: ServerBuildTarget.values.map((target) => target.name),
+      defaultsTo: ServerBuildTarget.native.name,
+      help: 'Server runtime to run.',
+    )
+    ..addOption(
+      'sqlite-migrations',
+      help: 'Override odroe.yaml SQLite migrations for this Native run.',
+    )
     ..addFlag(
       'server-only',
       negatable: false,
@@ -40,12 +80,21 @@ Future<int> runOdroe(
     ..addFlag(
       'server',
       defaultsTo: true,
-      help: 'Build the Odroe server artifact.',
+      help: 'Emit a deployable Odroe server artifact.',
     )
     ..addOption(
       'server-artifact',
-      defaultsTo: 'build/odroe/server',
-      help: 'Server executable path relative to the project.',
+      help: 'Native bundle or Cloudflare JS path inside the build directory.',
+    )
+    ..addOption(
+      'server-target',
+      allowed: ServerBuildTarget.values.map((target) => target.name),
+      defaultsTo: ServerBuildTarget.native.name,
+      help: 'Server runtime to compile.',
+    )
+    ..addOption(
+      'sqlite-migrations',
+      help: 'Override odroe.yaml SQLite migrations for this build.',
     )
     ..addFlag(
       'prerender',
@@ -55,15 +104,32 @@ Future<int> runOdroe(
     ..addOption(
       'prerender-output',
       defaultsTo: 'build/web',
-      help: 'Static output directory inside build/ (relative to the project).',
+      help: 'Static output directory inside the project build directory.',
     )
     ..addOption(
       'prerender-concurrency',
-      defaultsTo: '${Platform.numberOfProcessors}',
+      defaultsTo: '${Prerenderer.defaultConcurrency}',
       help: 'Maximum parallel prerender requests.',
+    )
+    ..addFlag(
+      'prerender-crawl',
+      negatable: false,
+      help: 'Discover additional same-origin HTML links.',
+    )
+    ..addOption(
+      'prerender-max-routes',
+      defaultsTo: '${Prerenderer.defaultMaxRoutes}',
+      help: 'Maximum explicit and discovered prerender routes.',
+    )
+    ..addOption(
+      'prerender-max-response-bytes',
+      defaultsTo: '${Prerenderer.defaultMaxResponseBytes}',
+      help: 'Maximum HTML response bytes per prerender route.',
     );
   final parser = ArgParser()
     ..addFlag('help', abbr: 'h', negatable: false)
+    ..addCommand('create', create)
+    ..addCommand('init', init)
     ..addCommand('generate', generate)
     ..addCommand('dev', dev)
     ..addCommand('build', build);
@@ -85,38 +151,77 @@ Future<int> runOdroe(
     out.writeln(
       _commandUsage(
         command.name!,
-        _parserFor(command.name!, generate, dev, build),
+        _parserFor(command.name!, create, init, generate, dev, build),
       ),
     );
     return 0;
   }
 
   try {
-    final project = CliProject.from(command);
+    if (command.name == 'create') {
+      if (command.rest.length != 1) {
+        err.writeln('odroe create requires exactly one target directory.');
+        return 64;
+      }
+      await createProject(
+        directory: command.rest.single,
+        odroePath: command.option('odroe-path'),
+        platforms: command.option('platforms')!,
+        organization: command.option('org'),
+        projectName: command.option('project-name'),
+        offline: command.flag('offline'),
+        out: out,
+        err: err,
+        runCommand: createCommandRunner,
+        initialize: createProjectInitializer,
+      );
+      return 0;
+    }
+    if (command.name == 'init' && command.rest.isNotEmpty) {
+      err.writeln('odroe init does not accept positional arguments.');
+      return 64;
+    }
+    final project = command.name == 'init'
+        ? CliProject.fromRoot(command.option('project')!)
+        : CliProject.from(command);
     return switch (command.name) {
+      'init' =>
+        initializeProject(
+              project,
+              out,
+              err,
+              fullStack: command.flag('full-stack'),
+            )
+            ? 0
+            : 1,
       'generate' =>
         command.flag('watch')
             ? await _watchRoutes(project, out, err)
             : (generateRoutes(project, out, err) == null ? 1 : 0),
-      'dev' => await runDevelopment(
-        project,
-        host: command.option('host')!,
-        port: _port(command.option('port')!),
-        serverOnly: command.flag('server-only'),
-        flutterArguments: command.rest,
-        out: out,
-        err: err,
-      ),
+      'dev' => await _runDevelopmentCommand(project, command, out, err),
       'build' => await runBuild(
         project,
         serverOnly: command.flag('server-only'),
         buildServer: command.flag('server'),
-        serverArtifact: command.option('server-artifact')!,
+        serverTarget: ServerBuildTarget.values.byName(
+          command.option('server-target')!,
+        ),
+        serverArtifact: command.option('server-artifact'),
+        sqliteMigrations: command.option('sqlite-migrations'),
         prerender: command.flag('prerender'),
         prerenderOutput: command.option('prerender-output')!,
         prerenderConcurrency: _positiveInt(
           command.option('prerender-concurrency')!,
           'prerender-concurrency',
+        ),
+        prerenderCrawl: command.flag('prerender-crawl'),
+        prerenderMaxRoutes: _positiveInt(
+          command.option('prerender-max-routes')!,
+          'prerender-max-routes',
+        ),
+        prerenderMaxResponseBytes: _positiveInt(
+          command.option('prerender-max-response-bytes')!,
+          'prerender-max-response-bytes',
         ),
         flutterArguments: command.rest,
         out: out,
@@ -141,13 +246,59 @@ Future<int> runOdroe(
   }
 }
 
-ArgParser _generationParser() => ArgParser()
+Future<int> _runDevelopmentCommand(
+  CliProject project,
+  ArgResults command,
+  StringSink out,
+  StringSink err,
+) {
+  final target = ServerBuildTarget.values.byName(
+    command.option('server-target')!,
+  );
+  if (target == ServerBuildTarget.cloudflare &&
+      command.option('sqlite-migrations') != null) {
+    throw const FormatException(
+      '--sqlite-migrations is only available in Native development.',
+    );
+  }
+  final arguments = (
+    host: command.option('host')!,
+    port: _port(command.option('port')!),
+    serverOnly: command.flag('server-only'),
+    flutterArguments: command.rest,
+  );
+  return switch (target) {
+    ServerBuildTarget.native => runDevelopment(
+      project,
+      host: arguments.host,
+      port: arguments.port,
+      serverOnly: arguments.serverOnly,
+      flutterArguments: arguments.flutterArguments,
+      sqliteMigrations: command.option('sqlite-migrations'),
+      out: out,
+      err: err,
+    ),
+    ServerBuildTarget.cloudflare => runCloudflareDevelopment(
+      project,
+      host: arguments.host,
+      port: arguments.port,
+      serverOnly: arguments.serverOnly,
+      flutterArguments: arguments.flutterArguments,
+      out: out,
+      err: err,
+    ),
+  };
+}
+
+ArgParser _projectParser() => ArgParser()
   ..addFlag('help', abbr: 'h', negatable: false)
   ..addOption(
     'project',
     defaultsTo: '.',
     help: 'Dart or Flutter application root.',
-  )
+  );
+
+ArgParser _generationParser() => _projectParser()
   ..addOption(
     'routes',
     defaultsTo: 'lib/routes',
@@ -166,10 +317,14 @@ ArgParser _generationParser() => ArgParser()
 
 ArgParser _parserFor(
   String name,
+  ArgParser create,
+  ArgParser init,
   ArgParser generate,
   ArgParser dev,
   ArgParser build,
 ) => switch (name) {
+  'create' => create,
+  'init' => init,
   'generate' => generate,
   'dev' => dev,
   'build' => build,
@@ -221,6 +376,8 @@ Future<int> _watchRoutes(
 String _usage(ArgParser parser) =>
     'Usage: dart run odroe <command> [arguments]\n\n'
     'Commands:\n'
+    '  create    Create a new full-stack Flutter application.\n'
+    '  init      Initialize an empty Flutter application.\n'
     '  generate  Generate client and server route targets.\n'
     '  dev       Watch source, run Odroe, and run Flutter.\n'
     '  build     Build a Flutter target and the Odroe server.\n'

@@ -1,0 +1,27 @@
+{
+  "name": "odroe-example",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.9.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.0.0",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": ">=10.9.0",
+      "onFail": "error"
+    }
+  },
+  "scripts": {
+    "cloudflare:migrate:local": "wrangler d1 migrations apply DB --local",
+    "cloudflare:dev": "dart run odroe dev --server-target cloudflare --server-only"
+  },
+  "devDependencies": {
+    "wrangler": "4.118.0"
+  }
+}

@@ -1,4 +1,8 @@
 .dart_tool/
+.wrangler/
+.odroe/
 .pub/
 build/
+node_modules/
 pubspec.lock
+!sites/odroe.dev/pubspec.lock
