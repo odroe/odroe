@@ -23,6 +23,6 @@ jobs:
           flutter-version: '3.47.5'
           channel: stable
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib/src/cli/build.dart test/cli/build_output_test.dart
-      - run: dart analyze lib/src/cli/build.dart test/cli/build_output_test.dart
+      - run: dart format --output=none --set-exit-if-changed lib/src/cli/build.dart lib/src/cli/cli.dart lib/src/cli/project.dart lib/src/router_compiler/compiler.dart test/cli/build_output_test.dart
+      - run: dart analyze lib/src/cli lib/src/router_compiler test/cli/build_output_test.dart
       - run: dart test test/cli/build_output_test.dart test/server/prerender_test.dart

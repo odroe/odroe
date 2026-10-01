@@ -81,6 +81,37 @@ final route = AppRoute<NoParams, NoSearch, NoData>().document(
     expect(sentinel.readAsStringSync(), 'keep');
   });
 
+  for (final option in <String>['--output', '--server-output']) {
+    test('rejects $option overlap before generating files', () async {
+      final sentinel = File(p.join(project.path, 'build/site/routes.dart'));
+      sentinel.parent.createSync(recursive: true);
+      sentinel.writeAsStringSync('keep');
+      final code = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          '--prerender-output',
+          'build/site',
+          option,
+          'build/site/routes.dart',
+        ],
+        output: StringBuffer(),
+        errors: StringBuffer(),
+      );
+      expect(code, isNot(0));
+      expect(sentinel.readAsStringSync(), 'keep');
+      expect(
+        File(p.join(project.path, 'lib/routes.dart')).existsSync(),
+        isFalse,
+      );
+      expect(
+        File(p.join(project.path, '.dart_tool/odroe/server.dart')).existsSync(),
+        isFalse,
+      );
+    });
+  }
+
   test('rejects symlinked output ancestors', () async {
     final outside = Directory(p.join(temporary.path, 'outside'))..createSync();
     File(p.join(outside.path, 'keep.txt')).writeAsStringSync('keep');

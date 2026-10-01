@@ -20,13 +20,18 @@ Future<int> runBuild(
   required StringSink out,
   required StringSink err,
 }) async {
-  final generated = generateRoutes(project, out, err);
-  if (generated == null) return 1;
+  final inspected = project.compiler.compile();
+  if (inspected.hasErrors) {
+    for (final diagnostic in inspected.diagnostics) {
+      err.writeln(diagnostic);
+    }
+    return 1;
+  }
   if (serverOnly && !buildServer) {
     err.writeln('--server-only cannot be combined with --no-server.');
     return 64;
   }
-  if (!serverOnly && generated.hasFlutter && flutterArguments.isEmpty) {
+  if (!serverOnly && inspected.hasFlutter && flutterArguments.isEmpty) {
     err.writeln(
       'Choose a Flutter build target, for example: '
       'dart run odroe build apk or dart run odroe build web.',
@@ -39,7 +44,7 @@ Future<int> runBuild(
   final shouldPrerender =
       prerender &&
       !serverOnly &&
-      (!generated.hasFlutter || flutterTarget == 'web');
+      (!inspected.hasFlutter || flutterTarget == 'web');
   if (shouldPrerender && !buildServer) {
     err.writeln('Prerendering requires the Odroe server artifact.');
     return 64;
@@ -49,9 +54,11 @@ Future<int> runBuild(
           project,
           prerenderOutput,
           serverArtifact,
-          hasFlutter: generated.hasFlutter,
+          hasFlutter: inspected.hasFlutter,
         )
       : null;
+  final generated = generateRoutes(project, out, err, compiled: inspected);
+  if (generated == null) return 1;
   late final File artifact;
   if (buildServer) {
     artifact = File(p.join(project.root.path, serverArtifact)).absolute;

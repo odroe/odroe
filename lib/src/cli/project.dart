@@ -78,10 +78,11 @@ final class CliProject {
 FileRouteOutput? generateRoutes(
   CliProject project,
   StringSink out,
-  StringSink err,
-) {
+  StringSink err, {
+  FileRouteOutput? compiled,
+}) {
   try {
-    final result = project.compiler.write();
+    final result = project.compiler.write(compiled: compiled);
     project.writeBootstrap();
     out.writeln(
       result.changed
