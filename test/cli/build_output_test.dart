@@ -121,6 +121,42 @@ final route = AppRoute<NoParams, NoSearch, NoData>().document(
     expect(outside.listSync().length, 1);
   });
 
+  for (final option in <String>[
+    '--output',
+    '--server-output',
+    '--server-artifact',
+  ]) {
+    test('rejects $option symlink aliases before writing', () async {
+      final output = Directory(p.join(project.path, 'build/site'))
+        ..createSync(recursive: true);
+      File(
+        p.join(output.path, '.odroe-prerender'),
+      ).writeAsStringSync('odroe-prerender-v1:build_fixture\n');
+      final sentinel = File(p.join(output.path, 'keep.dart'))
+        ..writeAsStringSync('keep');
+      Link(p.join(project.path, 'lib/generated')).createSync('../build/site');
+      final code = await runOdroe(
+        <String>[
+          'build',
+          '--project',
+          project.path,
+          '--prerender-output',
+          'build/site',
+          option,
+          'lib/generated/keep.dart',
+        ],
+        output: StringBuffer(),
+        errors: StringBuffer(),
+      );
+      expect(code, isNot(0));
+      expect(sentinel.readAsStringSync(), 'keep');
+      expect(
+        File(p.join(project.path, '.dart_tool/odroe/server.dart')).existsSync(),
+        isFalse,
+      );
+    });
+  }
+
   test('rejects public symlinks before copying assets', () async {
     Link(p.join(project.path, 'public')).createSync(project.path);
     expect(await build('build/site'), isNot(0));

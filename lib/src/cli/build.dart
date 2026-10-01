@@ -118,14 +118,39 @@ Future<int> runBuild(
     try {
       staging.renameSync(output.path);
     } on Object {
-      if (backup != null) backup.renameSync(output.path);
+      if (backup != null) {
+        try {
+          backup.renameSync(output.path);
+        } on FileSystemException catch (restoreError) {
+          err.writeln(
+            'Could not restore previous output; it remains at '
+            '${backup.path}: ${restoreError.message}',
+          );
+        }
+      }
       rethrow;
     }
-    if (backup != null) backup.deleteSync(recursive: true);
+    if (backup != null) {
+      try {
+        backup.deleteSync(recursive: true);
+      } on FileSystemException catch (error) {
+        err.writeln(
+          'Warning: Output was published, but the previous output remains at '
+          '${backup.path}: ${error.message}',
+        );
+      }
+    }
     return 0;
   } finally {
     if (!generated.hasFlutter && staging.existsSync()) {
-      staging.deleteSync(recursive: true);
+      try {
+        staging.deleteSync(recursive: true);
+      } on FileSystemException catch (error) {
+        err.writeln(
+          'Warning: Prerender staging remains at ${staging.path}: '
+          '${error.message}',
+        );
+      }
     }
   }
 }
@@ -158,11 +183,12 @@ Directory _validateOutput(
       );
     }
   }
+  final realOutput = _realPathForOverlap(path);
   bool overlaps(String other) {
-    final normalized = p.normalize(p.absolute(other));
-    return p.equals(path, normalized) ||
-        p.isWithin(path, normalized) ||
-        p.isWithin(normalized, path);
+    final normalized = _realPathForOverlap(other);
+    return p.equals(realOutput, normalized) ||
+        p.isWithin(realOutput, normalized) ||
+        p.isWithin(normalized, realOutput);
   }
 
   if (<String>[
@@ -200,6 +226,20 @@ Directory _validateOutput(
     }
   }
   return output;
+}
+
+String _realPathForOverlap(String path) {
+  var existing = p.normalize(p.absolute(path));
+  final suffix = <String>[];
+  while (FileSystemEntity.typeSync(existing, followLinks: false) ==
+      FileSystemEntityType.notFound) {
+    final parent = p.dirname(existing);
+    if (p.equals(parent, existing)) break;
+    suffix.insert(0, p.basename(existing));
+    existing = parent;
+  }
+  final resolved = Directory(existing).resolveSymbolicLinksSync();
+  return p.normalize(p.joinAll(<String>[resolved, ...suffix]));
 }
 
 Future<int> _copyPublicAssets(CliProject project, Directory output) async {
