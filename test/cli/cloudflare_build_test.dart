@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:odroe/src/cli/build.dart' show sameBuildDirectory;
 import 'package:odroe/src/cli/cli.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -277,6 +278,14 @@ if (prepared.length !== prepareCount) {
           ),
         ];
     for (final buildCase in cases) {
+      if (buildCase.artifact.startsWith('build/Overlap-Case/') &&
+          !sameBuildDirectory(
+            Directory(p.join(project.path, 'build', 'Overlap-Case')),
+            Directory(p.join(project.path, 'build', 'overlap-case')),
+          )) {
+        // Case-distinct directories do not overlap on this filesystem.
+        continue;
+      }
       final errors = StringBuffer();
       final code = await runOdroe(
         <String>[

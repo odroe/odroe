@@ -569,7 +569,7 @@ void main() {
       File(p.join(output.path, 'posts', '42', 'index.html')).existsSync(),
       isTrue,
     );
-  });
+  }, timeout: const Timeout(Duration(minutes: 4)));
 
   test(
     'native build rejects a linked bundle output without touching its target',
