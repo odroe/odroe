@@ -1,0 +1,31 @@
+name: RPC contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rpc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+      - run: flutter pub get
+      - run: flutter pub get --directory example/app
+      - run: dart format --output=none --set-exit-if-changed lib/src/rpc/module.dart test/rpc/http_module_test.dart example/app/lib/main.dart
+      - run: dart analyze lib/src/rpc/module.dart test/rpc/http_module_test.dart example/app/lib/main.dart
+      - run: dart test --platform vm,chrome test/rpc
