@@ -17,16 +17,34 @@ final class RpcModule extends Module {
   RpcModule._(this.client, this._transport);
 
   /// Creates an HTTP-backed client and owns its default transport.
+  ///
+  /// [baseUri] must be an absolute HTTP(S) URI with a host and no user
+  /// information. Omit it only for same-origin Web RPC, where [Uri.base]
+  /// supplies the browser location. Native applications must pass their
+  /// server URI explicitly. Validation happens before creating a transport.
   factory RpcModule.http({
     Uri? baseUri,
     HttpTransport? transport,
     Serializer? serializer,
     String functionPath = '/__odroe/functions',
   }) {
+    final resolvedBaseUri = baseUri ?? Uri.base;
+    if (!resolvedBaseUri.hasAuthority ||
+        resolvedBaseUri.host.isEmpty ||
+        (resolvedBaseUri.scheme != 'http' &&
+            resolvedBaseUri.scheme != 'https') ||
+        resolvedBaseUri.userInfo.isNotEmpty) {
+      throw ArgumentError.value(
+        resolvedBaseUri,
+        'baseUri',
+        'Must be an absolute HTTP(S) URI with a host and no user information. '
+            'Omit only for same-origin Web RPC.',
+      );
+    }
     final resolved = transport ?? HttpTransport();
     return RpcModule._(
       RpcClient(
-        baseUri: baseUri ?? Uri.base,
+        baseUri: resolvedBaseUri,
         transport: resolved,
         serializer: serializer,
         functionPath: functionPath,

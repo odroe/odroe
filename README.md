@@ -61,11 +61,14 @@ import 'package:odroe/rpc.dart';
 import 'routes.dart';
 
 void main() {
+  const rpcOrigin = String.fromEnvironment('ODROE_RPC_ORIGIN');
   runApp(
     App(
       modules: <Module>[
         QueryModule(),
-        RpcModule.http(),
+        RpcModule.http(
+          baseUri: rpcOrigin.isEmpty ? null : Uri.parse(rpcOrigin),
+        ),
         DocumentModule(),
         RouterModule(routes: routeTree),
       ],
@@ -80,6 +83,17 @@ void main() {
 删掉任意 module 就会删掉对应集成；`odroe.dart` 本身不创建 Query、Router、RPC、Provider 或 transport。独立使用 Router 时也可以直接创建 `AppRouter(routes: ...)`。
 
 Web 可让 `RpcModule.http()` 使用当前 origin；Android、iOS 与桌面应用应传入明确的服务端地址，例如 `RpcModule.http(baseUri: Uri.parse('https://api.example.com'))`。
+
+`RpcModule.http` rejects relative URIs, missing hosts, non-HTTP(S) schemes,
+and URI user information before creating its default client. Omitting `baseUri`
+on a native app now fails during module construction; supply the server URI
+explicitly. The default `/__odroe/functions` path resolves from the server root,
+so a base URI's path, query, and fragment are not an endpoint prefix. Use
+`functionPath` to select a custom endpoint path. This HTTP-specific validation
+does not restrict standalone `RpcClient` instances with custom transports.
+The example app reads `ODROE_RPC_ORIGIN` from a Dart define. For native targets,
+pass `--dart-define=ODROE_RPC_ORIGIN=https://api.example.com` to Flutter with your
+actual server URL. Web can omit it to keep same-origin RPC.
 
 ## 文件路由
 
