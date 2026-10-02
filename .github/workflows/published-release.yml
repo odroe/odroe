@@ -1,0 +1,45 @@
+name: Published release acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact published package version
+        type: string
+        required: true
+      source_commit:
+        description: Full reviewed main commit SHA
+        type: string
+        required: true
+      archive_sha256:
+        description: SHA256 of the validated prepublication pub archive
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  published:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.38.1'
+          channel: stable
+      - run: flutter pub get
+      - name: Verify the exact official package and its own CLI
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT: ${{ inputs.source_commit }}
+          RELEASE_ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
+        run: |
+          python3 test/support/release_verify.py \
+            --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" \
+            --archive-sha256 "$RELEASE_ARCHIVE_SHA256" \
+            --output .odroe/published-release

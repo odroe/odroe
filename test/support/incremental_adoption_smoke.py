@@ -10,7 +10,7 @@ import shutil
 import tempfile
 from urllib.parse import unquote, urljoin, urlparse
 
-from fullstack_consumer_smoke import Server, dart, flutter, root, run
+from fullstack_consumer_smoke import Server, dart, flutter, package_root, root, run
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
         cache.mkdir()
         env = dict(os.environ, PUB_CACHE=str(cache), PUB_HOSTED_URL='https://pub.dev')
         version = os.environ.get('ODROE_HOSTED_VERSION')
-        dependency = {'version': version} if version else {'path': str(root)}
+        dependency = {'version': version} if version else {'path': str(package_root)}
         run([flutter, 'create', '--empty', '--platforms', 'web',
              '--project-name', 'incremental_consumer', str(project)], base, env=env)
         run([flutter, 'pub', 'add', 'odroe:' + json.dumps(dependency)], project, env=env)
@@ -36,7 +36,7 @@ def main():
         config = json.loads(config_file.read_text())
         package = next(p for p in config['packages'] if p['name'] == 'odroe')
         resolved = Path(unquote(urlparse(urljoin(config_file.as_uri(), package['rootUri'])).path)).resolve()
-        expected = cache / 'hosted/pub.dev' / ('odroe-' + version) if version else root.resolve()
+        expected = cache / 'hosted/pub.dev' / ('odroe-' + version) if version else package_root
         if resolved != expected:
             raise RuntimeError(f'Unexpected dependency: {resolved}')
         if 'dependency_overrides:' in (project / 'pubspec.yaml').read_text():

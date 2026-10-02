@@ -117,7 +117,7 @@ that entry directly.
 ## Flutter
 
 Use `QueryClientProvider` around an existing Flutter application, or select
-`QueryModule` when using Odroe's shared App context. The next preview's ordinary
+`QueryModule` when using Odroe's shared App context. The `0.1.0-dev.2` ordinary
 provider constructor owns one client; `.value(client: ...)` borrows an existing
 one. See [incremental adoption](/docs/guides/incremental-adoption) for lifecycle
 rules and migration from the `0.1.0-dev.1` constructor.

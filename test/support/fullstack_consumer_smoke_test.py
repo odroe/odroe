@@ -21,7 +21,7 @@ spec.loader.exec_module(smoke)
 
 
 class HostedCacheIsolationTest(unittest.TestCase):
-    def exercise(self, stale_resolution, hosted_create=False, hosted_aot=False):
+    def exercise(self, stale_resolution, hosted_create=False, hosted_aot=False, archive_root=False):
         with tempfile.TemporaryDirectory(prefix='odroe-hosted-cache-test-', dir='/tmp') as temp:
             old_cache = Path(temp) / 'existing-cache'
             seeded = old_cache / 'hosted/pub.dev/odroe-0.1.0-dev.1'
@@ -36,7 +36,8 @@ class HostedCacheIsolationTest(unittest.TestCase):
                 if args[1:3] == ['build', 'cli']:
                     self.assertTrue(hosted_aot)
                     self.assertIsNone(env)
-                    self.assertEqual(cwd, smoke.root)
+                    self.assertEqual(cwd, smoke.package_root)
+                    self.assertEqual(args[4], str(smoke.package_root / 'bin/odroe.dart'))
                     self.assertEqual(Path(args[-1]).name, 'candidate cli')
                     return
                 self.assertIsNotNone(env)
@@ -50,7 +51,8 @@ class HostedCacheIsolationTest(unittest.TestCase):
                         self.assertTrue(args[0].endswith('/candidate cli/bundle/bin/odroe'))
                         project = Path(args[2])
                     else:
-                        self.assertEqual(args[1], '--packages=' + str(smoke.root / '.dart_tool/package_config.json'))
+                        self.assertEqual(args[1], '--packages=' + str(smoke.package_root / '.dart_tool/package_config.json'))
+                        self.assertEqual(args[2], str(smoke.package_root / 'bin/odroe.dart'))
                         project = Path(args[4])
                     (project / '.dart_tool').mkdir(parents=True)
                     resolve(project, cache)
@@ -77,6 +79,7 @@ class HostedCacheIsolationTest(unittest.TestCase):
                     mock.patch.object(smoke, 'run', side_effect=fake_run), \
                     mock.patch.object(smoke, 'dart', 'dart'), \
                     mock.patch.object(smoke, 'flutter', 'flutter'), \
+                    mock.patch.object(smoke, 'package_root', Path(temp) / 'archive' if archive_root else smoke.root), \
                     mock.patch.object(smoke, 'log', io.StringIO()) as output:
                 if stale_resolution:
                     with self.assertRaisesRegex(RuntimeError, 'isolated official hosted cache'):
@@ -112,6 +115,12 @@ class HostedCacheIsolationTest(unittest.TestCase):
 
     def test_aot_hosted_create_uses_built_cli_and_fresh_cache(self):
         self.exercise(stale_resolution=False, hosted_create=True, hosted_aot=True)
+
+    def test_interpreted_create_uses_selected_archive_cli(self):
+        self.exercise(stale_resolution=False, hosted_create=True, archive_root=True)
+
+    def test_aot_create_uses_selected_archive_cli(self):
+        self.exercise(stale_resolution=False, hosted_create=True, hosted_aot=True, archive_root=True)
 
 
 # This descendant both executes continuously and holds a live resource. Merely

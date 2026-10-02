@@ -10,8 +10,8 @@ Start with the part your application needs. Query does not require Odroe's App,
 modules, routing, server, configuration files, or initializer.
 
 The owning `QueryClientProvider` constructor and `.value` constructor described
-here are part of the next preview. For checkout evaluation, add the local
-package as a direct dependency. The published `0.1.0-dev.1` provider still takes
+here target `0.1.0-dev.2`. Before that exact version is available on pub.dev,
+add the local checkout as a direct dependency. The published `0.1.0-dev.1` provider still takes
 `client:` on its ordinary constructor; follow the migration note below when
 upgrading.
 

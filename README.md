@@ -30,6 +30,9 @@ reference app and documentation without overrides, checks their contracts,
 and runs a fresh generated RPC/SQLite application through a relocated native
 server bundle. Platform-specific delivery still needs its own verification.
 
+This checkout targets `0.1.0-dev.2`. Hosted installation requires that exact
+version to be available on pub.dev; publication is verified separately.
+
 ## Add Odroe to your Flutter app
 
 Use an existing Flutter application, or start with an empty one:
@@ -37,7 +40,7 @@ Use an existing Flutter application, or start with an empty one:
 ```sh
 flutter create --empty --platforms web my_app
 cd my_app
-flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
+flutter pub add 'odroe:{"version":"0.1.0-dev.2"}'
 ```
 
 Replace `lib/main.dart` with this application:
@@ -103,7 +106,7 @@ when your application uses those capabilities.
 For an existing Flutter application, follow the
 [incremental adoption guide](sites/odroe.dev/content/docs/guides/incremental-adoption.mdc).
 It separates a Query-only provider from optional routing and HTTP RPC, including
-the next preview's explicit owned and borrowed provider lifetimes.
+explicit owned and borrowed provider lifetimes in `0.1.0-dev.2`.
 
 ## Optional full-stack starter
 
@@ -114,7 +117,7 @@ above, create a separate empty Flutter project:
 cd ..
 flutter create --empty --platforms web full_stack_app
 cd full_stack_app
-flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
+flutter pub add 'odroe:{"version":"0.1.0-dev.2"}'
 dart run odroe init --full-stack
 dart run odroe dev -- -d chrome
 ```
@@ -123,8 +126,8 @@ dart run odroe dev -- -d chrome
 refuses conflicts rather than replacing it. Plain `dart run odroe init` writes
 a smaller Document + Router starter.
 
-The next CLI revision can also create the entire application. From this
-checkout with dependencies resolved:
+Starting with `0.1.0-dev.2`, the CLI can also create the entire application.
+From an application or checkout with that dependency resolved:
 
 ```sh
 dart run odroe create ../my_app --platforms web
@@ -137,8 +140,9 @@ two overrides cannot be combined. The hosted package's installed CLI supplies
 its initializer and generated routes. If that exact version is unavailable,
 creation fails without publishing an incomplete application.
 
-Hosted creation is not available in the published `0.1.0-dev.1` CLI; the
-add-dependency path above works with that release today. For source development:
+Hosted creation requires the `0.1.0-dev.2` CLI or newer. The older
+`0.1.0-dev.1` CLI supports the add-dependency and optional `init` paths.
+For source development:
 
 ```sh
 git clone https://github.com/odroe/odroe.git
