@@ -83,6 +83,51 @@ void main() {
   });
 
   test(
+    'custom generated paths follow actual filesystem case semantics',
+    () async {
+      final parent = await Directory.systemTemp.createTemp(
+        'odroe_generate_case_',
+      );
+      addTearDown(() => parent.delete(recursive: true));
+      final project = _createProject(parent);
+      final routes = Directory(p.join(project.path, 'lib', 'routes'))
+        ..createSync(recursive: true);
+      final caseAlias = Directory(p.join(project.path, 'lib', 'Routes'));
+      final ignoresCase =
+          caseAlias.existsSync() &&
+          FileSystemEntity.identicalSync(routes.path, caseAlias.path);
+      for (final arguments in <List<String>>[
+        <String>['--output', 'lib/Routes/generated.dart'],
+        <String>[
+          '--output',
+          'lib/Generated.dart',
+          '--server-output',
+          'lib/generated.dart',
+        ],
+      ]) {
+        final errors = StringBuffer();
+        final outputPath = arguments[1];
+        final result = await runOdroe(
+          <String>['generate', '--project', project.path, ...arguments],
+          output: StringBuffer(),
+          errors: errors,
+        );
+        expect(result, ignoresCase ? 64 : 0, reason: '$arguments\n$errors');
+        expect(
+          File(p.join(project.path, outputPath)).existsSync(),
+          !ignoresCase,
+        );
+        if (ignoresCase) {
+          expect(errors.toString(), contains('must not overlap'));
+        } else {
+          expect(errors.toString(), isEmpty);
+        }
+      }
+      expect(routes.listSync(), isEmpty);
+    },
+  );
+
+  test(
     'generate paths cannot traverse an existing symbolic link',
     () async {
       final parent = await Directory.systemTemp.createTemp(

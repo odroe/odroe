@@ -682,7 +682,7 @@ String _realPathForOverlap(String path) {
 }
 
 bool _pathsOverlap(String left, String right) {
-  final ignoreCase = _usesCaseInsensitivePaths(left);
+  final ignoreCase = usesCaseInsensitivePaths(left);
   final normalizedLeft = _pathForComparison(
     _realPathForOverlap(left),
     ignoreCase: ignoreCase,
@@ -697,7 +697,7 @@ bool _pathsOverlap(String left, String right) {
 }
 
 bool _pathsEqual(String left, String right) {
-  final ignoreCase = _usesCaseInsensitivePaths(left);
+  final ignoreCase = usesCaseInsensitivePaths(left);
   return p.equals(
     _pathForComparison(left, ignoreCase: ignoreCase),
     _pathForComparison(right, ignoreCase: ignoreCase),
@@ -707,52 +707,6 @@ bool _pathsEqual(String left, String right) {
 String _pathForComparison(String path, {required bool ignoreCase}) {
   final normalized = p.normalize(path);
   return ignoreCase ? normalized.toLowerCase() : normalized;
-}
-
-bool _usesCaseInsensitivePaths(String path) {
-  if (Platform.isWindows) return true;
-
-  var directory = p.normalize(Directory(path).absolute.path);
-  while (FileSystemEntity.typeSync(directory) !=
-      FileSystemEntityType.directory) {
-    final parent = p.dirname(directory);
-    if (p.equals(parent, directory)) return true;
-    directory = parent;
-  }
-  while (true) {
-    final name = p.basename(directory);
-    final alternateName = _toggleAsciiCase(name);
-    if (alternateName != name) {
-      final alternate = p.join(p.dirname(directory), alternateName);
-      if (FileSystemEntity.typeSync(alternate) ==
-          FileSystemEntityType.notFound) {
-        return false;
-      }
-      try {
-        return FileSystemEntity.identicalSync(directory, alternate);
-      } on FileSystemException {
-        return true;
-      }
-    }
-    final parent = p.dirname(directory);
-    if (p.equals(parent, directory)) return true;
-    directory = parent;
-  }
-}
-
-String _toggleAsciiCase(String value) {
-  for (var index = 0; index < value.length; index++) {
-    final unit = value.codeUnitAt(index);
-    if (unit >= 0x41 && unit <= 0x5a) {
-      return '${value.substring(0, index)}'
-          '${String.fromCharCode(unit + 0x20)}${value.substring(index + 1)}';
-    }
-    if (unit >= 0x61 && unit <= 0x7a) {
-      return '${value.substring(0, index)}'
-          '${String.fromCharCode(unit - 0x20)}${value.substring(index + 1)}';
-    }
-  }
-  return value;
 }
 
 /// Reports whether two build directories denote the same filesystem location.
@@ -773,7 +727,7 @@ bool _realPathsOverlap(String left, String right) =>
     _pathsOverlap(_realPathForOverlap(left), _realPathForOverlap(right));
 
 bool _pathIsWithin(String parent, String child) {
-  final ignoreCase = _usesCaseInsensitivePaths(parent);
+  final ignoreCase = usesCaseInsensitivePaths(parent);
   return p.isWithin(
     _pathForComparison(parent, ignoreCase: ignoreCase),
     _pathForComparison(child, ignoreCase: ignoreCase),
