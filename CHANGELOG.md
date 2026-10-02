@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Let `odroe create <directory>` use its own exact hosted package version by
+  default, with `--version <exact-version>` and `--odroe-path` as optional
+  overrides. Resolve the requested version,
+  verify its lockfile, and run its installed initializer from the staged
+  application so templates and generated code match the selected package.
+  Keep `--odroe-path` as the exclusive source-development alternative, reject
+  floating versions before staging, and preserve target protection and rollback
+  across resolution and initialization failures. Hosted initialization uses
+  the selected Flutter SDK's Dart executable, including when the invoking CLI
+  is an AOT executable; a missing SDK Dart fails before staging.
+
+- Make direct Flutter dependency usage the getting-started path, with a tested
+  App/Query/manual-routing example and standard Flutter release build. Keep
+  create/init scaffolding optional and describe generation only for features
+  that need generated source.
+
 ## 0.1.0-dev.1
 
 ### Framework preview and migration

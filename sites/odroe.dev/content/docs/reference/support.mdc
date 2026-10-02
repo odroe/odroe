@@ -70,19 +70,20 @@ not establish mobile signing, remote deployment, or every target architecture.
 ## First diagnostics
 
 ```sh
-dart run odroe generate
 dart analyze --fatal-infos
-dart test
+flutter test
 ```
 
-For a generated project, confirm that `.dart_tool/package_config.json` resolves
-`odroe` to the checkout you intend to run. `init` intentionally refuses a
+For file-route or generated RPC issues, also run `dart run odroe generate`.
+Confirm that `.dart_tool/package_config.json` resolves `odroe` to the selected
+hosted package or checkout. The optional `init` command intentionally refuses a
 transitive dependency, custom Dart source, conflicting configuration, or a
 symbolic-link target.
 
 For native RPC, confirm `ODROE_RPC_ORIGIN` is an absolute HTTP(S) origin with no
 path, query, fragment, or credentials. For local D1, run the locked sequence in
-[First product](/docs/getting-started) and keep every Wrangler command local.
+[First application](/docs/getting-started#run-the-edge-path-locally) and keep
+every Wrangler command local.
 
 For a Query type conflict, find every definition using the reported canonical
 key. They must share the same exact `QueryKey<T>` data type; do not widen or cast

@@ -85,7 +85,8 @@ footnotes.
 
 ## Choose the next page
 
-- [First product](/docs/getting-started): create and run the complete starter.
+- [First application](/docs/getting-started): add Odroe to a Flutter app, then
+  choose optional full-stack scaffolding when needed.
 - [Full-stack vertical slice](/docs/tutorials/full-stack): trace one feature
   through every generated and runtime boundary.
 - [Typed RPC records and enums](/docs/guides/typed-rpc-records): share domain

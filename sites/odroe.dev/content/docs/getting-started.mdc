@@ -1,38 +1,121 @@
 ---
-title: First product
-description: Create and run one Odroe product from Flutter to SQLite and local Cloudflare D1.
+title: First application
+description: Add Odroe to a Flutter app, write application code, and choose optional full-stack scaffolding.
 order: 2
 language: en
 ---
-# Build your first product
+# Use Odroe in your Flutter app
 
-This path starts with a nonexistent application path and ends with one working
-vertical slice: Flutter → Query → typed RPC → Server → typed SQL → SQLite.
-The same append-only SQL history initializes native SQLite and local D1, while
-the project keeps a locked Cloudflare toolchain. No global Wrangler install is
-required.
+Install Flutter 3.38.1 or newer with stable Dart 3.10.0 or newer. Keep the
+official Flutter SDK and its bundled Dart together.
 
-Install Flutter 3.38.1 or newer with stable Dart 3.10.0 or newer before starting.
-Keep the official Flutter SDK and its bundled Dart together.
+The `0.1.0-dev.1` framework preview has a different API from the former
+`odroe` 0.0.8 UI package. Read the repository's MIGRATION.md before upgrading.
 
-## Create the application
+## Add Odroe to your Flutter app
 
-For the hosted framework preview, install the exact version into an empty
-Flutter application and reuse the full-stack initializer:
+Use an existing Flutter application, or start with an empty one:
 
 ```sh
 flutter create --empty --platforms web my_app
 cd my_app
 flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
-dart run odroe init --full-stack
-dart run odroe generate
 ```
 
-The former `odroe` 0.0.8 UI package has a different API. Read the repository's
-MIGRATION.md before upgrading; old `setup` and `signal` APIs are not exported by
-this framework preview.
+Replace `lib/main.dart` with this application:
 
-For source development, let the create command own the complete setup:
+```dart
+import 'package:flutter/widgets.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/query_flutter.dart';
+import 'package:odroe/router_flutter.dart';
+
+final greeting = QueryOptions<String>(
+  key: QueryKey<String>('welcome'),
+  policy: const QueryPolicy(
+    freshness: QueryFreshness.staleAfter(Duration(minutes: 5)),
+  ),
+  query: (_) async => 'Hello from Odroe',
+);
+
+final home = AppRoute<NoParams, NoSearch, NoData>(path: '/').page(
+  build: (_) => Center(
+    child: QueryBuilder<String>(
+      options: greeting,
+      builder: (_, result) =>
+          Text(result.hasData ? result.requireData : 'Loading'),
+    ),
+  ),
+);
+
+final about = AppRoute<NoParams, NoSearch, NoData>(
+  path: '/about',
+).page(build: (_) => const Center(child: Text('About this app')));
+
+Widget createApp() => App(
+  modules: [
+    QueryModule(),
+    RouterModule(routes: [home, about]),
+  ],
+  builder: (app) => WidgetsApp.router(
+    color: const Color(0xff222222),
+    routerConfig: app.read(routerKey),
+  ),
+);
+
+void main() => runApp(createApp());
+```
+
+Run and build it with the standard Flutter commands:
+
+```sh
+flutter run -d chrome
+flutter build web --release
+```
+
+Adding the dependency and importing the APIs is enough. This application uses
+App, Query, and manually declared routes without `odroe init`, generated files,
+or an `odroe.yaml` configuration. Select only the modules your application
+needs; Query and routing can also be used through their individual entrypoints.
+
+Query owns the asynchronous greeting and its cache. RouterModule accepts the
+two route objects directly. A server, database, or RPC origin is only needed
+when your application uses those capabilities.
+
+## Optional full-stack starter
+
+To explore the generated Query/RPC/SQLite starter alongside the application
+above, create a separate empty Flutter project:
+
+```sh
+cd ..
+flutter create --empty --platforms web full_stack_app
+cd full_stack_app
+flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
+dart run odroe init --full-stack
+dart run odroe dev -- -d chrome
+```
+
+`init` is an optional template tool. It preserves custom application source and
+refuses conflicts rather than replacing it. Plain `dart run odroe init` writes
+a smaller Document + Router starter.
+
+The next CLI revision can also create the entire application. From this
+checkout with dependencies resolved:
+
+```sh
+dart run odroe create ../my_app --platforms web
+```
+
+By default, `create` pins the hosted dependency to the exact version of the CLI
+running the command. It does not select `latest`. Override the version with
+`--version 0.1.0-dev.1`, or use `--odroe-path .` for a checkout dependency; the
+two overrides cannot be combined. The hosted package's installed CLI supplies
+its initializer and generated routes. If that exact version is unavailable,
+creation fails without publishing an incomplete application.
+
+Hosted creation is not available in the published `0.1.0-dev.1` CLI; the
+add-dependency path above works with that release today. For source development:
 
 ```sh
 git clone https://github.com/odroe/odroe.git
@@ -42,21 +125,21 @@ dart run odroe create ../my_app --odroe-path .
 cd ../my_app
 ```
 
-`create` requires a target that does not exist. It builds Flutter's empty
-Android, iOS, and Web scaffold in a private directory beside that target, adds
-the selected Odroe checkout, confirms the staged project resolves that same
-checkout, and reuses the full-stack initializer in the current `create`
-process. Only the complete product is published to the requested path. A failed
-or interrupted stage removes the private staging directory; a target that
-appears meanwhile is preserved and publication stops.
-There is deliberately no `--force`. Use `--platforms`, `--org`, or
-`--project-name` when the Flutter host needs explicit values. Add `--offline`
-only when the package cache is already complete.
+`create` requires a nonexistent target and stages the Flutter application beside
+it before publication. Failed or interrupted stages remove only that private
+directory and preserve existing targets. Use `--platforms`, `--org`, or
+`--project-name` to customize the scaffold. `--offline` requires the selected
+package and all its dependencies in the local cache.
+
+File-based routing and automatic RPC codecs use generated Dart source. For
+those features, `odroe generate` runs the compiler explicitly; `odroe dev` and
+`odroe build` run it as part of their workflow. Ordinary Flutter commands do
+not generate file-route manifests. Handwritten routes need no generation.
 
 ## Know what was created
 
 ```text
-my_app/
+full_stack_app/
 ├── lib/
 │   ├── main.dart              # one-import Flutter composition root
 │   ├── posts.dart             # client-safe post, page, and input records
@@ -112,7 +195,7 @@ the exact SQL string and rejects divergent history; Wrangler owns a separate D1
 ledger and cannot detect edited source, so code review and immutable deployment
 artifacts remain part of the contract.
 
-Run the initializer again at any time. An unchanged starter produces no file
+For an unchanged generated starter, running the initializer again is safe. An unchanged starter produces no file
 changes. The smaller `dart run odroe init` remains available when a product
 needs only Document and Router; an untouched small starter can later upgrade
 atomically with `--full-stack`.
@@ -158,7 +241,7 @@ startup rather than failing on the first request.
 
 Node 22+ and npm 10.9+ are used only by the project-owned Cloudflare toolchain.
 They do not enter the Dart dependency graph, Flutter artifact, or Worker
-bundle. Run these commands from `my_app`:
+bundle. Run these commands from your generated application directory:
 
 ```sh
 npm ci

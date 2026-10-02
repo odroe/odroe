@@ -374,10 +374,6 @@ dependencies:
           },
     );
 
-    final missingSourceErrors = StringBuffer();
-    expect(await run(<String>['create', target], missingSourceErrors), 64);
-    expect(missingSourceErrors.toString(), contains('--odroe-path'));
-
     final platformErrors = StringBuffer();
     expect(
       await run(<String>[
@@ -537,6 +533,7 @@ dependencies:
     expect(await runOdroe(<String>['create', '--help'], output: createHelp), 0);
     expect(createHelp.toString(), contains('--platforms'));
     expect(createHelp.toString(), contains('--odroe-path'));
+    expect(createHelp.toString(), contains('--version'));
     expect(
       await runOdroe(
         <String>['create'],

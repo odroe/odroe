@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:pub_semver/pub_semver.dart';
 import 'package:yaml/yaml.dart';
 
 import 'initialize.dart';
 import 'no_replace_rename.dart';
 import 'project.dart';
+import 'version.dart';
 
 /// Runs one process used by [createProject].
 typedef CreateCommandRunner =
@@ -37,6 +39,7 @@ const _supportedPlatforms = <String>{
 Future<void> createProject({
   required String directory,
   required String? odroePath,
+  String? odroeVersion,
   required String platforms,
   required String? organization,
   required String? projectName,
@@ -47,13 +50,19 @@ Future<void> createProject({
   CreateProjectInitializer? initialize,
 }) async {
   final target = _targetDirectory(directory);
-  final source = _odroeDirectory(odroePath);
+  if (odroePath != null && odroeVersion != null) {
+    throw const FormatException('Do not combine --odroe-path and --version.');
+  }
+  final version = odroePath == null
+      ? _hostedVersion(odroeVersion ?? cliVersion)
+      : null;
+  final source = version == null ? _odroeDirectory(odroePath) : null;
   final selectedPlatforms = _platforms(platforms);
   final selectedOrganization = _optionalValue(organization, 'org');
   final selectedProjectName = _projectName(
     projectName ?? p.basename(target.path),
   )!;
-  final flutter = _flutterCommand();
+  final flutter = _flutterCommand(requireDart: version != null);
 
   final interruption = _CreateInterruption();
   late final Directory staging;
@@ -124,6 +133,9 @@ Future<void> createProject({
       err: err,
       environment: flutter.environment,
     );
+    final dependency = version == null
+        ? <String, String>{'path': p.relative(source!.path, from: staging.path)}
+        : <String, String>{'version': version};
     await _requireSuccess(
       runner,
       flutter.executable,
@@ -132,7 +144,7 @@ Future<void> createProject({
         'pub',
         'add',
         if (offline) '--offline',
-        'odroe:{"path":${jsonEncode(p.relative(source.path, from: staging.path))}}',
+        'odroe:${jsonEncode(dependency)}',
       ],
       workingDirectory: staging.path,
       stage: 'Odroe dependency resolution',
@@ -143,11 +155,28 @@ Future<void> createProject({
     out.writeln('Odroe starter initialization...');
     _requireNotInterrupted(interruption);
     final initializationOutput = StringBuffer();
-    final initialized = (initialize ?? _initializeFullStackProject)(
-      staging,
-      initializationOutput,
-      err,
-    );
+    var initialized = true;
+    if (version == null) {
+      initialized = (initialize ?? _initializeFullStackProject)(
+        staging,
+        initializationOutput,
+        err,
+      );
+    } else {
+      _validateHostedResolution(staging, version);
+      // Resolve the executable in the new application, not in this CLI's
+      // package configuration: its compiler and templates must match its API.
+      await _requireSuccess(
+        runner,
+        flutter.dartExecutable!,
+        const <String>['run', 'odroe', 'init', '--full-stack'],
+        workingDirectory: staging.path,
+        stage: 'Hosted Odroe starter initialization',
+        out: initializationOutput,
+        err: err,
+        environment: flutter.environment,
+      );
+    }
     // Deliver a signal queued while the synchronous initializer was running
     // before its result can be accepted or the staging directory published.
     await Future<void>.delayed(Duration.zero);
@@ -347,6 +376,45 @@ Directory _odroeDirectory(String? value) {
   return resolved;
 }
 
+String _hostedVersion(String value) {
+  try {
+    final parsed = Version.parse(value);
+    final canonical =
+        '${parsed.major}.${parsed.minor}.${parsed.patch}'
+        '${parsed.preRelease.isEmpty ? '' : '-${parsed.preRelease.join('.')}'}'
+        '${parsed.build.isEmpty ? '' : value.substring(value.indexOf('+'))}';
+    if (canonical == value) return value;
+  } on FormatException {
+    // Ranges, floating versions, and malformed input must fail before staging.
+  }
+  throw const FormatException(
+    '--version requires an exact version, for example 0.1.0-dev.1.',
+  );
+}
+
+void _validateHostedResolution(Directory project, String version) {
+  final lock = File(p.join(project.path, 'pubspec.lock'));
+  Object? document;
+  try {
+    document = loadYaml(lock.readAsStringSync());
+  } on YamlException {
+    throw FileSystemException(
+      'The resolved pubspec.lock is invalid.',
+      lock.path,
+    );
+  }
+  final packages = document is Map ? document['packages'] : null;
+  final odroe = packages is Map ? packages['odroe'] : null;
+  if (odroe is! Map ||
+      odroe['source'] != 'hosted' ||
+      odroe['version'] != version) {
+    throw FileSystemException(
+      'The new application must resolve hosted Odroe $version.',
+      lock.path,
+    );
+  }
+}
+
 List<String> _platforms(String value) {
   final parts = value.split(',').map((part) => part.trim()).toList();
   if (parts.isEmpty || parts.any((part) => part.isEmpty)) {
@@ -430,8 +498,34 @@ void _reportSecondary(StringSink sink, String message) {
   }
 }
 
-({String executable, List<String> arguments, Map<String, String>? environment})
-_flutterCommand() {
+/// Resolves Dart from the selected Flutter SDK, never from the CLI or PATH.
+String dartExecutableForFlutterSdk(String root) {
+  final dart = File(
+    p.join(
+      root,
+      'bin',
+      'cache',
+      'dart-sdk',
+      'bin',
+      Platform.isWindows ? 'dart.exe' : 'dart',
+    ),
+  );
+  if (!dart.existsSync()) {
+    throw FileSystemException(
+      'The selected Flutter SDK is missing its Dart executable.',
+      dart.path,
+    );
+  }
+  return dart.resolveSymbolicLinksSync();
+}
+
+({
+  String executable,
+  String? dartExecutable,
+  List<String> arguments,
+  Map<String, String>? environment,
+})
+_flutterCommand({required bool requireDart}) {
   final roots = _flutterRoots();
   if (!Platform.isWindows) {
     for (final root in roots) {
@@ -439,6 +533,9 @@ _flutterCommand() {
       if (flutter.existsSync()) {
         return (
           executable: flutter.resolveSymbolicLinksSync(),
+          dartExecutable: requireDart
+              ? dartExecutableForFlutterSdk(root)
+              : null,
           arguments: const <String>[],
           environment: <String, String>{
             'FLUTTER_ROOT': Directory(root).resolveSymbolicLinksSync(),
@@ -446,14 +543,23 @@ _flutterCommand() {
         );
       }
     }
+    if (requireDart) {
+      throw const FileSystemException(
+        'Could not locate a Flutter SDK and its bundled Dart executable.',
+      );
+    }
     return (
       executable: 'flutter',
+      dartExecutable: null,
       arguments: const <String>[],
       environment: null,
     );
   }
 
   for (final root in roots) {
+    if (requireDart && File(p.join(root, 'bin', 'flutter.bat')).existsSync()) {
+      dartExecutableForFlutterSdk(root);
+    }
     final dart = File(
       p.join(root, 'bin', 'cache', 'dart-sdk', 'bin', 'dart.exe'),
     );
@@ -486,6 +592,7 @@ _flutterCommand() {
       final resolvedDart = dart.resolveSymbolicLinksSync();
       return (
         executable: resolvedDart,
+        dartExecutable: resolvedDart,
         arguments: <String>[
           '--packages=${packageConfig.resolveSymbolicLinksSync()}',
           snapshot.resolveSymbolicLinksSync(),
