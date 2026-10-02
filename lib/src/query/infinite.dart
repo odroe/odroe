@@ -278,7 +278,7 @@ final class InfiniteQueryObserver<TPage, TPageParam> {
 
   /// Updates future fetches and paging controls without remounting the same key.
   void setOptions(InfiniteQueryOptions<TPage, TPageParam> value) {
-    final previous = _observer.current;
+    final previous = current;
     final previousOptions = _options;
     _options = value;
     try {
@@ -288,7 +288,10 @@ final class InfiniteQueryObserver<TPage, TPageParam> {
       rethrow;
     }
     // Paging controls may change even when the underlying query result does not.
-    if (_observer.current == previous) {
+    final next = current;
+    if (next.query == previous.query &&
+        (next.hasNextPage != previous.hasNextPage ||
+            next.hasPreviousPage != previous.hasPreviousPage)) {
       for (final listener in List<void Function()>.of(_listeners)) {
         listener();
       }

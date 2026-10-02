@@ -4,6 +4,91 @@ import 'package:odroe/query.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'cancellation requested synchronously by a query reaches its token',
+    () async {
+      final client = QueryClient();
+      final gate = Completer<int>();
+      late QueryCancelToken token;
+      final query = client.query(
+        QueryOptions<int>(
+          key: QueryKey('synchronous-cancel'),
+          query: (context) {
+            token = context.cancelToken;
+            unawaited(client.cancelQueries());
+            return gate.future;
+          },
+        ),
+      );
+      addTearDown(client.clear);
+      final request = query.fetch();
+      final cancelled = expectLater(
+        request,
+        throwsA(isA<QueryCancelledException>()),
+      );
+      final synchronouslyCancelled = token.isCancelled;
+      await query.cancel();
+      await cancelled;
+      expect(synchronouslyCancelled, isTrue);
+      gate.complete(99);
+      expect(query.state.hasData, isFalse);
+    },
+  );
+
+  for (final reset in [false, true]) {
+    test('a cancellation listener can start a new fetch during '
+        '${reset ? 'reset' : 'refetch'}', () async {
+      final client = QueryClient();
+      final gates = <Completer<int>>[];
+      final query = client.query(
+        QueryOptions<int>(
+          key: QueryKey('reentrant'),
+          initialData: const QueryInitialData(0),
+          query: (_) {
+            final gate = Completer<int>();
+            gates.add(gate);
+            return gate.future;
+          },
+        ),
+      );
+      addTearDown(client.clear);
+      final original = query.fetch();
+      final cancelled = expectLater(
+        original,
+        throwsA(isA<QueryCancelledException>()),
+      );
+      Future<int>? nested;
+      var armed = true;
+      final remove = client.queryCache.subscribe((event) {
+        if (armed &&
+            event.type == QueryCacheEventType.updated &&
+            query.state.fetchStatus == QueryFetchStatus.idle) {
+          armed = false;
+          nested = query.fetch(cancelRefetch: false);
+        }
+      });
+      addTearDown(remove);
+      if (reset) {
+        query.reset();
+      } else {
+        expect(query.fetch(), same(nested));
+      }
+      expect(nested, isNotNull);
+      expect(gates, hasLength(2));
+      expect(query.promise, same(nested));
+      expect(query.state.fetchStatus, QueryFetchStatus.fetching);
+      await cancelled;
+      gates.first.complete(99);
+      await Future<void>.value();
+      expect(query.promise, same(nested));
+      expect(query.state.data, 0);
+      gates.last.complete(20);
+      expect(await nested, 20);
+      expect(query.state.data, 20);
+      expect(query.promise, isNull);
+    });
+  }
+
   for (final infinite in [false, true]) {
     for (final paging in infinite ? [false, true] : [false]) {
       for (final policy in QueryRefetchPolicy.values) {

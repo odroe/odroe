@@ -50,6 +50,27 @@ void main() {
     expect(results.last.hasPreviousPage, isTrue);
     expect(calls, hasLength(1));
 
+    final notifications = results.length;
+    observer.setOptions(options(1));
+    expect(results, hasLength(notifications));
+
+    final conflictingKey = QueryKey<int>('conflicting');
+    client.query(QueryOptions(key: conflictingKey, query: (_) => 0));
+    expect(
+      () => observer.setOptions(
+        InfiniteQueryOptions<int, int>(
+          key: QueryKey('conflicting'),
+          initialPageParam: 99,
+          query: (_) => 99,
+          getNextPageParam: (_, _, _, _) => null,
+        ),
+      ),
+      throwsStateError,
+    );
+    expect(observer.options.key, options(1).key);
+    expect(results, hasLength(notifications));
+    expect(observer.current.query.requireData.pages, [50]);
+
     final forward = observer.fetchNextPage();
     observer.setOptions(options(0));
     expect(calls.last.context.query.cancelToken.isCancelled, isFalse);

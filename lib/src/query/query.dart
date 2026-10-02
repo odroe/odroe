@@ -244,9 +244,7 @@ final class Query<T> {
 
   /// Restores initial state and cancels active work.
   void reset() {
-    cancel(silent: true, revert: false);
-    _setState(_initialStateValue);
-    scheduleGc();
+    _cancel(silent: true, revert: false, resetState: _initialStateValue);
   }
 
   /// Fetches data, deduplicating or replacing active work as configured.
@@ -260,6 +258,9 @@ final class Query<T> {
     if (active != null) {
       if (!cancelRefetch || !state.hasData) return active;
       cancel(silent: true, revert: true);
+      // A cancellation listener may already have started the replacement.
+      final replacement = _inFlight;
+      if (replacement != null) return replacement;
     }
 
     final fetchOptions = options ?? this.options;
@@ -473,27 +474,41 @@ final class Query<T> {
   }
 
   /// Cancels the active fetch and waits for it to stop.
-  Future<void> cancel({bool silent = false, bool revert = true}) async {
+  Future<void> cancel({bool silent = false, bool revert = true}) =>
+      _cancel(silent: silent, revert: revert);
+
+  Future<void> _cancel({
+    required bool silent,
+    required bool revert,
+    QueryState<T>? resetState,
+  }) async {
     final future = _inFlight;
+    final previous = _revertState;
+    _cancellation?.cancel(silent: silent, revert: revert);
     if (future != null) {
-      _cancellation?.cancel(silent: silent, revert: revert);
       // Detach cancelled work synchronously: a mount in the same turn must
       // start a new fetch, and late completion must not overwrite that fetch.
       _fetchId++;
       _inFlight = null;
       _cancellation = null;
       _hydrationPending = null;
-      final previous = _revertState;
       _revertState = null;
+    }
+    if (future != null || resetState != null) {
+      // Publish reset's final state once, so a listener can start a fetch
+      // without its fetching state being overwritten by a later reset update.
       _setState(
-        revert && previous != null
-            ? previous.copyWith(fetchStatus: QueryFetchStatus.idle)
-            : state.copyWith(
-                fetchStatus: QueryFetchStatus.idle,
-                fetchMeta: null,
-              ),
+        resetState ??
+            (revert && previous != null
+                ? previous.copyWith(fetchStatus: QueryFetchStatus.idle)
+                : state.copyWith(
+                    fetchStatus: QueryFetchStatus.idle,
+                    fetchMeta: null,
+                  )),
       );
       scheduleGc();
+    }
+    if (future != null) {
       try {
         await future;
       } on QueryCancelledException {
