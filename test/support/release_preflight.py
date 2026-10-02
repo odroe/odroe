@@ -21,8 +21,9 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise RuntimeError('Choose an empty output directory to preserve earlier artifacts.')
-    if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True):
-        raise RuntimeError('Release preflight requires a committed, clean checkout.')
+    status = subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True)
+    if status:
+        raise RuntimeError('Release preflight requires a committed, clean checkout:\n' + status)
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     version = package_version(root)
     sdk = json.loads(subprocess.check_output([flutter, '--version', '--machine'], text=True))
