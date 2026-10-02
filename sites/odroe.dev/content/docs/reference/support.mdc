@@ -11,6 +11,21 @@ run them on the revision and platform you intend to use. “Preview” means the
 API is usable but the deployment or provider boundary remains narrow. The
 presence of a test is not evidence that it passed on every platform.
 
+## SDK versions
+
+The supported minimum is Flutter 3.38.1 with its bundled stable Dart 3.10.0.
+Odroe declares Dart `^3.10.0` and Flutter `>=3.38.1`; no dependency overrides
+are needed. Flutter 3.38.0 bundles Dart 3.10.0-290.4.beta and cannot resolve a
+fresh consumer with that stable Dart constraint. Replacing Flutter's built-in
+Dart independently can also break the compiler/engine Kernel SDK pairing.
+
+The minimum SDK workflow verifies normal dependency resolution, analysis,
+compiler and CLI contracts, typed RPC and SQLite, Flutter consumption, and a
+fresh generated application's persisted state after restarting and relocating
+its native server bundle. The current integration workflow uses Flutter 3.47.5
+for the broader contract, browser and local provider suites. These checks do
+not establish mobile signing, remote deployment, or every target architecture.
+
 ## Current status
 
 | Surface | Status | Evidence boundary |

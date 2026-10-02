@@ -5,6 +5,8 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/analyzer_diagnostics.dart';
+
 void main() {
   test('identity key constructors and values stay type-safe', () async {
     final directory = Directory('test/app').absolute.path;
@@ -28,9 +30,7 @@ void main() {
       expect((valid as ResolvedUnitResult).diagnostics, isEmpty);
       expect(invalid, isA<ResolvedUnitResult>());
       final diagnostics = (invalid as ResolvedUnitResult).diagnostics;
-      final codes = diagnostics
-          .map((diagnostic) => diagnostic.diagnosticCode.lowerCaseName)
-          .toList();
+      final codes = diagnostics.map(diagnosticCodeName).toList();
       expect(
         codes.where((code) => code == 'const_with_non_const'),
         hasLength(3),

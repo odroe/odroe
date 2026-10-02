@@ -18,6 +18,18 @@ belongs to the previous UI API and must not be used for the examples below.
 The current source package remains version 0.0.0 while release and migration
 policy are decided. No 1.0 date is promised.
 
+## SDK requirements
+
+Use Flutter 3.38.1 or newer with stable Dart 3.10.0 or newer. The minimum
+validated pair is Flutter 3.38.1 / Dart 3.10.0. Flutter 3.38.0 bundles a
+prerelease Dart SDK that does not satisfy the stable Dart constraint; keep
+Flutter's matching compiler and engine together.
+
+[Minimum SDK CI](.github/workflows/minimum-sdk.yml) resolves the framework,
+reference app and documentation without overrides, checks their contracts,
+and runs a fresh generated RPC/SQLite application through a relocated native
+server bundle. Platform-specific delivery still needs its own verification.
+
 ## Create a product
 
 Use the source checkout with a complete Flutter package cache:
@@ -134,5 +146,5 @@ bundle checks must run on the actual target architecture.
 
 Release preparation still needs the existing project's license source, a
 version/migration policy for users of the former UI package, a hosted-package
-consumer, and verification of the declared minimum SDK. These are release
+consumer. These are release
 requirements, not reasons to replace the working source implementation.

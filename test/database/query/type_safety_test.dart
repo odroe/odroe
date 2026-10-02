@@ -5,6 +5,8 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../../support/analyzer_diagnostics.dart';
+
 void main() {
   test('columns preserve assignment, predicate, and selection types', () async {
     final path = File('test/database/query/type_fixture.invalid').absolute.path;
@@ -24,24 +26,21 @@ void main() {
 
     expect(result, isA<ResolvedUnitResult>());
     final diagnostics = (result as ResolvedUnitResult).diagnostics;
-    expect(
-      diagnostics.map((diagnostic) => diagnostic.diagnosticCode.lowerCaseName),
-      <String>[
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-        'undefined_method',
-        'undefined_method',
-        'undefined_method',
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-        'argument_type_not_assignable',
-      ],
-    );
+    expect(diagnostics.map(diagnosticCodeName), <String>[
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+      'undefined_method',
+      'undefined_method',
+      'undefined_method',
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+      'argument_type_not_assignable',
+    ]);
   });
 }
 

@@ -23,7 +23,12 @@ void main() {
       );
       expect(source, contains('old `odroe` 0.0.8'));
       expect(source, contains('`.odroe-prerender` marker'));
-      expect(source, contains('verification of the declared minimum SDK'));
+      final normalized = source.replaceAll(RegExp(r'\s+'), ' ');
+      expect(normalized, contains('Flutter 3.38.1 / Dart 3.10.0'));
+      expect(source, contains('.github/workflows/minimum-sdk.yml'));
+      expect(normalized, contains("existing project's license source"));
+      expect(normalized, contains('version/migration policy'));
+      expect(normalized, contains('hosted-package consumer'));
     },
   );
   test('every published location renders semantic HTML', () async {

@@ -736,6 +736,42 @@ ${_serverFunction(name: 'watchPosts', input: 'NoServerInput', output: 'Stream<mo
       timeout: const Timeout(Duration(minutes: 2)),
     );
 
+    test('keeps project nominal declaration names adapter-owned', () {
+      project.writeSharedModels('''
+final class ValueClass {}
+mixin ValueMixin {}
+class ValueAlias = Object with ValueMixin;
+extension type ValueExtension(int value) {}
+extension type const ConstValueExtension(int value) {}
+''');
+      for (final name in <String>[
+        'ValueClass',
+        'ValueMixin',
+        'ValueAlias',
+        'ValueExtension',
+        'ConstValueExtension',
+      ]) {
+        project.writeFunctions(
+          _serverFunction(
+            name: 'echoValue',
+            input: 'models.$name',
+            output: 'models.$name',
+          ),
+          imports: "import '../models.dart' as models;",
+        );
+        final output = project.compile();
+        expect(output.diagnostics, isEmpty, reason: name);
+        expect(
+          output.source.replaceAll(RegExp(r'\s+'), '').replaceAll(',>', '>'),
+          contains(
+            'ServerFunctionRef<root_models_type.$name,root_models_type.$name>',
+          ),
+        );
+        expect(output.source, isNot(contains('encodeInput:')));
+        expect(output.source, isNot(contains('decodeOutput:')));
+      }
+    });
+
     test('keeps dependency nominal values adapter-owned', () {
       project.writeFunctions(
         _serverFunction(

@@ -1088,11 +1088,11 @@ final class _WireShapeResolver {
               in result.unit.declarations.whereType<GenericTypeAlias>())
             declaration.name.lexeme: declaration,
         },
-        enumTypes: <String>{
-          for (final declaration
-              in result.unit.declarations.whereType<EnumDeclaration>())
-            declaration.namePart.typeName.lexeme,
-        },
+        enumTypes: result.unit.declarations
+            .whereType<EnumDeclaration>()
+            .map(_nominalTypeName)
+            .nonNulls
+            .toSet(),
         nominalTypes: result.unit.declarations
             .map(_nominalTypeName)
             .nonNulls
@@ -1386,13 +1386,18 @@ String? _projectPackageName(Directory rootDirectory) {
   ).firstMatch(pubspec.readAsStringSync())?.group(1);
 }
 
+// Keyword tokens are stable across supported analyzer generations. Older
+// namePart getters are experimental/unimplemented, and newer primary
+// constructor nodes are not available on the minimum toolchain.
 String? _nominalTypeName(CompilationUnitMember declaration) =>
     switch (declaration) {
-      ClassDeclaration(:final namePart) => namePart.typeName.lexeme,
+      ClassDeclaration(:final classKeyword) => classKeyword.next?.lexeme,
       ClassTypeAlias(:final name) => name.lexeme,
-      EnumDeclaration(:final namePart) => namePart.typeName.lexeme,
-      ExtensionTypeDeclaration(:final primaryConstructor) =>
-        primaryConstructor.typeName.lexeme,
+      EnumDeclaration(:final enumKeyword) => enumKeyword.next?.lexeme,
+      ExtensionTypeDeclaration(:final typeKeyword) =>
+        typeKeyword.next?.lexeme == 'const'
+            ? typeKeyword.next?.next?.lexeme
+            : typeKeyword.next?.lexeme,
       MixinDeclaration(:final name) => name.lexeme,
       _ => null,
     };

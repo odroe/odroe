@@ -132,7 +132,7 @@ Future<void> createProject({
         'pub',
         'add',
         if (offline) '--offline',
-        'odroe@{"path":${jsonEncode(p.relative(source.path, from: staging.path))}}',
+        'odroe:{"path":${jsonEncode(p.relative(source.path, from: staging.path))}}',
       ],
       workingDirectory: staging.path,
       stage: 'Odroe dependency resolution',
