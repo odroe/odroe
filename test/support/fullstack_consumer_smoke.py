@@ -201,7 +201,7 @@ def main():
                     run([dart, 'run', 'odroe', 'init', '--full-stack'], project, env=consumer_env)
             else:
                 run([dart, 'run', 'odroe', 'create', str(project), '--platforms', 'web',
-                     '--project-name', 'batch_consumer', '--odroe-path', str(package_root), '--offline'], package_root)
+                     '--project-name', 'batch_consumer', '--odroe-path', str(package_root)], package_root)
             run([dart, 'run', 'odroe', 'generate'], project, env=consumer_env)
             (project / 'test').mkdir(exist_ok=True)
             (project / 'test/fullstack_smoke_test.dart').write_text(probe)

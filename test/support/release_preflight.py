@@ -44,6 +44,8 @@ def main():
                      'incremental_adoption_smoke']:
             run([sys.executable, str(root / 'test/support' / (name + '.py'))],
                 root, timeout=900, env=env)
+    if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True):
+        raise RuntimeError('The source checkout changed during release preflight.')
     result = {'package': 'odroe', 'version': version, 'sourceCommit': commit,
               'sdk': sdk, 'archiveSha256': sha256(archive), 'files': manifest,
               'archiveConsumers': 'passed', 'officialHostedAcceptance': 'not run',

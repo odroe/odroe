@@ -20,6 +20,8 @@ def main():
     parser.add_argument('--archive-sha256', required=True)
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
+    if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True):
+        raise RuntimeError('Published acceptance requires a clean source checkout.')
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     if not re.fullmatch(r'[0-9a-f]{40}', args.commit) or commit != args.commit:
         raise ValueError('Checkout must match the exact reviewed source commit.')
