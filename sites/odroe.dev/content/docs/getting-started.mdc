@@ -58,12 +58,12 @@ package instead of a checkout dependency:
 
 ```sh
 # Run from the current Odroe checkout after flutter pub get.
-dart run odroe create ../hosted_app --odroe-version 0.1.0-dev.1 --platforms web
+dart run odroe create ../hosted_app --version 0.1.0-dev.1 --platforms web
 ```
 
 The new application resolves and initializes using that hosted version. It
 does not depend on the checkout used to launch the command. Choose either
-`--odroe-version` or `--odroe-path`; there is no implicit latest version. The
+`--version` or `--odroe-path`; there is no implicit latest version. The
 published `0.1.0-dev.1` CLI does not yet have this option, so its installation
 flow remains `flutter create`, `flutter pub add`, and `odroe init` above.
 

@@ -63,5 +63,6 @@ jobs:
         run: python3 test/support/fullstack_consumer_smoke.py
       - name: Verify hosted create with an exact published package and fresh cache
         env:
-          ODROE_CREATE_HOSTED_VERSION: '0.1.0-dev.1'
+          ODROE_CREATE_VERSION: '0.1.0-dev.1'
+          ODROE_CREATE_AOT: '1'
         run: python3 test/support/fullstack_consumer_smoke.py

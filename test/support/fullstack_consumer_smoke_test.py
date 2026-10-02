@@ -21,7 +21,7 @@ spec.loader.exec_module(smoke)
 
 
 class HostedCacheIsolationTest(unittest.TestCase):
-    def exercise(self, stale_resolution, hosted_create=False):
+    def exercise(self, stale_resolution, hosted_create=False, hosted_aot=False):
         with tempfile.TemporaryDirectory(prefix='odroe-hosted-cache-test-', dir='/tmp') as temp:
             old_cache = Path(temp) / 'existing-cache'
             seeded = old_cache / 'hosted/pub.dev/odroe-0.1.0-dev.1'
@@ -33,15 +33,25 @@ class HostedCacheIsolationTest(unittest.TestCase):
                 pass
             def fake_run(args, cwd, timeout=240, env=None):
                 calls.append((args, env))
+                if args[1:3] == ['build', 'cli']:
+                    self.assertTrue(hosted_aot)
+                    self.assertIsNone(env)
+                    self.assertEqual(cwd, smoke.root)
+                    self.assertEqual(Path(args[-1]).name, 'candidate cli')
+                    return
                 self.assertIsNotNone(env)
                 cache = Path(env['PUB_CACHE'])
                 self.assertNotEqual(cache.resolve(), old_cache.resolve())
                 self.assertEqual(env['PUB_HOSTED_URL'], 'https://pub.dev')
-                if hosted_create and args[3] == 'create':
+                if hosted_create and (args[1] == 'create' or args[3] == 'create'):
                     self.assertEqual(list(cache.iterdir()), [])
-                    self.assertEqual(args[-2:], ['--odroe-version', '0.1.0-dev.1'])
-                    self.assertEqual(args[1], '--packages=' + str(smoke.root / '.dart_tool/package_config.json'))
-                    project = Path(args[4])
+                    self.assertEqual(args[-2:], ['--version', '0.1.0-dev.1'])
+                    if hosted_aot:
+                        self.assertTrue(args[0].endswith('/candidate cli/bundle/bin/odroe'))
+                        project = Path(args[2])
+                    else:
+                        self.assertEqual(args[1], '--packages=' + str(smoke.root / '.dart_tool/package_config.json'))
+                        project = Path(args[4])
                     (project / '.dart_tool').mkdir(parents=True)
                     resolve(project, cache)
                 elif args[1] == 'create':
@@ -61,8 +71,9 @@ class HostedCacheIsolationTest(unittest.TestCase):
                 (project / 'pubspec.yaml').write_text('name: batch_consumer\n')
             with mock.patch.dict(os.environ, PUB_CACHE=str(old_cache),
                     PUB_HOSTED_URL='https://local.invalid',
+                    ODROE_CREATE_AOT='1' if hosted_aot else '',
                     ODROE_HOSTED_VERSION='' if hosted_create else '0.1.0-dev.1',
-                    ODROE_CREATE_HOSTED_VERSION='0.1.0-dev.1' if hosted_create else ''), \
+                    ODROE_CREATE_VERSION='0.1.0-dev.1' if hosted_create else ''), \
                     mock.patch.object(smoke, 'run', side_effect=fake_run), \
                     mock.patch.object(smoke, 'dart', 'dart'), \
                     mock.patch.object(smoke, 'flutter', 'flutter'), \
@@ -76,10 +87,10 @@ class HostedCacheIsolationTest(unittest.TestCase):
                         smoke.main()
                     self.assertIn('VERIFIED_HOSTED_ODROE', output.getvalue())
                     if hosted_create:
-                        self.assertEqual(len(calls), 2)
+                        self.assertEqual(len(calls), 3 if hosted_aot else 2)
                     else:
                         self.assertEqual(calls[-2][0][3:], ['init', '--full-stack'])
-                cache = Path(calls[0][1]['PUB_CACHE'])
+                cache = Path(next(env for _, env in calls if env)['PUB_CACHE'])
                 self.assertFalse(cache.exists())
                 self.assertEqual(marker.read_text(), 'must not be consumed or deleted')
                 self.assertEqual(os.environ['PUB_CACHE'], str(old_cache))
@@ -95,6 +106,12 @@ class HostedCacheIsolationTest(unittest.TestCase):
 
     def test_hosted_create_uses_candidate_dispatcher_and_fresh_cache(self):
         self.exercise(stale_resolution=False, hosted_create=True)
+
+    def test_aot_hosted_create_rejects_seeded_resolution(self):
+        self.exercise(stale_resolution=True, hosted_create=True, hosted_aot=True)
+
+    def test_aot_hosted_create_uses_built_cli_and_fresh_cache(self):
+        self.exercise(stale_resolution=False, hosted_create=True, hosted_aot=True)
 
 
 # This descendant both executes continuously and holds a live resource. Merely

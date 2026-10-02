@@ -326,7 +326,7 @@ void main() {
     expect(gettingStarted, contains('reuses the full-stack initializer'));
     expect(tutorial, contains('in-process full-stack initializer'));
     expect(cliReference, contains('--odroe-path <checkout>'));
-    expect(cliReference, contains('--odroe-version <exact-version>'));
+    expect(cliReference, contains('--version <exact-version>'));
     expect(cliReference, contains('dart run odroe init --full-stack'));
     expect(cliReference, contains('not in the published `0.1.0-dev.1` CLI'));
     expect(cliReference, contains('committed only after publication'));

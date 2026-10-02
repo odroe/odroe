@@ -49,8 +49,9 @@ Future<int> runOdroe(
       help: 'Odroe package checkout to use as a path dependency.',
     )
     ..addOption(
-      'odroe-version',
-      help: 'Exact hosted Odroe version; mutually exclusive with --odroe-path.',
+      'version',
+      help:
+          'Exact hosted Odroe dependency version; mutually exclusive with --odroe-path.',
     )
     ..addFlag(
       'offline',
@@ -170,7 +171,7 @@ Future<int> runOdroe(
       await createProject(
         directory: command.rest.single,
         odroePath: command.option('odroe-path'),
-        odroeVersion: command.option('odroe-version'),
+        odroeVersion: command.option('version'),
         platforms: command.option('platforms')!,
         organization: command.option('org'),
         projectName: command.option('project-name'),

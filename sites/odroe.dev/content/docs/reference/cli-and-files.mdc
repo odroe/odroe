@@ -26,7 +26,7 @@ passed directly, for example `dart run odroe build apk`.
 
 | Command | Purpose | Important options |
 | --- | --- | --- |
-| `create` | Create a guarded full-stack Flutter application | target directory, `--odroe-path` or `--odroe-version`, `--platforms`, `--org`, `--project-name`, `--offline` |
+| `create` | Create a guarded full-stack Flutter application | target directory, `--odroe-path` or `--version`, `--platforms`, `--org`, `--project-name`, `--offline` |
 | `init` | Initialize an empty Flutter application | `--project`, `--full-stack` |
 | `generate` | Generate client and server route targets | `--routes`, `--output`, `--server-output`, `--watch` |
 | `dev` | Watch sources, run one selected server runtime, and optionally run Flutter | `--host`, `--port`, `--server-target`, `--sqlite-migrations`, `--server-only` |
@@ -45,7 +45,7 @@ Choose exactly one source:
 - `--odroe-path <checkout>` adds a path dependency. The current process confirms
   the staged package resolves the same canonical checkout and reuses its
   full-stack initializer directly.
-- `--odroe-version <exact-version>` adds a hosted dependency, checks the resolved
+- `--version <exact-version>` adds a hosted dependency, checks the resolved
   lockfile source and version, and runs `dart run odroe init --full-stack` from
   the staged application. Its installed package owns the templates and compiler,
   even when it differs from the package running `create`. Versions such as

@@ -51,7 +51,7 @@ Future<void> createProject({
   final target = _targetDirectory(directory);
   if ((odroePath == null) == (odroeVersion == null)) {
     throw const FormatException(
-      'Provide exactly one of --odroe-path or --odroe-version.',
+      'Provide exactly one of --odroe-path or --version.',
     );
   }
   final version = odroeVersion == null ? null : _hostedVersion(odroeVersion);
@@ -61,7 +61,7 @@ Future<void> createProject({
   final selectedProjectName = _projectName(
     projectName ?? p.basename(target.path),
   )!;
-  final flutter = _flutterCommand();
+  final flutter = _flutterCommand(requireDart: version != null);
 
   final interruption = _CreateInterruption();
   late final Directory staging;
@@ -167,7 +167,7 @@ Future<void> createProject({
       // package configuration: its compiler and templates must match its API.
       await _requireSuccess(
         runner,
-        Platform.resolvedExecutable,
+        flutter.dartExecutable!,
         const <String>['run', 'odroe', 'init', '--full-stack'],
         workingDirectory: staging.path,
         stage: 'Hosted Odroe starter initialization',
@@ -387,7 +387,7 @@ String _hostedVersion(String value) {
     // Ranges, floating versions, and malformed input must fail before staging.
   }
   throw const FormatException(
-    '--odroe-version requires an exact version, for example 0.1.0-dev.1.',
+    '--version requires an exact version, for example 0.1.0-dev.1.',
   );
 }
 
@@ -497,8 +497,34 @@ void _reportSecondary(StringSink sink, String message) {
   }
 }
 
-({String executable, List<String> arguments, Map<String, String>? environment})
-_flutterCommand() {
+/// Resolves Dart from the selected Flutter SDK, never from the CLI or PATH.
+String dartExecutableForFlutterSdk(String root) {
+  final dart = File(
+    p.join(
+      root,
+      'bin',
+      'cache',
+      'dart-sdk',
+      'bin',
+      Platform.isWindows ? 'dart.exe' : 'dart',
+    ),
+  );
+  if (!dart.existsSync()) {
+    throw FileSystemException(
+      'The selected Flutter SDK is missing its Dart executable.',
+      dart.path,
+    );
+  }
+  return dart.resolveSymbolicLinksSync();
+}
+
+({
+  String executable,
+  String? dartExecutable,
+  List<String> arguments,
+  Map<String, String>? environment,
+})
+_flutterCommand({required bool requireDart}) {
   final roots = _flutterRoots();
   if (!Platform.isWindows) {
     for (final root in roots) {
@@ -506,6 +532,9 @@ _flutterCommand() {
       if (flutter.existsSync()) {
         return (
           executable: flutter.resolveSymbolicLinksSync(),
+          dartExecutable: requireDart
+              ? dartExecutableForFlutterSdk(root)
+              : null,
           arguments: const <String>[],
           environment: <String, String>{
             'FLUTTER_ROOT': Directory(root).resolveSymbolicLinksSync(),
@@ -513,14 +542,23 @@ _flutterCommand() {
         );
       }
     }
+    if (requireDart) {
+      throw const FileSystemException(
+        'Could not locate a Flutter SDK and its bundled Dart executable.',
+      );
+    }
     return (
       executable: 'flutter',
+      dartExecutable: null,
       arguments: const <String>[],
       environment: null,
     );
   }
 
   for (final root in roots) {
+    if (requireDart && File(p.join(root, 'bin', 'flutter.bat')).existsSync()) {
+      dartExecutableForFlutterSdk(root);
+    }
     final dart = File(
       p.join(root, 'bin', 'cache', 'dart-sdk', 'bin', 'dart.exe'),
     );
@@ -553,6 +591,7 @@ _flutterCommand() {
       final resolvedDart = dart.resolveSymbolicLinksSync();
       return (
         executable: resolvedDart,
+        dartExecutable: resolvedDart,
         arguments: <String>[
           '--packages=${packageConfig.resolveSymbolicLinksSync()}',
           snapshot.resolveSymbolicLinksSync(),

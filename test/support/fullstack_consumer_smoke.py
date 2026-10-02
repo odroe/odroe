@@ -133,8 +133,11 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix='odroe-batch-consumer-', dir='/tmp') as temp:
             base = Path(temp); project = base / 'consumer'; db = base / 'persistent.sqlite3'
-            create_hosted_version = os.environ.get('ODROE_CREATE_HOSTED_VERSION')
+            create_hosted_version = os.environ.get('ODROE_CREATE_VERSION')
+            create_aot = os.environ.get('ODROE_CREATE_AOT') == '1'
             hosted_version = os.environ.get('ODROE_HOSTED_VERSION')
+            if create_aot and not create_hosted_version:
+                raise RuntimeError('ODROE_CREATE_AOT requires ODROE_CREATE_VERSION.')
             if create_hosted_version and hosted_version:
                 raise RuntimeError('Select one hosted consumer mode, not both.')
             hosted_version = create_hosted_version or hosted_version
@@ -149,10 +152,16 @@ def main():
                     # Run the candidate dispatcher without re-resolving its own
                     # checkout into the disposable cache. The new application
                     # and its initializer must use the actual hosted package.
-                    run([dart, '--packages=' + str(root / '.dart_tool/package_config.json'),
-                         str(root / 'bin/odroe.dart'), 'create', str(project),
+                    launcher = [dart, '--packages=' + str(root / '.dart_tool/package_config.json'),
+                                str(root / 'bin/odroe.dart')]
+                    if create_aot:
+                        cli_output = base / 'candidate cli'
+                        run([dart, 'build', 'cli', '--target', launcher[2],
+                             '--output', str(cli_output)], root)
+                        launcher = [str(cli_output / 'bundle/bin/odroe')]
+                    run([*launcher, 'create', str(project),
                          '--platforms', 'web', '--project-name', 'batch_consumer',
-                         '--odroe-version', hosted_version], base, env=consumer_env)
+                         '--version', hosted_version], base, env=consumer_env)
                 else:
                     run([flutter, 'create', '--empty', '--platforms', 'web',
                          '--project-name', 'batch_consumer', str(project)], base, env=consumer_env)
@@ -211,7 +220,8 @@ def main():
                 'dependencySource': 'hosted' if hosted_version else 'path',
                 'hostedVersion': hosted_version,
                 'creationMode': 'hosted-create' if create_hosted_version else
-                    'hosted-init' if hosted_version else 'source-create'}
+                    'hosted-init' if hosted_version else 'source-create',
+                'creationLauncher': 'aot' if create_aot else 'dart'}
             print(json.dumps(result))
         log.write('\nDisposable generated consumer, servers, database, and relocated bundle cleaned.\n')
     finally:

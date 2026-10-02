@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:odroe/src/cli/cli.dart';
+import 'package:odroe/src/cli/create.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -15,6 +16,73 @@ void main() {
   });
   tearDown(() => parent.delete(recursive: true));
 
+  test('create version is a value option scoped to creation', () async {
+    final output = StringBuffer();
+    expect(
+      await runOdroe([
+        'create',
+        '--version',
+        '0.1.0-dev.1',
+        '--help',
+      ], output: output),
+      0,
+    );
+    expect('$output', contains('Exact hosted Odroe dependency version'));
+    final errors = StringBuffer();
+    expect(
+      await runOdroe(
+        ['create', target, '--version'],
+        output: StringBuffer(),
+        errors: errors,
+      ),
+      64,
+    );
+    expect(parent.listSync(), isEmpty);
+  });
+
+  test('unreleased prefixed version option is not kept as an alias', () async {
+    expect(
+      await runOdroe(
+        ['create', target, '--odroe-version', '0.1.0-dev.1'],
+        output: StringBuffer(),
+        errors: StringBuffer(),
+      ),
+      64,
+    );
+    expect(parent.listSync(), isEmpty);
+  });
+
+  test('selected SDK Dart resolution preserves a path with spaces', () {
+    final sdk = p.join(parent.path, 'Flutter SDK');
+    final dart = File(
+      p.join(
+        sdk,
+        'bin',
+        'cache',
+        'dart-sdk',
+        'bin',
+        Platform.isWindows ? 'dart.exe' : 'dart',
+      ),
+    );
+    dart.createSync(recursive: true);
+    expect(dartExecutableForFlutterSdk(sdk), dart.resolveSymbolicLinksSync());
+  });
+
+  test('incomplete selected SDK fails without falling back to PATH or CLI', () {
+    final sdk = p.join(parent.path, 'incomplete Flutter SDK');
+    expect(
+      () => dartExecutableForFlutterSdk(sdk),
+      throwsA(
+        isA<FileSystemException>().having(
+          (e) => e.message,
+          'message',
+          contains('missing its Dart executable'),
+        ),
+      ),
+    );
+    expect(parent.listSync(), isEmpty);
+  });
+
   test(
     'hosted create pins the version and runs the installed initializer',
     () async {
@@ -22,7 +90,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
       final code = await runOdroe(
-        ['create', target, '--odroe-version', '0.1.0-dev.1', '--offline'],
+        ['create', target, '--version', '0.1.0-dev.1', '--offline'],
         output: output,
         errors: errors,
         createProjectInitializer: (_, _, _) =>
@@ -54,7 +122,10 @@ void main() {
       expect(jsonDecode(calls[1].args.last.substring('odroe:'.length)), {
         'version': '0.1.0-dev.1',
       });
-      expect(calls[2].executable, Platform.resolvedExecutable);
+      final sdk = Platform.isWindows
+          ? File(calls[0].executable).parent.parent.parent.parent.parent.path
+          : File(calls[0].executable).parent.parent.path;
+      expect(calls[2].executable, dartExecutableForFlutterSdk(sdk));
       expect(calls[2].args, ['run', 'odroe', 'init', '--full-stack']);
       expect(calls[2].cwd, calls[1].cwd);
       expect(Directory(target).existsSync(), isTrue);
@@ -83,7 +154,7 @@ void main() {
         final errors = StringBuffer();
         expect(
           await runOdroe(
-            ['create', target, '--odroe-version', invalid],
+            ['create', target, '--version', invalid],
             output: StringBuffer(),
             errors: errors,
             createCommandRunner:
@@ -113,7 +184,7 @@ void main() {
           target,
           '--odroe-path',
           Directory.current.path,
-          '--odroe-version',
+          '--version',
           '0.1.0-dev.1',
         ],
         output: StringBuffer(),
@@ -134,7 +205,7 @@ void main() {
       var stage = 0;
       String? staging;
       final code = await runOdroe(
-        ['create', target, '--odroe-version', '0.1.0-dev.1'],
+        ['create', target, '--version', '0.1.0-dev.1'],
         output: output,
         errors: errors,
         createCommandRunner:
@@ -170,7 +241,7 @@ void main() {
       final errors = StringBuffer();
       expect(
         await runOdroe(
-          ['create', target, '--odroe-version', '0.1.0-dev.1'],
+          ['create', target, '--version', '0.1.0-dev.1'],
           output: StringBuffer(),
           errors: errors,
           createCommandRunner:
@@ -225,7 +296,7 @@ void main() {
         final errors = StringBuffer();
         expect(
           await runOdroe(
-            ['create', target, '--odroe-version', '0.1.0-dev.1'],
+            ['create', target, '--version', '0.1.0-dev.1'],
             output: StringBuffer(),
             errors: errors,
             createCommandRunner:
@@ -263,7 +334,7 @@ void main() {
       final errors = StringBuffer();
       expect(
         await runOdroe(
-          ['create', target, '--odroe-version', '0.1.0-dev.1'],
+          ['create', target, '--version', '0.1.0-dev.1'],
           output: StringBuffer(),
           errors: errors,
           createCommandRunner:

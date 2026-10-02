@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-- Add `odroe create --odroe-version <exact-version>` for hosted full-stack
+- Add `odroe create --version <exact-version>` for hosted full-stack
   applications without a checkout dependency. Resolve the requested version,
   verify its lockfile, and run its installed initializer from the staged
   application so templates and generated code match the selected package.
   Keep `--odroe-path` as the exclusive source-development alternative, reject
   floating versions before staging, and preserve target protection and rollback
-  across resolution and initialization failures.
+  across resolution and initialization failures. Hosted initialization uses
+  the selected Flutter SDK's Dart executable, including when the invoking CLI
+  is an AOT executable; a missing SDK Dart fails before staging.
 
 ## 0.1.0-dev.1
 
