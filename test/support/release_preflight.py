@@ -35,6 +35,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='odroe-release-preflight-') as temp:
         package = Path(temp) / 'package'
         manifest = extract_package(archive, package)
+        if any(name.startswith(('research/', 'test/')) for name in manifest):
+            raise RuntimeError('Research and test fixtures must not ship in the pub archive.')
         env = dict(os.environ, ODROE_PACKAGE_ROOT=str(package),
                    PUB_CACHE=str(Path(temp) / 'cache'), PUB_HOSTED_URL='https://pub.dev')
         for key in ['ODROE_HOSTED_VERSION', 'ODROE_CREATE_VERSION',
@@ -42,7 +44,7 @@ def main():
             env.pop(key, None)
         run([flutter, 'pub', 'get'], package, env=env)
         for name in ['fullstack_consumer_smoke', 'dependency_first_consumer_smoke',
-                     'incremental_adoption_smoke']:
+                     'incremental_adoption_smoke', 'query_rpc_consumer_smoke']:
             run([sys.executable, str(root / 'test/support' / (name + '.py'))],
                 root, timeout=900, env=env)
     if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True):

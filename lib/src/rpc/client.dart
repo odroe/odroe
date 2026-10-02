@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import '../server/context.dart';
 import '../server/http.dart';
 import 'cancellation.dart';
+import 'endpoint.dart' if (dart.library.js_interop) 'endpoint_web.dart';
 import 'function.dart';
 import 'path.dart';
 import 'serializer.dart';
@@ -80,6 +81,77 @@ abstract interface class RpcTransport {
 /// Creates application-owned headers immediately before one RPC request.
 typedef RpcHeadersProvider = FutureOr<Headers> Function();
 
+/// @nodoc
+/// Internal bound read snapshot; never exported from a public entrypoint.
+final class PreparedRpcRead<O> {
+  const PreparedRpcRead._(
+    this._client,
+    this.endpoint,
+    this.method,
+    this.payload,
+    this._decode,
+  );
+  final RpcClient _client;
+  final ValueDecoder<O>? _decode;
+
+  /// Resolved destination captured when the read was created.
+  final Uri endpoint;
+
+  /// Captured wire method.
+  final HttpMethod method;
+
+  /// Encoded request sent verbatim; never paired with a different ref.
+  final String payload;
+
+  /// Invokes only this bound snapshot.
+  Future<O> call({Future<void>? cancelled}) async => _client._readValue<O>(
+    await _client._sendPayload(endpoint, method, payload, cancelled),
+    _decode,
+    cancelled,
+  );
+}
+
+/// @nodoc
+/// Binds the original ref/endpoint/method/serializer/decoder to one wire value.
+PreparedRpcRead<O> prepareRpcRead<I, O>(
+  RpcClient client,
+  ServerFunctionRef<I, O> function,
+  I data,
+) {
+  final endpoint = rpcReadEndpoint(client, function.id);
+  final input = data is NoServerInput
+      ? null
+      : function.encodeInput == null
+      ? data
+      : function.encodeInput!(data);
+  final wire = client.serializer.encode(<String, Object?>{'data': input});
+  return PreparedRpcRead<O>._(
+    client,
+    endpoint,
+    function.method,
+    jsonEncode(_canonicalWire(wire)),
+    function.decodeOutput,
+  );
+}
+
+/// @nodoc
+/// The same resolved endpoint used by direct calls and bound Query reads.
+Uri rpcReadEndpoint(RpcClient client, String id) {
+  final endpoint = client._functionEndpoint(id);
+  if (!endpoint.isAbsolute ||
+      endpoint.host.isEmpty ||
+      endpoint.userInfo.isNotEmpty ||
+      endpoint.hasQuery ||
+      endpoint.hasFragment ||
+      !['http', 'https'].contains(endpoint.scheme)) {
+    throw ArgumentError(
+      'RPC reads require an HTTP(S) endpoint without credentials. '
+      'Use an explicit server baseUri on native platforms.',
+    );
+  }
+  return endpoint;
+}
+
 /// Typed client for generated server-function references.
 final class RpcClient {
   /// Default maximum size of one typed response frame: 1 MiB.
@@ -127,6 +199,10 @@ final class RpcClient {
   /// whose output type is [ServerResponse] leave body limits to the caller.
   final int maxResponseFrameBytes;
 
+  Uri _functionEndpoint(String id) => resolveRpcEndpoint(
+    baseUri.resolve('$functionPath/${Uri.encodeComponent(id)}'),
+  );
+
   /// Calls a value-returning server [function].
   ///
   /// Completing [cancelled] stops the request with [RpcCancelledException].
@@ -142,6 +218,14 @@ final class RpcClient {
       encodeInput: function.encodeInput,
       cancelled: cancelled,
     );
+    return _readValue<O>(response, function.decodeOutput, cancelled);
+  }
+
+  Future<O> _readValue<O>(
+    ServerResponse response,
+    ValueDecoder<O>? decode,
+    Future<void>? cancelled,
+  ) async {
     if (O == ServerResponse) return response as O;
     final contentType = response.headers.value('content-type') ?? '';
     if (contentType.startsWith('application/x-ndjson')) {
@@ -159,7 +243,7 @@ final class RpcClient {
     return _decodeFrame<O>(
       await _readFrame(response, cancelled),
       response.status,
-      decode: function.decodeOutput,
+      decode: decode,
     );
   }
 
@@ -222,15 +306,38 @@ final class RpcClient {
       );
     }, cancelled);
     final payload = setup.payload;
-    final path = '$functionPath/${Uri.encodeComponent(id)}';
-    final headers = _rpcHeaders(baseUri, setup.headers);
+    return _sendPayload(
+      _functionEndpoint(id),
+      method,
+      payload,
+      cancelled,
+      resolvedHeaders: setup.headers,
+      headersResolved: true,
+    );
+  }
+
+  Future<ServerResponse> _sendPayload(
+    Uri endpoint,
+    HttpMethod method,
+    String payload,
+    Future<void>? cancelled, {
+    Headers? resolvedHeaders,
+    bool headersResolved = false,
+  }) async {
+    final supplied = headersResolved
+        ? resolvedHeaders
+        : await runUntilRpcCancelled(
+            () async => headersProvider?.call(),
+            cancelled,
+          );
+    final headers = _rpcHeaders(baseUri, supplied);
     late final ServerRequest request;
     if (method == HttpMethod.get) {
       request = ServerRequest.bytes(
         method: method,
-        uri: baseUri
-            .resolve(path)
-            .replace(queryParameters: <String, String>{'payload': payload}),
+        uri: endpoint.replace(
+          queryParameters: <String, String>{'payload': payload},
+        ),
         headers: headers,
         cancelled: cancelled,
       );
@@ -238,7 +345,7 @@ final class RpcClient {
       headers.set('content-type', 'application/json; charset=utf-8');
       request = ServerRequest.bytes(
         method: method,
-        uri: baseUri.resolve(path),
+        uri: endpoint,
         headers: headers,
         body: utf8.encode(payload),
         cancelled: cancelled,
@@ -653,4 +760,25 @@ final class RemoteServerException implements Exception {
   String toString() => remoteType == null
       ? 'RemoteServerException($status): $message'
       : 'RemoteServerException($status, $remoteType): $message';
+}
+
+Object? _canonicalWire(Object? value) {
+  if (value is List) return value.map(_canonicalWire).toList(growable: false);
+  if (value is Map<String, Object?>) {
+    // Serializer escapes application maps containing its reserved tag fields
+    // into Map entry pairs. Their insertion order is not input identity.
+    if (value[r'$type'] == 'Map' && value[r'$value'] is List) {
+      final entries = (value[r'$value'] as List).cast<List>().toList()
+        ..sort((a, b) => (a.first as String).compareTo(b.first as String));
+      return <String, Object?>{
+        r'$type': 'Map',
+        r'$value': entries.map(_canonicalWire).toList(growable: false),
+      };
+    }
+    final keys = value.keys.toList()..sort();
+    return <String, Object?>{
+      for (final key in keys) key: _canonicalWire(value[key]),
+    };
+  }
+  return value;
 }

@@ -26,7 +26,10 @@ The script rejects links, traversal paths, duplicate members, and special files
 before using the extracted package. Its consumers run the extracted package's
 CLI and path dependency while obtaining fixtures from the checkout. Generated
 RPC/SQLite and a relocated native server, direct dependency adoption, and
-incremental Query/routing/HTTP RPC must all pass.
+incremental Query/routing/HTTP RPC, and the ordinary read bridge must all pass.
+The read bridge consumer uses the extracted public entrypoint on native HTTP
+and real Chrome, including document-base URL resolution. Research files and
+test fixtures must not enter the archive.
 
 Keep the archive and `manifest.json` together. The manifest records the exact
 source commit, version, SDK, archive SHA256, and every shipped file's checksum.

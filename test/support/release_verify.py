@@ -67,7 +67,8 @@ def main():
             cli_env = dict(env, ODROE_CREATE_DEFAULT='1', ODROE_CREATE_AOT=aot)
             run([sys.executable, str(root / 'test/support/fullstack_consumer_smoke.py')],
                 root, timeout=900, env=cli_env)
-        for name in ['dependency_first_consumer_smoke', 'incremental_adoption_smoke']:
+        for name in ['dependency_first_consumer_smoke', 'incremental_adoption_smoke',
+                     'query_rpc_consumer_smoke']:
             run([sys.executable, str(root / 'test/support' / (name + '.py'))],
                 root, timeout=900, env=dict(env, ODROE_HOSTED_VERSION=args.version))
     if (subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True)

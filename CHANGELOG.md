@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Add optional `query_rpc.dart` with `ServerFunctionRef.read`, `readAt`, and
+  `reads`, returning existing Query options and filters. Reads explicitly opt
+  into repeat execution and use a frozen codec/serializer payload, resolved
+  endpoint, and application-supplied account/tenant scope for cache identity.
+  The application owns each account/backend RPC client and its credentials.
+- Resolve relative Web RPC URLs against the document base consistently for
+  cache identity and transport; native reads require an explicit HTTP(S)
+  endpoint. Reject raw responses and streams from the value bridge while
+  preserving direct RPC resource calls. Cancellation stops client work and
+  excludes late results; server notification remains transport best-effort.
+- Keep pagination and mutation invalidation application-defined. Add native,
+  Flutter, real-browser, generated-ref, and pub-archive consumer coverage.
+
 ## 0.1.0-dev.2
 
 - Update same-key Query options across parent rebuilds without redundant

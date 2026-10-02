@@ -26,7 +26,10 @@ jobs:
           channel: stable
       - run: flutter pub get
       - run: flutter pub get --directory example/app
-      - run: dart format --output=none --set-exit-if-changed lib/src/rpc/module.dart test/rpc/http_module_test.dart example/app/lib/main.dart
-      - run: dart analyze lib/src/rpc/module.dart test/rpc/http_module_test.dart example/app/lib/main.dart
+      - run: dart format --output=none --set-exit-if-changed lib/query_rpc.dart lib/src/rpc test/rpc test/fixtures/query_rpc test/query/flutter_rpc_read_test.dart example/app/lib/main.dart
+      - run: dart analyze lib/query_rpc.dart lib/src/rpc test/rpc test/fixtures/query_rpc test/query/flutter_rpc_read_test.dart example/app/lib/main.dart
       - run: dart test test/rpc
       - run: dart test --platform chrome test/rpc/http_module_test.dart test/rpc/rpc_test.dart test/rpc/client_test.dart test/rpc/query_cancellation_test.dart
+      - run: flutter test --no-pub test/query/flutter_rpc_read_test.dart
+      - name: Verify native and real browser read consumers
+        run: python3 test/support/query_rpc_consumer_smoke.py
