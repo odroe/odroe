@@ -47,8 +47,7 @@ It creates a private same-parent staging directory, runs
 Without a source override, the hosted version is the exact package version
 embedded in the running CLI, including compiled executables. The current
 working directory does not select that version, and the command never follows
-`latest`. This default is available in the next CLI revision, not in the
-published `0.1.0-dev.1` CLI.
+`latest`. This default is available starting with `0.1.0-dev.2`, not in the published `0.1.0-dev.1` CLI.
 
 Optional overrides (mutually exclusive):
 
@@ -60,8 +59,8 @@ Optional overrides (mutually exclusive):
   the staged application. Its installed package owns the templates and compiler,
   even when it differs from the package running `create`. Versions such as
   `0.1.0-dev.1` are accepted; `latest`, `any`, and ranges are rejected. The
-  configured pub registry is used. This option is available in the next CLI
-  revision, not in the published `0.1.0-dev.1` CLI.
+  configured pub registry is used. This option is available starting with `0.1.0-dev.2`,
+  not in the published `0.1.0-dev.1` CLI.
 
 The requested target is published only after all child processes and the
 initializer succeed.

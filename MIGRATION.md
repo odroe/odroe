@@ -1,4 +1,4 @@
-# Migrating to Odroe 0.1.0-dev.1
+# Migrating to the Odroe 0.1 framework
 
 Odroe 0.1.0-dev.1 is the first preview of a new full-stack framework generation
 under the existing package name. It is a breaking change from the former UI
@@ -13,11 +13,11 @@ The old `setup`, `signal`, reactive props, lifecycle hooks and UI context APIs a
 
 ## New framework applications
 
-For source evaluation, use Flutter 3.38.1 / stable Dart 3.10.0 or a newer validated pair. For hosted installation, add the exact `odroe` version `0.1.0-dev.1` to an existing or empty Flutter application and import the APIs you need, as shown in the README. `init` and `create` are optional starter tools; direct use does not require initialization or generated files.
+For source evaluation, use Flutter 3.38.1 / stable Dart 3.10.0 or a newer validated pair. For hosted installation, add the exact `odroe` version `0.1.0-dev.2` to an existing or empty Flutter application and import the APIs you need, as shown in the README. `init` and `create` are optional starter tools; direct use does not require initialization or generated files.
 
 Framework App/Module/Context, Query/Mutation, typed routes, generated RPC and SQL are separate contracts from the former UI API. Roux is the actual matching dependency; Spry and oxy are not integrated.
 
-## Next preview: Query client ownership
+## 0.1.0-dev.2: Query client ownership
 
 `QueryClientProvider(child: app)` now creates and owns one QueryClient. Its
 optional `create:` callback runs once per owned lifetime; ordinary rebuilds and
