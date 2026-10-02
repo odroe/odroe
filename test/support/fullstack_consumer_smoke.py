@@ -134,13 +134,20 @@ def main():
         with tempfile.TemporaryDirectory(prefix='odroe-batch-consumer-', dir='/tmp') as temp:
             base = Path(temp); project = base / 'consumer'; db = base / 'persistent.sqlite3'
             create_hosted_version = os.environ.get('ODROE_CREATE_VERSION')
+            create_default = os.environ.get('ODROE_CREATE_DEFAULT') == '1'
+            create_hosted = create_default or bool(create_hosted_version)
             create_aot = os.environ.get('ODROE_CREATE_AOT') == '1'
             hosted_version = os.environ.get('ODROE_HOSTED_VERSION')
-            if create_aot and not create_hosted_version:
-                raise RuntimeError('ODROE_CREATE_AOT requires ODROE_CREATE_VERSION.')
-            if create_hosted_version and hosted_version:
+            if create_default and create_hosted_version:
+                raise RuntimeError('Select default create or an explicit version, not both.')
+            if create_aot and not create_hosted:
+                raise RuntimeError('ODROE_CREATE_AOT requires a hosted create mode.')
+            if create_hosted and hosted_version:
                 raise RuntimeError('Select one hosted consumer mode, not both.')
             hosted_version = create_hosted_version or hosted_version
+            if create_default:
+                hosted_version = re.search(r'^version:\s*(\S+)\s*$',
+                    (root / 'pubspec.yaml').read_text(), re.M).group(1)
             consumer_env = None
             if hosted_version:
                 # Own a fresh cache even when callers supply a populated or seeded cache.
@@ -148,7 +155,7 @@ def main():
                 cache_root.mkdir()
                 consumer_env = dict(os.environ, PUB_CACHE=str(cache_root),
                     PUB_HOSTED_URL='https://pub.dev')
-                if create_hosted_version:
+                if create_hosted:
                     # Run the candidate dispatcher without re-resolving its own
                     # checkout into the disposable cache. The new application
                     # and its initializer must use the actual hosted package.
@@ -159,9 +166,12 @@ def main():
                         run([dart, 'build', 'cli', '--target', launcher[2],
                              '--output', str(cli_output)], root)
                         launcher = [str(cli_output / 'bundle/bin/odroe')]
+                    # An unrelated caller pubspec must not control the default.
+                    (base / 'pubspec.yaml').write_text('name: unrelated_caller\nversion: 99999.0.0\n')
                     run([*launcher, 'create', str(project),
                          '--platforms', 'web', '--project-name', 'batch_consumer',
-                         '--version', hosted_version], base, env=consumer_env)
+                         *([] if create_default else ['--version', hosted_version])],
+                        base, env=consumer_env)
                 else:
                     run([flutter, 'create', '--empty', '--platforms', 'web',
                          '--project-name', 'batch_consumer', str(project)], base, env=consumer_env)
@@ -186,7 +196,7 @@ def main():
                     raise RuntimeError('Hosted consumer must not contain dependency overrides')
                 log.write('VERIFIED_HOSTED_ODROE ' + json.dumps({'version': hosted_version,
                     'root': str(package_root), 'source': 'hosted', 'registry': 'https://pub.dev'}) + '\n')
-                if not create_hosted_version:
+                if not create_hosted:
                     run([dart, 'run', 'odroe', 'init', '--full-stack'], project, env=consumer_env)
             else:
                 run([dart, 'run', 'odroe', 'create', str(project), '--platforms', 'web',
@@ -219,7 +229,8 @@ def main():
                 'migrations': sorted(p.name for p in (deployed/'migrations').iterdir()),
                 'dependencySource': 'hosted' if hosted_version else 'path',
                 'hostedVersion': hosted_version,
-                'creationMode': 'hosted-create' if create_hosted_version else
+                'creationMode': 'hosted-create-default' if create_default else
+                    'hosted-create' if create_hosted else
                     'hosted-init' if hosted_version else 'source-create',
                 'creationLauncher': 'aot' if create_aot else 'dart'}
             print(json.dumps(result))

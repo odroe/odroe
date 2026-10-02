@@ -11,6 +11,7 @@ import 'create.dart';
 import 'development.dart';
 import 'initialize.dart';
 import 'project.dart';
+import 'version.dart';
 
 /// Runs the Odroe command-line product and returns a process exit code.
 Future<int> runOdroe(
@@ -46,12 +47,13 @@ Future<int> runOdroe(
     ..addOption('project-name', help: 'Dart package name for the project.')
     ..addOption(
       'odroe-path',
-      help: 'Odroe package checkout to use as a path dependency.',
+      help: 'Use an Odroe checkout instead of the default hosted dependency.',
     )
     ..addOption(
       'version',
       help:
-          'Exact hosted Odroe dependency version; mutually exclusive with --odroe-path.',
+          'Exact hosted Odroe dependency version (default: $cliVersion, this CLI). '
+          'Cannot combine with --odroe-path.',
     )
     ..addFlag(
       'offline',

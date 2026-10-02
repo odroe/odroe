@@ -30,64 +30,133 @@ reference app and documentation without overrides, checks their contracts,
 and runs a fresh generated RPC/SQLite application through a relocated native
 server bundle. Platform-specific delivery still needs its own verification.
 
-## Create a product
+## Add Odroe to your Flutter app
 
-Install the exact hosted preview into an empty Flutter application:
+Use an existing Flutter application, or start with an empty one:
 
 ```sh
 flutter create --empty --platforms web my_app
 cd my_app
 flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
+```
+
+Replace `lib/main.dart` with this application:
+
+```dart
+import 'package:flutter/widgets.dart';
+import 'package:odroe/odroe_flutter.dart';
+import 'package:odroe/query_flutter.dart';
+import 'package:odroe/router_flutter.dart';
+
+final greeting = QueryOptions<String>(
+  key: QueryKey<String>('welcome'),
+  policy: const QueryPolicy(
+    freshness: QueryFreshness.staleAfter(Duration(minutes: 5)),
+  ),
+  query: (_) async => 'Hello from Odroe',
+);
+
+final home = AppRoute<NoParams, NoSearch, NoData>(path: '/').page(
+  build: (_) => Center(
+    child: QueryBuilder<String>(
+      options: greeting,
+      builder: (_, result) =>
+          Text(result.hasData ? result.requireData : 'Loading'),
+    ),
+  ),
+);
+
+final about = AppRoute<NoParams, NoSearch, NoData>(
+  path: '/about',
+).page(build: (_) => const Center(child: Text('About this app')));
+
+Widget createApp() => App(
+  modules: [
+    QueryModule(),
+    RouterModule(routes: [home, about]),
+  ],
+  builder: (app) => WidgetsApp.router(
+    color: const Color(0xff222222),
+    routerConfig: app.read(routerKey),
+  ),
+);
+
+void main() => runApp(createApp());
+```
+
+Run and build it with the standard Flutter commands:
+
+```sh
+flutter run -d chrome
+flutter build web --release
+```
+
+Adding the dependency and importing the APIs is enough. This application uses
+App, Query, and manually declared routes without `odroe init`, generated files,
+or an `odroe.yaml` configuration. Select only the modules your application
+needs; Query and routing can also be used through their individual entrypoints.
+
+Query owns the asynchronous greeting and its cache. RouterModule accepts the
+two route objects directly. A server, database, or RPC origin is only needed
+when your application uses those capabilities.
+
+## Optional full-stack starter
+
+For a generated Query/RPC/SQLite application, run the initializer in a separate,
+empty Flutter application after adding Odroe:
+
+```sh
 dart run odroe init --full-stack
-dart run odroe generate
 dart run odroe dev -- -d chrome
 ```
 
-`init --full-stack` uses the installed package and preserves custom application
-source. It refuses conflicts rather than overwriting them. A native client can
-add its desired Flutter platforms and select its actual API origin.
+`init` is an optional template tool. It preserves custom application source and
+refuses conflicts rather than replacing it. Plain `dart run odroe init` writes
+a smaller Document + Router starter.
 
-The next CLI revision also supports creating an application from an exact
-hosted version. From this checkout with dependencies resolved:
+The next CLI revision can also create the entire application. From this
+checkout with dependencies resolved:
 
 ```sh
-dart run odroe create ../my_app --version 0.1.0-dev.1 --platforms web
+dart run odroe create ../my_app --platforms web
 ```
 
-`--version` is not available in the published `0.1.0-dev.1` CLI itself.
-The new application depends entirely on the selected hosted package; its own
-installed CLI supplies the initializer, templates, and generated routes.
-Choose exactly one of `--version` and `--odroe-path`. Version ranges and
-`latest` are rejected; `--offline` requires that exact package and its
-dependencies in the local cache. A failed download or initialization removes
-only the command's private staging directory and preserves existing targets.
+By default, `create` pins the hosted dependency to the exact version of the CLI
+running the command. It does not select `latest`. Override the version with
+`--version 0.1.0-dev.1`, or use `--odroe-path .` for a checkout dependency; the
+two overrides cannot be combined. The hosted package's installed CLI supplies
+its initializer and generated routes. If that exact version is unavailable,
+creation fails without publishing an incomplete application.
 
-For checkout-based development, use the source create flow:
+Hosted creation is not available in the published `0.1.0-dev.1` CLI; the
+add-dependency path above works with that release today. For source development:
 
 ```sh
 git clone https://github.com/odroe/odroe.git
 cd odroe
 flutter pub get
-dart run odroe create ../my_app --odroe-path . --platforms web
+dart run odroe create ../my_app --odroe-path .
 cd ../my_app
-dart run odroe generate
-dart run odroe dev -- -d chrome
 ```
 
-`create` builds Flutter's scaffold beside a nonexistent target, resolves the
-selected Odroe checkout, initializes the full-stack starter, and publishes the
-complete project. It preserves existing targets and rolls back incomplete
-stages. Use `--offline` only when the package cache is complete. For an existing
-empty Flutter product, use `dart run odroe init`; custom application source is
-preserved and initialization refuses conflicts.
+`create` requires a nonexistent target and stages the Flutter application beside
+it before publication. Failed or interrupted stages remove only that private
+directory and preserve existing targets. Use `--platforms`, `--org`, or
+`--project-name` to customize the scaffold. `--offline` requires the selected
+package and all its dependencies in the local cache.
 
-The starter connects Flutter Query/Mutation to generated typed RPC and a native
-SQLite database. It includes bounded post pagination, creation, local record
-and enum codecs, append-only SQL migrations, semantic document rendering,
-prerendering, and native/Cloudflare server entrypoints. It also includes a locked
-local Wrangler toolchain for the D1 preview path.
+File-based routing and automatic RPC codecs use generated Dart source. For
+those features, `odroe generate` runs the compiler explicitly; `odroe dev` and
+`odroe build` run it as part of their workflow. Ordinary Flutter commands do
+not generate file-route manifests. Handwritten routes need no generation.
 
-## Run and build
+The full-stack starter connects Flutter Query/Mutation to generated typed RPC
+and SQLite, with pagination, local record and enum codecs, migrations, document
+rendering, and native/Cloudflare server entrypoints. Follow the
+[first application guide](sites/odroe.dev/content/docs/getting-started.mdc) for
+the starter layout and its optional server workflows.
+
+## Run and build the full-stack starter
 
 ```sh
 # Native server only; startup applies pending SQLite migrations.
@@ -162,7 +231,7 @@ Odroe does not silently retry writes or perform remote migrations.
 ## Documentation and validation
 
 - [Full-stack reference application](example/app)
-- [First product](sites/odroe.dev/content/docs/getting-started.mdc)
+- [First application](sites/odroe.dev/content/docs/getting-started.mdc)
 - [Complete tutorial](sites/odroe.dev/content/docs/tutorials/full-stack.mdc)
 - [Provider contracts](sites/odroe.dev/content/docs/guides/database-providers.mdc)
 - [Deployment and artifact layout](sites/odroe.dev/content/docs/guides/deployment.mdc)

@@ -61,8 +61,12 @@ jobs:
             test/database/query/type_safety_test.dart
       - name: Verify a fresh generated full-stack consumer and native bundle
         run: python3 test/support/fullstack_consumer_smoke.py
-      - name: Verify hosted create with an exact published package and fresh cache
+      - name: Verify default hosted create from a compiled CLI and fresh cache
         env:
-          ODROE_CREATE_VERSION: '0.1.0-dev.1'
+          ODROE_CREATE_DEFAULT: '1'
           ODROE_CREATE_AOT: '1'
         run: python3 test/support/fullstack_consumer_smoke.py
+      - name: Verify direct dependency usage with standard Flutter commands
+        run: |
+          python3 test/support/dependency_first_consumer_smoke.py
+          ODROE_HOSTED_VERSION=0.1.0-dev.1 python3 test/support/dependency_first_consumer_smoke.py

@@ -6,10 +6,14 @@ language: en
 ---
 # CLI and generated files
 
-Create a source-stage product from the Odroe checkout:
+Odroe library APIs work after adding the package and importing them; CLI
+scaffolding is optional. See [First application](/docs/getting-started).
+
+With the next CLI revision, create a full-stack application using the CLI's
+own exact hosted package version:
 
 ```sh
-dart run odroe create <directory> --odroe-path <odroe-checkout>
+dart run odroe create <directory>
 ```
 
 Run project commands from an application that directly depends on the active
@@ -26,7 +30,7 @@ passed directly, for example `dart run odroe build apk`.
 
 | Command | Purpose | Important options |
 | --- | --- | --- |
-| `create` | Create a guarded full-stack Flutter application | target directory, `--odroe-path` or `--version`, `--platforms`, `--org`, `--project-name`, `--offline` |
+| `create` | Create a guarded full-stack Flutter application | target directory, optional `--odroe-path` or `--version`, `--platforms`, `--org`, `--project-name`, `--offline` |
 | `init` | Initialize an empty Flutter application | `--project`, `--full-stack` |
 | `generate` | Generate client and server route targets | `--routes`, `--output`, `--server-output`, `--watch` |
 | `dev` | Watch sources, run one selected server runtime, and optionally run Flutter | `--host`, `--port`, `--server-target`, `--sqlite-migrations`, `--server-only` |
@@ -40,7 +44,13 @@ current directory.
 `create` requires one nonexistent target whose direct parent already exists.
 It creates a private same-parent staging directory, runs
 `flutter create --empty --no-pub`, and adds the selected Odroe dependency.
-Choose exactly one source:
+Without a source override, the hosted version is the exact package version
+embedded in the running CLI, including compiled executables. The current
+working directory does not select that version, and the command never follows
+`latest`. This default is available in the next CLI revision, not in the
+published `0.1.0-dev.1` CLI.
+
+Optional overrides (mutually exclusive):
 
 - `--odroe-path <checkout>` adds a path dependency. The current process confirms
   the staged package resolves the same canonical checkout and reuses its
@@ -71,6 +81,9 @@ unavailable version, failed download, or package without a compatible
 `init --full-stack` command fails creation and rolls back the private stage.
 
 ## Initializers
+
+These optional commands write starter source; they are not required to use
+Odroe in a Flutter application.
 
 `dart run odroe init` writes the minimal Document + Router starter.
 
@@ -108,6 +121,10 @@ starter is idempotent. An untouched small starter can upgrade to full-stack
 mode.
 
 ## Route generation
+
+File-based routing and automatic RPC codecs require generation. `generate`
+runs it explicitly; Odroe `dev` and `build` include it. Standard Flutter
+commands do not run this generator. Manually declared routes do not need it.
 
 | Option | Default |
 | --- | --- |

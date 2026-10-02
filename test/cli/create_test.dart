@@ -374,10 +374,6 @@ dependencies:
           },
     );
 
-    final missingSourceErrors = StringBuffer();
-    expect(await run(<String>['create', target], missingSourceErrors), 64);
-    expect(missingSourceErrors.toString(), contains('--odroe-path'));
-
     final platformErrors = StringBuffer();
     expect(
       await run(<String>[

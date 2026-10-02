@@ -9,6 +9,7 @@ import 'package:yaml/yaml.dart';
 import 'initialize.dart';
 import 'no_replace_rename.dart';
 import 'project.dart';
+import 'version.dart';
 
 /// Runs one process used by [createProject].
 typedef CreateCommandRunner =
@@ -49,12 +50,12 @@ Future<void> createProject({
   CreateProjectInitializer? initialize,
 }) async {
   final target = _targetDirectory(directory);
-  if ((odroePath == null) == (odroeVersion == null)) {
-    throw const FormatException(
-      'Provide exactly one of --odroe-path or --version.',
-    );
+  if (odroePath != null && odroeVersion != null) {
+    throw const FormatException('Do not combine --odroe-path and --version.');
   }
-  final version = odroeVersion == null ? null : _hostedVersion(odroeVersion);
+  final version = odroePath == null
+      ? _hostedVersion(odroeVersion ?? cliVersion)
+      : null;
   final source = version == null ? _odroeDirectory(odroePath) : null;
   final selectedPlatforms = _platforms(platforms);
   final selectedOrganization = _optionalValue(organization, 'org');

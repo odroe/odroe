@@ -147,7 +147,7 @@ void main() {
       expect(
         body,
         contains(
-          'href="/docs/getting-started" aria-current="page">First product</a>',
+          'href="/docs/getting-started" aria-current="page">First application</a>',
         ),
       );
       expect(body, contains('href="/docs/tutorials/full-stack"'));
@@ -290,7 +290,7 @@ void main() {
         source,
         contains('dart run odroe build --no-server -- web --wasm'),
       );
-      _expectInOrder('Primary product path', source, <String>[
+      _expectInOrder('Optional source starter', source, <String>[
         'flutter pub get',
         'dart run odroe create ../my_app --odroe-path .',
         'dart run odroe dev -- -d chrome',
@@ -323,8 +323,20 @@ void main() {
     expect(gettingStarted, contains('NNNN_snake_case.sql'));
     expect(gettingStarted, contains('temporary database'));
     expect(gettingStarted, contains('serves the semantic handoff'));
-    expect(gettingStarted, contains('reuses the full-stack initializer'));
-    expect(tutorial, contains('in-process full-stack initializer'));
+    _expectInOrder(
+      'Direct dependency before optional scaffolding',
+      gettingStarted,
+      <String>[
+        'flutter pub add',
+        'package:odroe/odroe_flutter.dart',
+        'flutter run -d chrome',
+        'flutter build web --release',
+        '## Optional full-stack starter',
+        'dart run odroe init --full-stack',
+      ],
+    );
+    expect(gettingStarted, contains('without `odroe init`'));
+    expect(tutorial, contains("selected package's full-stack initializer"));
     expect(cliReference, contains('--odroe-path <checkout>'));
     expect(cliReference, contains('--version <exact-version>'));
     expect(cliReference, contains('dart run odroe init --full-stack'));

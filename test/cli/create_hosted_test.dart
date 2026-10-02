@@ -3,8 +3,10 @@ import 'dart:io';
 
 import 'package:odroe/src/cli/cli.dart';
 import 'package:odroe/src/cli/create.dart';
+import 'package:odroe/src/cli/version.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 void main() {
   late Directory parent;
@@ -15,6 +17,12 @@ void main() {
     target = p.join(parent.path, 'app');
   });
   tearDown(() => parent.delete(recursive: true));
+
+  test('embedded CLI version matches the package release version', () {
+    final pubspec =
+        loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
+    expect(cliVersion, pubspec['version']);
+  });
 
   test('create version is a value option scoped to creation', () async {
     final output = StringBuffer();
@@ -28,6 +36,7 @@ void main() {
       0,
     );
     expect('$output', contains('Exact hosted Odroe dependency version'));
+    expect('$output', contains('default: $cliVersion, this CLI'));
     final errors = StringBuffer();
     expect(
       await runOdroe(
@@ -83,58 +92,68 @@ void main() {
     expect(parent.listSync(), isEmpty);
   });
 
-  test(
-    'hosted create pins the version and runs the installed initializer',
-    () async {
-      final calls = <({String executable, List<String> args, String cwd})>[];
-      final output = StringBuffer();
-      final errors = StringBuffer();
-      final code = await runOdroe(
-        ['create', target, '--version', '0.1.0-dev.1', '--offline'],
-        output: output,
-        errors: errors,
-        createProjectInitializer: (_, _, _) =>
-            throw StateError('checkout initializer'),
-        createCommandRunner:
-            (
-              executable,
-              arguments, {
-              required workingDirectory,
-              required out,
-              required err,
-              environment,
-            }) async {
-              calls.add((
-                executable: executable,
-                args: arguments,
-                cwd: workingDirectory,
-              ));
-              if (calls.length == 2) _lock(workingDirectory);
-              if (calls.length == 3) {
-                out.writeln('Initialized in $workingDirectory.');
-              }
-              return 0;
-            },
-      );
-      expect(code, 0, reason: '$errors');
-      expect(calls, hasLength(3));
-      expect(calls[1].args, containsAllInOrder(['pub', 'add', '--offline']));
-      expect(jsonDecode(calls[1].args.last.substring('odroe:'.length)), {
-        'version': '0.1.0-dev.1',
-      });
-      final sdk = Platform.isWindows
-          ? File(calls[0].executable).parent.parent.parent.parent.parent.path
-          : File(calls[0].executable).parent.parent.path;
-      expect(calls[2].executable, dartExecutableForFlutterSdk(sdk));
-      expect(calls[2].args, ['run', 'odroe', 'init', '--full-stack']);
-      expect(calls[2].cwd, calls[1].cwd);
-      expect(Directory(target).existsSync(), isTrue);
-      expect(Directory(calls[2].cwd).existsSync(), isFalse);
-      final finalTarget = Directory(target).resolveSymbolicLinksSync();
-      expect('$output', contains('Initialized in $finalTarget.'));
-      expect('$output', isNot(contains(calls[2].cwd)));
-    },
-  );
+  for (final requested in <String?>[null, '0.2.0-dev.2+build.3']) {
+    final expectedVersion = requested ?? cliVersion;
+    test(
+      'hosted create pins ${requested == null ? 'the CLI default' : 'an explicit override'} and runs the installed initializer',
+      () async {
+        final calls = <({String executable, List<String> args, String cwd})>[];
+        final output = StringBuffer();
+        final errors = StringBuffer();
+        final code = await runOdroe(
+          [
+            'create',
+            target,
+            if (requested != null) ...['--version', requested],
+            '--offline',
+          ],
+          output: output,
+          errors: errors,
+          createProjectInitializer: (_, _, _) =>
+              throw StateError('checkout initializer'),
+          createCommandRunner:
+              (
+                executable,
+                arguments, {
+                required workingDirectory,
+                required out,
+                required err,
+                environment,
+              }) async {
+                calls.add((
+                  executable: executable,
+                  args: arguments,
+                  cwd: workingDirectory,
+                ));
+                if (calls.length == 2) {
+                  _lock(workingDirectory, version: expectedVersion);
+                }
+                if (calls.length == 3) {
+                  out.writeln('Initialized in $workingDirectory.');
+                }
+                return 0;
+              },
+        );
+        expect(code, 0, reason: '$errors');
+        expect(calls, hasLength(3));
+        expect(calls[1].args, containsAllInOrder(['pub', 'add', '--offline']));
+        expect(jsonDecode(calls[1].args.last.substring('odroe:'.length)), {
+          'version': expectedVersion,
+        });
+        final sdk = Platform.isWindows
+            ? File(calls[0].executable).parent.parent.parent.parent.parent.path
+            : File(calls[0].executable).parent.parent.path;
+        expect(calls[2].executable, dartExecutableForFlutterSdk(sdk));
+        expect(calls[2].args, ['run', 'odroe', 'init', '--full-stack']);
+        expect(calls[2].cwd, calls[1].cwd);
+        expect(Directory(target).existsSync(), isTrue);
+        expect(Directory(calls[2].cwd).existsSync(), isFalse);
+        final finalTarget = Directory(target).resolveSymbolicLinksSync();
+        expect('$output', contains('Initialized in $finalTarget.'));
+        expect('$output', isNot(contains(calls[2].cwd)));
+      },
+    );
+  }
 
   for (final invalid in [
     '',
@@ -192,7 +211,7 @@ void main() {
       ),
       64,
     );
-    expect('$errors', contains('exactly one'));
+    expect('$errors', contains('Do not combine'));
     expect(parent.listSync(), isEmpty);
   });
 
