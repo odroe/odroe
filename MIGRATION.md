@@ -13,9 +13,25 @@ The old `setup`, `signal`, reactive props, lifecycle hooks and UI context APIs a
 
 ## New framework applications
 
-For source evaluation, use Flutter 3.38.1 / stable Dart 3.10.0 or a newer validated pair. For hosted installation, add the exact `odroe` version `0.1.0-dev.1` to an empty Flutter application, then run `dart run odroe init --full-stack` and `dart run odroe generate`, as shown in the README. For source development, use the checkout-based `create --odroe-path` flow.
+For source evaluation, use Flutter 3.38.1 / stable Dart 3.10.0 or a newer validated pair. For hosted installation, add the exact `odroe` version `0.1.0-dev.1` to an existing or empty Flutter application and import the APIs you need, as shown in the README. `init` and `create` are optional starter tools; direct use does not require initialization or generated files.
 
 Framework App/Module/Context, Query/Mutation, typed routes, generated RPC and SQL are separate contracts from the former UI API. Roux is the actual matching dependency; Spry and oxy are not integrated.
+
+## Next preview: Query client ownership
+
+`QueryClientProvider(child: app)` now creates and owns one QueryClient. Its
+optional `create:` callback runs once per owned lifetime; ordinary rebuilds and
+callback changes retain the cache. Use a new widget key to reset the lifetime.
+
+Change existing `QueryClientProvider(client: client, child: app)` calls to
+`QueryClientProvider.value(client: client, child: app)` to preserve borrowing.
+Borrowed clients are never cleared by the provider. Use
+`QueryClientProvider.of(context)` to read the live client; the old widget
+`client` field is removed. QueryModule and QueryBuilder usage is unchanged.
+
+This API is not present in the published `0.1.0-dev.1` package. See the
+[incremental adoption guide](sites/odroe.dev/content/docs/guides/incremental-adoption.mdc)
+for complete Query, manual-routing, and RPC consumption.
 
 ## Earlier framework source
 

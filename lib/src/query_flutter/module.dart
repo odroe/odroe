@@ -25,6 +25,8 @@ final class _QueryFlutterBinding extends FlutterBinding {
   const _QueryFlutterBinding();
 
   @override
-  Widget wrap(AppContext context, Widget child) =>
-      QueryClientProvider(client: context.read(queryClientKey), child: child);
+  Widget wrap(AppContext context, Widget child) => QueryClientProvider.value(
+    client: context.read(queryClientKey),
+    child: child,
+  );
 }

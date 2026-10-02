@@ -100,6 +100,11 @@ Query owns the asynchronous greeting and its cache. RouterModule accepts the
 two route objects directly. A server, database, or RPC origin is only needed
 when your application uses those capabilities.
 
+For an existing Flutter application, follow the
+[incremental adoption guide](sites/odroe.dev/content/docs/guides/incremental-adoption.mdc).
+It separates a Query-only provider from optional routing and HTTP RPC, including
+the next preview's explicit owned and borrowed provider lifetimes.
+
 ## Optional full-stack starter
 
 To explore the generated Query/RPC/SQLite starter alongside the application

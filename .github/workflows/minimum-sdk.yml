@@ -46,7 +46,8 @@ jobs:
       - run: dart analyze --fatal-infos
       - name: Verify compiler and reference Flutter consumption
         run: |
-          flutter test --no-pub --concurrency=2 test/router/file_router_test.dart
+          flutter test --no-pub --concurrency=2 test/router/file_router_test.dart \
+            test/query/flutter_provider_test.dart test/query/flutter_query_test.dart
           (cd example/app && flutter test --no-pub --concurrency=2 test)
       - name: Verify compiler, create, native RPC and SQLite semantics
         run: |
@@ -70,3 +71,5 @@ jobs:
         run: |
           python3 test/support/dependency_first_consumer_smoke.py
           ODROE_HOSTED_VERSION=0.1.0-dev.1 python3 test/support/dependency_first_consumer_smoke.py
+      - name: Verify incremental Flutter adoption and real HTTP RPC
+        run: python3 test/support/incremental_adoption_smoke.py
