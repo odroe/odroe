@@ -68,6 +68,19 @@ jobs:
         run: python3 test/support/dependency_first_consumer_smoke.py
       - name: Verify incremental Flutter adoption and real HTTP RPC
         run: python3 test/support/incremental_adoption_smoke.py
+
+  artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.38.1'
+          channel: stable
+      - run: flutter pub get
       - name: Verify the actual pub archive before publication
         run: python3 test/support/release_preflight.py --output .odroe/release-preflight
       - name: Preserve the validated pub artifact and file manifest

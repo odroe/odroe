@@ -18,6 +18,9 @@ then its separate local-only `--to-archive` operation. The generated archive
 respects pub's inclusion rules and `.pubignore`; `git archive` is not a
 substitute. Do not skip validation. The hidden archive option must work on the
 selected SDK; an unsupported option is a failed gate, not permission to upload.
+CI runs this in a separate clean checkout: SDK compatibility checks may resolve
+different versions in the documentation application's lockfile, which is not
+part of the published package.
 
 The script rejects links, traversal paths, duplicate members, and special files
 before using the extracted package. Its consumers run the extracted package's
