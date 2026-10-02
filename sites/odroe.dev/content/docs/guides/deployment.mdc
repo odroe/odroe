@@ -149,6 +149,39 @@ directory, or to an empty string to disable the static root. `build web` already
 places assets in the default location. A server-only image must add an explicit
 static tree, set another path, or disable static serving.
 
+Behind TLS termination, set the server's fixed public RPC origin:
+
+```sh
+ODROE_PUBLIC_ORIGIN=https://api.example.com \
+ODROE_SQLITE_PATH=/persistent/odroe/app.sqlite3 \
+/app/server/bin/server
+```
+
+`ODROE_PUBLIC_ORIGIN` is supported by the generated server bootstrap and the
+full-stack starter's native factory. It is a server setting; the Flutter client
+still uses `--dart-define=ODROE_RPC_ORIGIN=https://api.example.com`. The server
+validates an absolute HTTP(S) origin at startup, allowing an empty/root path
+and a non-default port but rejecting credentials, other paths, query strings,
+and fragments. Generated `createServer(publicOrigin: ...)` and
+`Server(publicOrigin: ...)` accept the same configuration. A custom
+`lib/server.dart` factory must pass the chosen origin to its Server; the CLI
+preserves its existing zero-argument `createServer()` contract.
+
+When configured, RPC accepts only that fixed origin or a matching Referer;
+it does not also accept the internal listener origin. Forwarded headers cannot
+change it, and cross-site/same-site Fetch Metadata remains rejected. Missing
+origin metadata is still denied by default.
+
+Without the setting, the existing adapter behavior remains: Dart IO's
+`HttpRequest.requestedUri` reads `X-Forwarded-Proto` and `X-Forwarded-Host`
+without checking the sender. A correctly configured proxy can therefore
+preserve the public origin already; absent headers, RFC `Forwarded` alone, or
+an internal authority can cause native RPC to return 403. Restrict the upstream
+to your proxy and have it remove/replace client-supplied forwarding headers.
+This framework does not discover or authenticate trusted proxy networks.
+The fixed setting controls RPC Origin validation; it does not rewrite the
+request URI for other handlers or add authentication/CORS permissions.
+
 The generated full-stack starter defaults SQLite to `.odroe/app.sqlite3`
 relative to the effective runtime root. In an owned bundle that is the bundle
 root; in source and development runs it remains the project process directory.

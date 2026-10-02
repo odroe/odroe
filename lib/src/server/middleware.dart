@@ -34,6 +34,7 @@ Future<ServerResponse> runMiddleware(
 ServerResponse? rejectCrossOriginRpc(
   ServerRequest request, {
   bool allowWithoutOrigin = false,
+  Uri? publicOrigin,
 }) {
   final fetchSite = request.headers.value('sec-fetch-site');
   if (fetchSite == 'cross-site' || fetchSite == 'same-site') {
@@ -42,9 +43,9 @@ ServerResponse? rejectCrossOriginRpc(
       status: 403,
     );
   }
-  if (fetchSite == 'same-origin') return null;
+  if (publicOrigin == null && fetchSite == 'same-origin') return null;
 
-  final expectedOrigin = _origin(request.uri);
+  final expectedOrigin = publicOrigin?.origin ?? _origin(request.uri);
   final suppliedOrigin = request.headers.value('origin');
   if (suppliedOrigin != null) {
     return suppliedOrigin == expectedOrigin

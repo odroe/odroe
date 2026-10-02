@@ -15,6 +15,39 @@ import 'package:odroe_example/routes.dart';
 import 'package:odroe_example/server_native.dart' as native_server;
 
 void main() {
+  test(
+    'native startup validates public origin before creating SQLite state',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'odroe-origin-invalid-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final state = Directory('${root.path}/state');
+      await expectLater(
+        native_server.createNativeServer(
+          databasePath: '${state.path}/app.sqlite3',
+          publicOrigin: Uri.parse('https://public.example/not-an-origin'),
+        ),
+        throwsArgumentError,
+      );
+      expect(state.existsSync(), isFalse);
+    },
+  );
+
+  test(
+    'native factory passes the fixed public origin to the generated server',
+    () async {
+      final root = await Directory.systemTemp.createTemp('odroe-origin-valid-');
+      addTearDown(() => root.delete(recursive: true));
+      final server = await native_server.createNativeServer(
+        databasePath: '${root.path}/app.sqlite3',
+        publicOrigin: Uri.parse('https://public.example:8443/'),
+      );
+      addTearDown(server.close);
+      expect(server.publicOrigin, Uri.parse('https://public.example:8443'));
+    },
+  );
+
   test('native database rejects an empty path', () async {
     await expectLater(
       native_server.createNativeServer(databasePath: ''),

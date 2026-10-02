@@ -10,11 +10,15 @@ FutureOr<Server> createServer() => createNativeServer(
   databasePath:
       Platform.environment['ODROE_SQLITE_PATH'] ?? '.odroe/app.sqlite3',
   migrationsPath: Platform.environment['ODROE_MIGRATIONS_PATH'] ?? 'migrations',
+  publicOrigin: Platform.environment['ODROE_PUBLIC_ORIGIN'] == null
+      ? null
+      : Uri.parse(Platform.environment['ODROE_PUBLIC_ORIGIN']!),
 );
 
 Future<Server> createNativeServer({
   required String databasePath,
   String migrationsPath = 'migrations',
+  Uri? publicOrigin,
 }) async {
   if (databasePath.isEmpty) {
     throw ArgumentError.value(
@@ -30,22 +34,28 @@ Future<Server> createNativeServer({
       'must not be empty',
     );
   }
+  final validatedOrigin = publicOrigin == null
+      ? null
+      : Server.validatePublicOrigin(publicOrigin);
   final migrations = readSqliteMigrations(migrationsPath);
   final databaseFile = File(databasePath).absolute;
   await databaseFile.parent.create(recursive: true);
   return _createServer(
     SqliteDatabase.open(databaseFile.path),
     migrations: migrations,
+    publicOrigin: validatedOrigin,
   );
 }
 
 Future<Server> _createServer(
   SqliteDatabase database, {
   required List<SqliteMigration> migrations,
+  Uri? publicOrigin,
 }) async {
   try {
     await database.applyMigrations(migrations);
     return generated.createServer(
+      publicOrigin: publicOrigin,
       modules: () => <DatabaseModule>[DatabaseModule.borrowed(database)],
       onClose: database.close,
     );

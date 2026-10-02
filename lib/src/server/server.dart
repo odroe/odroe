@@ -62,7 +62,11 @@ final class Server {
     this.maxFunctionResponseFrameBytes = defaultMaxFunctionResponseFrameBytes,
     this.exposeErrors = false,
     this.allowRpcWithoutOrigin = false,
-  }) : routes = List<RouteNode>.unmodifiable(routes),
+    Uri? publicOrigin,
+  }) : publicOrigin = publicOrigin == null
+           ? null
+           : validatePublicOrigin(publicOrigin),
+       routes = List<RouteNode>.unmodifiable(routes),
        functions = Map<String, ServerFunctionBinding>.unmodifiable(functions),
        middleware = List<Middleware>.unmodifiable(middleware),
        modules = modules ?? _emptyModules,
@@ -148,6 +152,36 @@ final class Server {
 
   /// Whether RPC requests without origin metadata are accepted.
   final bool allowRpcWithoutOrigin;
+
+  /// Fixed external origin accepted by RPC when deployed behind a proxy.
+  ///
+  /// When set, forwarded headers and the internal request origin cannot
+  /// change the expected origin. Without this setting, adapter URI semantics
+  /// remain in effect; the IO adapter uses Dart's requestedUri, which reads
+  /// X-Forwarded-Proto/Host without checking the sender.
+  final Uri? publicOrigin;
+
+  /// Validates and canonicalizes a fixed HTTP(S) deployment origin.
+  ///
+  /// Factories may call this before acquiring database or other resources.
+  static Uri validatePublicOrigin(Uri value) {
+    if ((value.scheme != 'http' && value.scheme != 'https') ||
+        !value.hasAuthority ||
+        value.host.isEmpty ||
+        value.userInfo.isNotEmpty ||
+        (value.path.isNotEmpty && value.path != '/') ||
+        value.hasQuery ||
+        value.hasFragment ||
+        value.port < 1 ||
+        value.port > 65535) {
+      throw ArgumentError.value(
+        value,
+        'publicOrigin',
+        'Must be an absolute HTTP(S) origin without credentials, path, query, or fragment.',
+      );
+    }
+    return Uri.parse(value.origin);
+  }
 
   final Set<Object> _flutterRoutes;
   final Set<Completer<void>> _activeInvocations = <Completer<void>>{};
@@ -442,6 +476,7 @@ final class Server {
     final rejection = rejectCrossOriginRpc(
       context.request,
       allowWithoutOrigin: allowRpcWithoutOrigin,
+      publicOrigin: publicOrigin,
     );
     if (rejection != null) return rejection;
 

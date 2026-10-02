@@ -57,6 +57,8 @@ void main() {
       isNot(contains("import 'package:odroe/rpc.dart';")),
     );
     expect(output.serverSource, contains('Server createServer('));
+    expect(output.serverSource, contains('Uri? publicOrigin'));
+    expect(output.serverSource, contains('publicOrigin: publicOrigin'));
     expect(
       RegExp(r': ServerFunctionBinding\(').allMatches(output.serverSource),
       hasLength(3),

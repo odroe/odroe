@@ -293,7 +293,11 @@ Future<void> main(List<String> arguments) async {
   final webRoot = Platform.environment['ODROE_WEB_ROOT'];
   final developmentOriginFile =
       Platform.environment['ODROE_FLUTTER_ORIGIN_FILE'];
-  final appServer = await app.createServer();
+  final appServer = await ${customServer ? 'app.createServer()' : '''app.createServer(
+    publicOrigin: Platform.environment['ODROE_PUBLIC_ORIGIN'] == null
+        ? null
+        : Uri.parse(Platform.environment['ODROE_PUBLIC_ORIGIN']!),
+  )'''};
   HttpServer? nativeServer;
   Object? primaryError;
   StackTrace? primaryStackTrace;
