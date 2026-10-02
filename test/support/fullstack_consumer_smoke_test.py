@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import io
 import os
 from pathlib import Path
 import signal
@@ -11,11 +12,70 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location(
     'consumer_smoke', Path(__file__).with_name('fullstack_consumer_smoke.py'))
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
+
+
+class HostedCacheIsolationTest(unittest.TestCase):
+    def exercise(self, stale_resolution):
+        with tempfile.TemporaryDirectory(prefix='odroe-hosted-cache-test-', dir='/tmp') as temp:
+            old_cache = Path(temp) / 'existing-cache'
+            seeded = old_cache / 'hosted/pub.dev/odroe-0.1.0-dev.1'
+            seeded.mkdir(parents=True)
+            marker = seeded / 'locally-seeded'
+            marker.write_text('must not be consumed or deleted')
+            calls = []
+            class ReachedGeneration(Exception):
+                pass
+            def fake_run(args, cwd, timeout=240, env=None):
+                calls.append((args, env))
+                self.assertIsNotNone(env)
+                cache = Path(env['PUB_CACHE'])
+                self.assertNotEqual(cache.resolve(), old_cache.resolve())
+                self.assertEqual(env['PUB_HOSTED_URL'], 'https://pub.dev')
+                if args[1] == 'create':
+                    self.assertEqual(list(cache.iterdir()), [])
+                    project = Path(args[-1])
+                    (project / '.dart_tool').mkdir(parents=True)
+                elif args[1:3] == ['pub', 'add']:
+                    project = Path(cwd)
+                    target = seeded if stale_resolution else cache / 'hosted/pub.dev/odroe-0.1.0-dev.1'
+                    target.mkdir(parents=True, exist_ok=True)
+                    (project / '.dart_tool/package_config.json').write_text(json.dumps({
+                        'packages': [{'name': 'odroe', 'rootUri': target.as_uri()}]}))
+                    (project / 'pubspec.lock').write_text('  odroe:\n    source: hosted\n    version: "0.1.0-dev.1"\n')
+                    (project / 'pubspec.yaml').write_text('name: batch_consumer\n')
+                elif args[3] == 'generate':
+                    raise ReachedGeneration()
+            with mock.patch.dict(os.environ, PUB_CACHE=str(old_cache),
+                    PUB_HOSTED_URL='https://local.invalid', ODROE_HOSTED_VERSION='0.1.0-dev.1'), \
+                    mock.patch.object(smoke, 'run', side_effect=fake_run), \
+                    mock.patch.object(smoke, 'dart', 'dart'), \
+                    mock.patch.object(smoke, 'flutter', 'flutter'), \
+                    mock.patch.object(smoke, 'log', io.StringIO()) as output:
+                if stale_resolution:
+                    with self.assertRaisesRegex(RuntimeError, 'isolated official hosted cache'):
+                        smoke.main()
+                    self.assertNotIn('VERIFIED_HOSTED_ODROE', output.getvalue())
+                else:
+                    with self.assertRaises(ReachedGeneration):
+                        smoke.main()
+                    self.assertIn('VERIFIED_HOSTED_ODROE', output.getvalue())
+                    self.assertEqual(calls[-2][0][3:], ['init', '--full-stack'])
+                cache = Path(calls[0][1]['PUB_CACHE'])
+                self.assertFalse(cache.exists())
+                self.assertEqual(marker.read_text(), 'must not be consumed or deleted')
+                self.assertEqual(os.environ['PUB_CACHE'], str(old_cache))
+
+    def test_rejects_preexisting_seeded_package(self):
+        self.exercise(stale_resolution=True)
+
+    def test_fresh_cache_reaches_installed_cli(self):
+        self.exercise(stale_resolution=False)
 
 
 # This descendant both executes continuously and holds a live resource. Merely

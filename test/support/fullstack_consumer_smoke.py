@@ -1,15 +1,16 @@
 from pathlib import Path
 import json, os, queue, re, shutil, signal, subprocess, sys, tempfile, threading, time
+from urllib.parse import urljoin, urlparse, unquote
 
 root = Path(__file__).resolve().parents[2]
 dart = shutil.which('dart')
 flutter = shutil.which('flutter')
 log = sys.stdout
 
-def run(args, cwd, timeout=240):
+def run(args, cwd, timeout=240, env=None):
     log.write('\nCOMMAND ' + repr(args) + '\n'); log.flush()
     process = subprocess.Popen(args, cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
-        start_new_session=True)
+        start_new_session=True, env=env)
     try:
         code = process.wait(timeout=timeout)
     finally:
@@ -72,8 +73,8 @@ def stop(process):
         raise TimeoutError('Consumer process group did not terminate')
 
 class Server:
-    def __init__(self, args, cwd, db):
-        env = dict(os.environ, ODROE_HOST='127.0.0.1', ODROE_PORT='0', ODROE_SQLITE_PATH=str(db))
+    def __init__(self, args, cwd, db, env=None):
+        env = dict(os.environ if env is None else env, ODROE_HOST='127.0.0.1', ODROE_PORT='0', ODROE_SQLITE_PATH=str(db))
         self.process = subprocess.Popen(args, cwd=cwd, env=env, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, text=True, start_new_session=True)
         lines = queue.Queue()
@@ -132,34 +133,69 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix='odroe-batch-consumer-', dir='/tmp') as temp:
             base = Path(temp); project = base / 'consumer'; db = base / 'persistent.sqlite3'
-            run([dart, 'run', 'odroe', 'create', str(project), '--platforms', 'web',
-                 '--project-name', 'batch_consumer', '--odroe-path', str(root), '--offline'], root)
-            run([dart, 'run', 'odroe', 'generate'], project)
+            hosted_version = os.environ.get('ODROE_HOSTED_VERSION')
+            consumer_env = None
+            if hosted_version:
+                # Own a fresh cache even when callers supply a populated or seeded cache.
+                cache_root = (base / 'pub-cache').resolve()
+                cache_root.mkdir()
+                consumer_env = dict(os.environ, PUB_CACHE=str(cache_root),
+                    PUB_HOSTED_URL='https://pub.dev')
+                run([flutter, 'create', '--empty', '--platforms', 'web',
+                     '--project-name', 'batch_consumer', str(project)], base, env=consumer_env)
+                descriptor = 'odroe:' + json.dumps({'version': hosted_version})
+                run([flutter, 'pub', 'add', descriptor], project, env=consumer_env)
+                config_file = project / '.dart_tool/package_config.json'
+                config = json.loads(config_file.read_text())
+                package = next(value for value in config['packages'] if value['name'] == 'odroe')
+                package_uri = urljoin(config_file.as_uri(), package['rootUri'])
+                package_root = Path(unquote(urlparse(package_uri).path)).resolve()
+                expected = cache_root / 'hosted/pub.dev' / ('odroe-' + hosted_version)
+                if package_root != expected:
+                    raise RuntimeError('Odroe did not resolve from the isolated official hosted cache')
+                lock = (project / 'pubspec.lock').read_text()
+                # Read through the whole dependency block, not only its first nested key.
+                match = re.search(r'^  odroe:\n(.*?)(?=^  [a-zA-Z_][\w]*:|^sdks:|\Z)', lock, re.M | re.S)
+                if not match or 'source: hosted' not in match.group(1):
+                    raise RuntimeError('Odroe lockfile source is not hosted')
+                if ('version: "' + hosted_version + '"') not in match.group(1):
+                    raise RuntimeError('Odroe hosted version does not match the requested exact preview')
+                if 'dependency_overrides:' in (project / 'pubspec.yaml').read_text():
+                    raise RuntimeError('Hosted consumer must not contain dependency overrides')
+                log.write('VERIFIED_HOSTED_ODROE ' + json.dumps({'version': hosted_version,
+                    'root': str(package_root), 'source': 'hosted', 'registry': 'https://pub.dev'}) + '\n')
+                run([dart, 'run', 'odroe', 'init', '--full-stack'], project, env=consumer_env)
+            else:
+                run([dart, 'run', 'odroe', 'create', str(project), '--platforms', 'web',
+                     '--project-name', 'batch_consumer', '--odroe-path', str(root), '--offline'], root)
+            run([dart, 'run', 'odroe', 'generate'], project, env=consumer_env)
             (project / 'test').mkdir(exist_ok=True)
             (project / 'test/fullstack_smoke_test.dart').write_text(probe)
-            run([dart, 'format', 'test/fullstack_smoke_test.dart'], project)
-            run([dart, 'analyze', '--fatal-infos'], project)
+            run([dart, 'format', 'test/fullstack_smoke_test.dart'], project, env=consumer_env)
+            run([dart, 'analyze', '--fatal-infos'], project, env=consumer_env)
             for create in [True, False]:
-                server = Server([dart, 'run', 'odroe', 'dev', '--server-only', '--host', '127.0.0.1', '--port', '0'], project, db)
+                server = Server([dart, 'run', 'odroe', 'dev', '--server-only', '--host', '127.0.0.1', '--port', '0'], project, db, env=consumer_env)
                 try:
                     run([flutter, 'test', '--no-pub', '--reporter', 'expanded',
                         '--dart-define=ODROE_SMOKE_ORIGIN='+server.origin,
                         '--dart-define=ODROE_SMOKE_CREATE='+str(create).lower(),
-                        'test/fullstack_smoke_test.dart'], project)
+                        'test/fullstack_smoke_test.dart'], project, env=consumer_env)
                 finally: server.close()
-            run([dart, 'run', 'odroe', 'build', '--server-only'], project)
+            run([dart, 'run', 'odroe', 'build', '--server-only'], project, env=consumer_env)
             deployed = base / 'relocated'; shutil.copytree(project / 'build/odroe/server', deployed)
             executable = deployed / 'bin/server'
-            server = Server([str(executable)], base, db)
+            server = Server([str(executable)], base, db, env=consumer_env)
             try:
                 run([flutter, 'test', '--no-pub', '--reporter', 'expanded',
                     '--dart-define=ODROE_SMOKE_ORIGIN='+server.origin,
-                    '--dart-define=ODROE_SMOKE_CREATE=false', 'test/fullstack_smoke_test.dart'], project)
+                    '--dart-define=ODROE_SMOKE_CREATE=false', 'test/fullstack_smoke_test.dart'], project, env=consumer_env)
             finally: server.close()
             result = {'create': True, 'generate': True, 'analyze': True, 'typedRpc': True,
                 'sqliteRestart': True, 'nativeBundle': True, 'relocatedBundle': True,
                 'nativeLibraries': sorted(p.name for p in (deployed/'lib').iterdir()),
-                'migrations': sorted(p.name for p in (deployed/'migrations').iterdir())}
+                'migrations': sorted(p.name for p in (deployed/'migrations').iterdir()),
+                'dependencySource': 'hosted' if hosted_version else 'path',
+                'hostedVersion': hosted_version}
             print(json.dumps(result))
         log.write('\nDisposable generated consumer, servers, database, and relocated bundle cleaned.\n')
     finally:

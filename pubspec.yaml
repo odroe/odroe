@@ -1,6 +1,6 @@
 name: odroe
 description: A full-stack meta-framework for Dart and Flutter products.
-version: 0.0.0
+version: 0.1.0-dev.1
 homepage: https://odroe.dev
 repository: https://github.com/odroe/odroe
 issue_tracker: https://github.com/odroe/odroe/issues

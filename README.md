@@ -10,13 +10,13 @@ reusable primitives. Roux is the current route-matching dependency; Spry and
 oxy are not yet Odroe dependencies. Integrating them requires a tested contract,
 not a package-name substitution.
 
-## Source-stage status
+## Framework preview
 
-This branch integrates the existing full-stack implementation as one product
-chain. It is not a new hosted release. The old `odroe` 0.0.8 package on pub.dev
-belongs to the previous UI API and must not be used for the examples below.
-The current source package remains version 0.0.0 while release and migration
-policy are decided. No 1.0 date is promised.
+Version 0.1.0-dev.1 starts a new full-stack framework generation. The old
+`odroe` 0.0.8 package on pub.dev provides a different UI API; its `setup`, `signal`, props and
+lifecycle helpers are not compatibility exports here. Read the
+[migration guide](MIGRATION.md) before upgrading. Existing `^0.0.8` dependencies
+do not select this 0.1 preview. No 1.0 date is promised.
 
 ## SDK requirements
 
@@ -32,7 +32,22 @@ server bundle. Platform-specific delivery still needs its own verification.
 
 ## Create a product
 
-Use the source checkout with a complete Flutter package cache:
+Install the exact hosted preview into an empty Flutter application:
+
+```sh
+flutter create --empty --platforms web my_app
+cd my_app
+flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
+dart run odroe init --full-stack
+dart run odroe generate
+dart run odroe dev -- -d chrome
+```
+
+`init --full-stack` uses the installed package and preserves custom application
+source. It refuses conflicts rather than overwriting them. A native client can
+add its desired Flutter platforms and select its actual API origin.
+
+For checkout-based development, use the source create flow:
 
 ```sh
 git clone https://github.com/odroe/odroe.git
@@ -144,7 +159,9 @@ Signed Android/iOS releases, real devices, remote databases, production TLS,
 and Cloudflare account changes require separate validation. SQLite and native
 bundle checks must run on the actual target architecture.
 
-Release preparation still needs the existing project's license source, a
-version/migration policy for users of the former UI package, a hosted-package
-consumer. These are release
-requirements, not reasons to replace the working source implementation.
+Odroe is licensed under the [MIT license](LICENSE), retaining the project's
+original Odroe Inc. copyright notice. This preview's
+[version/migration policy](MIGRATION.md) separates the new framework from the
+former UI package. A hosted-package consumer must install the exact preview
+without source paths or dependency overrides; source/archive checks alone do
+not establish hosted-package installation.
