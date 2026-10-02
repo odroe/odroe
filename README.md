@@ -102,10 +102,14 @@ when your application uses those capabilities.
 
 ## Optional full-stack starter
 
-For a generated Query/RPC/SQLite application, run the initializer in a separate,
-empty Flutter application after adding Odroe:
+To explore the generated Query/RPC/SQLite starter alongside the application
+above, create a separate empty Flutter project:
 
 ```sh
+cd ..
+flutter create --empty --platforms web full_stack_app
+cd full_stack_app
+flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
 dart run odroe init --full-stack
 dart run odroe dev -- -d chrome
 ```

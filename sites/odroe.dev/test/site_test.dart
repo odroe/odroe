@@ -332,6 +332,8 @@ void main() {
         'flutter run -d chrome',
         'flutter build web --release',
         '## Optional full-stack starter',
+        'flutter create --empty --platforms web full_stack_app',
+        'cd full_stack_app',
         'dart run odroe init --full-stack',
       ],
     );
