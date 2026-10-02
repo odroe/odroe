@@ -2,6 +2,14 @@
 
 ## 0.1.0-dev.2
 
+- Update same-key Query options across parent rebuilds without redundant
+  refetches or cancelling infinite queries and page requests. Preserve cached
+  pages and subscriptions while applying updated query functions and policies
+  to future requests. Immediately remounting after cancellation now starts a
+  valid replacement request; late results cannot overwrite it. Real key/client
+  changes, mounts, and disabled-to-enabled transitions retain their fetch
+  behavior.
+
 - Let `QueryClientProvider` create and own a client without App/modules setup.
   Keep it across rebuilds and clear it on disposal; use a new widget key for a
   fresh lifetime. Borrow existing clients with `QueryClientProvider.value`.
