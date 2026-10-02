@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
+import '../filesystem_case.dart';
+
 /// One successfully generated route.
 final class PrerenderedRoute {
   /// Describes a generated route and its output file.
@@ -76,8 +78,9 @@ final class Prerenderer {
         'Must be at least 1.',
       );
     }
-    final client = _client ?? HttpClient();
     final root = output.absolute;
+    final ignoreCase = usesCaseInsensitivePaths(root.path);
+    final client = _client ?? HttpClient();
     final queue = <Uri>[];
     final seen = <String>{};
     final outputRoutes = <String, String>{};
@@ -118,7 +121,10 @@ final class Prerenderer {
       seen.add(route);
       final file = _outputFile(root, normalized);
       final relative = p.relative(file.path, from: root.path);
-      final outputKey = p.normalize(relative).toLowerCase();
+      final normalizedPath = p.normalize(relative);
+      final outputKey = ignoreCase
+          ? normalizedPath.toLowerCase()
+          : normalizedPath;
       final existing = outputRoutes[outputKey];
       if (existing != null) {
         throw StateError(

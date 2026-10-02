@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../atomic_write.dart';
 import '../database_sqlite/migration.dart';
+import '../filesystem_case.dart';
 import 'prerender_manifest.dart';
 import 'project.dart';
 

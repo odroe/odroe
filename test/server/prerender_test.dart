@@ -97,6 +97,84 @@ void main() {
     }
   });
 
+  test('prerender collisions follow actual output filesystem case', () async {
+    final parent = await Directory.systemTemp.createTemp('odroe-ssg-case-');
+    addTearDown(() => parent.delete(recursive: true));
+    final probe = Directory('${parent.path}/Docs')..createSync();
+    final alias = Directory('${parent.path}/docs');
+    final ignoresCase =
+        alias.existsSync() &&
+        FileSystemEntity.identicalSync(probe.path, alias.path);
+    probe.deleteSync();
+    final requests = <String>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      requests.add(request.uri.path);
+      request.response
+        ..headers.contentType = ContentType.html
+        ..write(
+          request.uri.path == '/'
+              ? '<a href="/Docs">Upper</a><a href="/docs">Lower</a>'
+              : '<!doctype html><title>${request.uri.path}</title>',
+        );
+      await request.response.close();
+    });
+    for (final crawlLinks in <bool>[false, true]) {
+      requests.clear();
+      final output = Directory(
+        '${parent.path}/${crawlLinks ? 'crawl' : 'explicit'}',
+      );
+      final rendering = Prerenderer().render(
+        origin: Uri.parse('http://127.0.0.1:${server.port}'),
+        routes: crawlLinks
+            ? const <String>['/']
+            : const <String>['/Docs', '/docs'],
+        output: output,
+        crawlLinks: crawlLinks,
+      );
+      if (ignoresCase) {
+        await expectLater(
+          rendering,
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('both write'),
+            ),
+          ),
+        );
+        expect(requests, crawlLinks ? <String>['/'] : isEmpty);
+        expect(File('${output.path}/Docs/index.html').existsSync(), isFalse);
+        expect(File('${output.path}/docs/index.html').existsSync(), isFalse);
+        if (!crawlLinks) expect(output.existsSync(), isFalse);
+      } else {
+        final result = await rendering;
+        expect(
+          result.map((route) => route.route),
+          crawlLinks
+              ? <String>['/', '/Docs', '/docs']
+              : <String>['/Docs', '/docs'],
+        );
+        expect(
+          await File('${output.path}/Docs/index.html').readAsString(),
+          contains('<title>/Docs</title>'),
+        );
+        expect(
+          await File('${output.path}/docs/index.html').readAsString(),
+          contains('<title>/docs</title>'),
+        );
+        expect(
+          FileSystemEntity.identicalSync(
+            '${output.path}/Docs/index.html',
+            '${output.path}/docs/index.html',
+          ),
+          isFalse,
+        );
+      }
+    }
+  });
+
   test('prerenderer does not wait for redirect bodies', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) {
