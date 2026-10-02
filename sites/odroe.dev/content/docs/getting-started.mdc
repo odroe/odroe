@@ -12,6 +12,9 @@ The same append-only SQL history initializes native SQLite and local D1, while
 the project keeps a locked Cloudflare toolchain. No global Wrangler install is
 required.
 
+Install Flutter 3.38.1 or newer with stable Dart 3.10.0 or newer before starting.
+Keep the official Flutter SDK and its bundled Dart together.
+
 ## Create the application
 
 Odroe is currently consumed from source. Let its create command own the complete

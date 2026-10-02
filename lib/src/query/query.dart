@@ -34,11 +34,10 @@ final class Query<T> {
   Query({
     required this.client,
     required this.cache,
-    required ResolvedQueryOptions<T> options,
+    required this.options,
     QueryOptions<T>? sourceOptions,
     QueryState<T>? state,
-  }) : options = options,
-       _sourceOptions = sourceOptions,
+  }) : _sourceOptions = sourceOptions,
        state = state ?? _initialState(options) {
     _requireExactKeyType<T>(options.key);
     _initialStateValue = this.state;

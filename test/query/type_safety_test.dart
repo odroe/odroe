@@ -5,6 +5,8 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/analyzer_diagnostics.dart';
+
 void main() {
   test('query keys preserve options, state, and data types', () async {
     final directory = Directory('test/query').absolute.path;
@@ -28,9 +30,7 @@ void main() {
       expect((valid as ResolvedUnitResult).diagnostics, isEmpty);
       expect(invalid, isA<ResolvedUnitResult>());
       expect(
-        (invalid as ResolvedUnitResult).diagnostics.map(
-          (diagnostic) => diagnostic.diagnosticCode.lowerCaseName,
-        ),
+        (invalid as ResolvedUnitResult).diagnostics.map(diagnosticCodeName),
         <String>[
           'argument_type_not_assignable',
           'argument_type_not_assignable',

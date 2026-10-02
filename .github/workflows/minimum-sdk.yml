@@ -1,0 +1,63 @@
+name: Minimum SDK compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minimum-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  minimum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.38.1'
+          channel: stable
+      - name: Verify the complete lower-bound SDK pair
+        run: |
+          python3 - <<'PY'
+          import json, re, subprocess
+          version = json.loads(subprocess.check_output(['flutter', '--version', '--machine']))
+          assert version['frameworkVersion'] == '3.38.1', version
+          assert version['dartSdkVersion'] == '3.10.0', version
+          standalone = subprocess.check_output(['dart', '--version'], text=True)
+          assert re.search(r'Dart SDK version: 3\.10\.0 \(stable\)', standalone), standalone
+          print(standalone)
+          print(json.dumps(version, indent=2))
+          PY
+      - name: Verify smoke process-group cleanup
+        run: python3 test/support/fullstack_consumer_smoke_test.py
+      - run: flutter pub get
+      - run: flutter pub get
+        working-directory: example/app
+      - run: flutter pub get
+        working-directory: sites/odroe.dev
+      - run: dart analyze --fatal-infos
+      - name: Verify compiler and reference Flutter consumption
+        run: |
+          flutter test --no-pub --concurrency=2 test/router/file_router_test.dart
+          (cd example/app && flutter test --no-pub --concurrency=2 test)
+      - name: Verify compiler, create, native RPC and SQLite semantics
+        run: |
+          dart test --concurrency=1 test/cli/create_test.dart
+          dart test --concurrency=1 test/cli/cli_test.dart
+          dart test --concurrency=1 \
+            test/router/server_function_id_test.dart test/router/site_router_test.dart \
+            test/cli/init_test.dart \
+            test/server/public_origin_test.dart test/rpc test/database_sqlite \
+            test/database/query/compiler_test.dart test/database/query/sqlite_test.dart \
+            test/app/key_contract_test.dart test/query/type_safety_test.dart \
+            test/database/query/type_safety_test.dart
+      - name: Verify a fresh generated full-stack consumer and native bundle
+        run: python3 test/support/fullstack_consumer_smoke.py

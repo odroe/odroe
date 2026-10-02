@@ -87,8 +87,8 @@ void main() {
       containsAllInOrder(<String>['pub', 'add', '--offline']),
     );
     final descriptor = calls[1].arguments.last;
-    expect(descriptor, startsWith('odroe@'));
-    expect(jsonDecode(descriptor.substring('odroe@'.length)), <String, Object?>{
+    expect(descriptor, startsWith('odroe:'));
+    expect(jsonDecode(descriptor.substring('odroe:'.length)), <String, Object?>{
       'path': p.relative(
         Directory.current.resolveSymbolicLinksSync(),
         from: resolvedTarget,
@@ -485,7 +485,7 @@ dependencies:
       0,
     );
     expect(
-      jsonDecode(descriptor!.substring('odroe@'.length)),
+      jsonDecode(descriptor!.substring('odroe:'.length)),
       <String, Object?>{
         'path': p.relative(
           source.resolveSymbolicLinksSync(),
