@@ -157,6 +157,50 @@ if (prepared.length !== prepareCount) {
     timeout: const Timeout(Duration(minutes: 3)),
   );
 
+  test(
+    'Cloudflare wrapper filenames fail before artifact publication',
+    () async {
+      final project = await _createDocumentFixture();
+      addTearDown(() => project.delete(recursive: true));
+      final output = Directory(
+        p.join(project.path, 'build', 'worker-collision'),
+      )..createSync(recursive: true);
+      final previous = File(p.join(output.path, 'worker.mjs'))
+        ..writeAsStringSync('previous working wrapper');
+      final cases = <String>['worker.mjs'];
+      if (sameBuildDirectory(
+        Directory(p.join(output.path, 'worker.mjs')),
+        Directory(p.join(output.path, 'WORKER.MJS')),
+      )) {
+        cases.add('WORKER.MJS');
+      }
+      for (final name in cases) {
+        final errors = StringBuffer();
+        final code = await runOdroe(
+          <String>[
+            'build',
+            '--project',
+            project.path,
+            '--server-only',
+            '--server-target',
+            'cloudflare',
+            '--server-artifact',
+            p.relative(p.join(output.path, name), from: project.path),
+          ],
+          output: StringBuffer(),
+          errors: errors,
+        );
+        expect(code, 64, reason: '$name: $errors');
+        expect(
+          errors.toString(),
+          contains('Cloudflare server artifacts must use the .js extension.'),
+        );
+        expect(previous.readAsStringSync(), 'previous working wrapper');
+        expect(File(p.join(output.path, '$name.deps')).existsSync(), isFalse);
+      }
+    },
+  );
+
   test('Cloudflare-only build ignores configured Native history', () async {
     final project = await _createDocumentFixture();
     addTearDown(() => project.delete(recursive: true));
