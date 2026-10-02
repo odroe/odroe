@@ -7,6 +7,15 @@ import 'package:watcher/watcher.dart';
 import 'build.dart';
 import 'project.dart';
 
+/// Compiler dependency used by the CLI's controlled startup regressions.
+typedef CloudflareDevelopmentCompiler =
+    Future<int> Function(
+      CliProject project, {
+      required File artifact,
+      required StringSink out,
+      Future<void>? cancelled,
+    });
+
 /// Builds and watches an Odroe server in a project-local Cloudflare runtime.
 Future<int> runCloudflareDevelopment(
   CliProject project, {
@@ -16,6 +25,7 @@ Future<int> runCloudflareDevelopment(
   required List<String> flutterArguments,
   required StringSink out,
   required StringSink err,
+  CloudflareDevelopmentCompiler compiler = buildCloudflareServer,
 }) async {
   if (!serverOnly) {
     err.writeln(
@@ -49,8 +59,6 @@ Future<int> runCloudflareDevelopment(
     return 1;
   }
 
-  final generated = generateRoutes(project, out, err);
-  if (generated == null) return 1;
   final artifact = File(
     resolveBuildOutputPath(
       project.root,
@@ -58,12 +66,6 @@ Future<int> runCloudflareDevelopment(
       option: 'Cloudflare development artifact',
     ),
   );
-  final initialBuild = await buildCloudflareServer(
-    project,
-    artifact: artifact,
-    out: out,
-  );
-  if (initialBuild != 0) return initialBuild;
 
   final done = Completer<int>();
   final stoppingSignal = Completer<void>();
@@ -76,7 +78,8 @@ Future<int> runCloudflareDevelopment(
   Timer? debounce;
   var serverBuildNeeded = false;
   var rebuildQueued = false;
-  var rebuilding = false;
+  // Source events are queued until the initial compile finishes.
+  var rebuilding = true;
   Future<void>? activeRebuild;
   Future<void> rebuild() async {
     if (stopping) return;
@@ -89,7 +92,7 @@ Future<int> runCloudflareDevelopment(
         try {
           final generated = generateRoutes(project, out, err);
           if (generated == null || !shouldBuildServer) continue;
-          final code = await buildCloudflareServer(
+          final code = await compiler(
             project,
             artifact: artifact,
             out: out,
@@ -155,17 +158,46 @@ Future<int> runCloudflareDevelopment(
   }
 
   try {
+    project.libDirectory.createSync(recursive: true);
     final sourceWatcher = DirectoryWatcher(project.libDirectory.path);
     changes = sourceWatcher.events.listen(
       sourceChanged,
       onError: (Object error) {
         if (stopping || done.isCompleted) return;
         err.writeln('Cloudflare source watcher failed. $error');
+        beginStopping();
         done.complete(1);
       },
     );
-    await sourceWatcher.ready;
+    await Future.any<void>(<Future<void>>[
+      sourceWatcher.ready.then<void>((_) {}),
+      done.future.then<void>((_) {}),
+    ]);
     if (done.isCompleted) return await done.future;
+    signals.add(ProcessSignal.sigint.watch().listen(stop));
+    if (!Platform.isWindows) {
+      signals.add(ProcessSignal.sigterm.watch().listen(stop));
+    }
+    final generated = generateRoutes(project, out, err);
+    if (generated == null) return 1;
+    final initialBuild = await compiler(
+      project,
+      artifact: artifact,
+      out: out,
+      cancelled: stoppingSignal.future,
+    );
+    if (done.isCompleted) return await done.future;
+    if (initialBuild != 0) return initialBuild;
+    final startupChanges =
+        serverBuildNeeded || rebuildQueued || debounce != null;
+    debounce?.cancel();
+    debounce = null;
+    rebuilding = false;
+    if (startupChanges) {
+      activeRebuild = rebuild();
+      await activeRebuild;
+      if (done.isCompleted) return await done.future;
+    }
     final worker = File(p.join(artifact.parent.path, 'worker.mjs'));
     runtime = await startProjectProcess('node', <String>[
       wrangler.path,
@@ -185,10 +217,6 @@ Future<int> runCloudflareDevelopment(
         if (!stopping && !done.isCompleted) done.complete(code);
       }),
     );
-    signals.add(ProcessSignal.sigint.watch().listen(stop));
-    if (!Platform.isWindows) {
-      signals.add(ProcessSignal.sigterm.watch().listen(stop));
-    }
     return await done.future;
   } finally {
     beginStopping();

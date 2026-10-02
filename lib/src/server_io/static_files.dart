@@ -38,18 +38,14 @@ final class StaticFiles {
         compress &&
         asset.stat.size >= _minimumCompressionBytes &&
         _compressible(asset.file.path);
-    final encoding = compressible
-        ? _selectEncoding(request.headers)
-        : _ContentEncoding.identity;
-    if (usedIndexFallback || compressible) {
-      response.headers.set(
-        HttpHeaders.varyHeader,
-        <String>[
-          if (usedIndexFallback) 'Accept',
-          if (compressible) 'Accept-Encoding',
-        ].join(', '),
-      );
-    }
+    final encoding = _selectEncoding(
+      request.headers,
+      gzipAvailable: compressible,
+    );
+    response.headers.set(
+      HttpHeaders.varyHeader,
+      <String>[if (usedIndexFallback) 'Accept', 'Accept-Encoding'].join(', '),
+    );
     if (encoding == _ContentEncoding.notAcceptable) {
       response
         ..statusCode = HttpStatus.notAcceptable
@@ -180,7 +176,10 @@ bool _notModified(HttpHeaders headers, String etag, DateTime modified) {
 String _weakTag(String value) =>
     value.startsWith('W/') ? value.substring(2) : value;
 
-_ContentEncoding _selectEncoding(HttpHeaders headers) {
+_ContentEncoding _selectEncoding(
+  HttpHeaders headers, {
+  required bool gzipAvailable,
+}) {
   double? gzipQuality;
   double? identityQuality;
   double? wildcardQuality;
@@ -195,7 +194,7 @@ _ContentEncoding _selectEncoding(HttpHeaders headers) {
     }
   }
   final identity = identityQuality ?? (wildcardQuality == 0 ? 0.0 : 1.0);
-  final gzip = gzipQuality ?? wildcardQuality ?? 0.0;
+  final gzip = gzipAvailable ? gzipQuality ?? wildcardQuality ?? 0.0 : 0.0;
   if (identity <= 0 && gzip <= 0) {
     return _ContentEncoding.notAcceptable;
   }

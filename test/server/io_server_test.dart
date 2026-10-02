@@ -287,7 +287,10 @@ void main() {
 
     final docs = await get('/docs');
     final etag = docs.response.headers.value(HttpHeaders.etagHeader);
-    expect(docs.response.headers.value(HttpHeaders.varyHeader), 'Accept');
+    expect(
+      docs.response.headers.value(HttpHeaders.varyHeader),
+      'Accept, Accept-Encoding',
+    );
     final head = await client.openUrl('HEAD', base.resolve('/docs'));
     final headResponse = await head.close();
     expect(headResponse.statusCode, HttpStatus.ok);
@@ -300,7 +303,10 @@ void main() {
     conditional.headers.set(HttpHeaders.ifNoneMatchHeader, etag!);
     final notModified = await conditional.close();
     expect(notModified.statusCode, HttpStatus.notModified);
-    expect(notModified.headers.value(HttpHeaders.varyHeader), 'Accept');
+    expect(
+      notModified.headers.value(HttpHeaders.varyHeader),
+      'Accept, Accept-Encoding',
+    );
     expect(await notModified.toList(), isEmpty);
     expect(handlerCalls, 0);
 
@@ -465,6 +471,77 @@ void main() {
     );
   });
 
+  test(
+    'IO static identity exclusions apply to every available representation',
+    () async {
+      final public = await Directory.systemTemp.createTemp('odroe-identity-');
+      addTearDown(() => public.delete(recursive: true));
+      for (final asset in <String>['small.txt', 'large.jpg', 'large.txt']) {
+        File('${public.path}/$asset').writeAsBytesSync(
+          List<int>.filled(asset == 'small.txt' ? 4 : 2048, 42),
+        );
+      }
+      final client = HttpClient()..autoUncompress = false;
+      addTearDown(client.close);
+      for (final variant in <({String asset, bool compress})>[
+        (asset: 'small.txt', compress: true),
+        (asset: 'large.jpg', compress: true),
+        (asset: 'large.txt', compress: false),
+      ]) {
+        final server = await IoServer.bind(
+          (_) async => ServerResponse.text('missing', status: 404),
+          port: 0,
+          publicDirectory: public,
+          compressStaticAssets: variant.compress,
+        );
+        addTearDown(server.close);
+        final uri = Uri.parse(
+          'http://127.0.0.1:${server.port}/${variant.asset}',
+        );
+        for (final method in <String>['GET', 'HEAD']) {
+          for (final excluded in <String>[
+            'identity;q=0',
+            '*;q=0',
+            'gzip, identity;q=0',
+          ]) {
+            final request = await client.openUrl(method, uri);
+            request.headers.set(HttpHeaders.acceptEncodingHeader, excluded);
+            final response = await request.close();
+            expect(
+              response.statusCode,
+              HttpStatus.notAcceptable,
+              reason: '$variant $method $excluded',
+            );
+            expect(response.contentLength, 0);
+            expect(
+              response.headers.value(HttpHeaders.varyHeader),
+              'Accept-Encoding',
+            );
+            expect(await response.toList(), isEmpty);
+          }
+        }
+        final accepted = await client.getUrl(uri);
+        accepted.headers.set(
+          HttpHeaders.acceptEncodingHeader,
+          'gzip, identity;q=0.5',
+        );
+        final response = await accepted.close();
+        expect(response.statusCode, HttpStatus.ok);
+        expect(
+          response.headers.value(HttpHeaders.contentEncodingHeader),
+          isNull,
+        );
+        expect(
+          (await response.fold<List<int>>(
+            <int>[],
+            (bytes, chunk) => bytes..addAll(chunk),
+          )).length,
+          variant.asset == 'small.txt' ? 4 : 2048,
+        );
+      }
+    },
+  );
+
   test('IO adapter streams large static assets with optional gzip', () async {
     final public = await Directory.systemTemp.createTemp('odroe-gzip-');
     addTearDown(() => public.delete(recursive: true));
@@ -507,7 +584,7 @@ void main() {
     final compressed = await client.getUrl(uri);
     compressed.headers.set(
       HttpHeaders.acceptEncodingHeader,
-      'br, gzip;q=0.8, identity;q=0.4',
+      'br, gzip;q=0.8, identity;q=0',
     );
     final compressedResponse = await compressed.close();
     final compressedBytes = await compressedResponse.fold<List<int>>(
@@ -670,7 +747,7 @@ void main() {
     );
     expect(
       explicitlyDisabledResponse.headers.value(HttpHeaders.varyHeader),
-      isNull,
+      'Accept-Encoding',
     );
     await explicitlyDisabledResponse.drain<void>();
 
@@ -681,11 +758,11 @@ void main() {
     );
     disabledNegotiation.headers.set(HttpHeaders.acceptEncodingHeader, '*;q=0');
     final disabledNegotiationResponse = await disabledNegotiation.close();
-    expect(disabledNegotiationResponse.statusCode, HttpStatus.ok);
-    expect(disabledNegotiationResponse.contentLength, sourceBytes.length);
+    expect(disabledNegotiationResponse.statusCode, HttpStatus.notAcceptable);
+    expect(disabledNegotiationResponse.contentLength, 0);
     expect(
       disabledNegotiationResponse.headers.value(HttpHeaders.varyHeader),
-      isNull,
+      'Accept-Encoding',
     );
     await disabledNegotiationResponse.drain<void>();
   });

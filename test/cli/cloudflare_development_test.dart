@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:odroe/src/cli/cli.dart';
+import 'package:odroe/src/cli/cloudflare_development.dart';
+import 'package:odroe/src/cli/project.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -127,6 +129,76 @@ void main() {
     expect(errors.toString(), contains('wrangler.jsonc does not exist'));
     expect(errors.toString(), contains('application-owned'));
   });
+
+  test(
+    'Cloudflare startup queues edits made after the first compiler read',
+    () async {
+      final project = await _project();
+      addTearDown(() => project.delete(recursive: true));
+      Directory(
+        p.join(project.path, 'lib', 'routes'),
+      ).createSync(recursive: true);
+      final source = File(p.join(project.path, 'lib', 'shared', 'page.dart'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("const label = 'old';\n");
+      File(p.join(project.path, 'wrangler.jsonc')).writeAsStringSync('{}');
+      final runtimeRead = File(p.join(project.path, 'runtime-read'));
+      File(
+          p.join(
+            project.path,
+            'node_modules',
+            'wrangler',
+            'bin',
+            'wrangler.js',
+          ),
+        )
+        ..createSync(recursive: true)
+        ..writeAsStringSync(r'''
+const fs = require('node:fs');
+fs.writeFileSync('runtime-read', fs.readFileSync(process.argv[3], 'utf8'));
+''');
+      final compiling = Completer<void>();
+      final finishInitialCompile = Completer<void>();
+      var builds = 0;
+      final running = runCloudflareDevelopment(
+        CliProject.fromRoot(project.path),
+        host: '127.0.0.1',
+        port: 0,
+        serverOnly: true,
+        flutterArguments: const <String>[],
+        out: StringBuffer(),
+        err: StringBuffer(),
+        compiler: (_, {required artifact, required out, cancelled}) async {
+          final snapshot = source.readAsStringSync();
+          if (++builds == 1) {
+            compiling.complete();
+            await finishInitialCompile.future;
+          }
+          artifact.parent.createSync(recursive: true);
+          File(
+            p.join(artifact.parent.path, 'worker.mjs'),
+          ).writeAsStringSync(snapshot);
+          return 0;
+        },
+      );
+      await compiling.future.timeout(const Duration(seconds: 5));
+      try {
+        source.writeAsStringSync("const label = 'new one';\n");
+        // Hold the compiler after its source read across two debounce windows.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        source.writeAsStringSync("const label = 'new two';\n");
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      } finally {
+        finishInitialCompile.complete();
+      }
+      expect(await running.timeout(const Duration(seconds: 10)), 0);
+      expect(runtimeRead.readAsStringSync(), "const label = 'new two';\n");
+      expect(builds, greaterThanOrEqualTo(2));
+    },
+    skip: !_nodeAvailable
+        ? 'Node is required for the startup runtime fixture.'
+        : false,
+  );
 
   test(
     'Cloudflare development rebuilds and preserves last-known-good output',
