@@ -43,3 +43,10 @@ jobs:
             --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" \
             --archive-sha256 "$RELEASE_ARCHIVE_SHA256" \
             --output .odroe/published-release
+      - name: Preserve the official release acceptance evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: published-release-${{ github.run_id }}
+          path: .odroe/published-release/*
+          include-hidden-files: true
+          if-no-files-found: error

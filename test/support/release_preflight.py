@@ -46,6 +46,8 @@ def main():
                 root, timeout=900, env=env)
     if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True):
         raise RuntimeError('The source checkout changed during release preflight.')
+    if subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip() != commit:
+        raise RuntimeError('The source commit changed during release preflight.')
     result = {'package': 'odroe', 'version': version, 'sourceCommit': commit,
               'sdk': sdk, 'archiveSha256': sha256(archive), 'files': manifest,
               'archiveConsumers': 'passed', 'officialHostedAcceptance': 'not run',

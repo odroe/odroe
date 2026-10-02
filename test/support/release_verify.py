@@ -29,6 +29,7 @@ def main():
         raise ValueError('Requested and checked-out package versions differ.')
     if not re.fullmatch(r'[0-9a-f]{64}', args.archive_sha256):
         raise ValueError('An exact preflight archive SHA256 is required.')
+    sdk = json.loads(subprocess.check_output([flutter, '--version', '--machine'], text=True))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
@@ -69,12 +70,15 @@ def main():
         for name in ['dependency_first_consumer_smoke', 'incremental_adoption_smoke']:
             run([sys.executable, str(root / 'test/support' / (name + '.py'))],
                 root, timeout=900, env=dict(env, ODROE_HOSTED_VERSION=args.version))
-    result = {'package': 'odroe', 'version': args.version, 'sourceCommit': commit,
+    if (subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True)
+            or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip() != commit):
+        raise RuntimeError('The source checkout changed during published acceptance.')
+    result = {'package': 'odroe', 'version': args.version, 'sourceCommit': commit, 'sdk': sdk,
               'archiveSha256': args.archive_sha256, 'files': manifest,
               'registry': 'https://pub.dev', 'interpretedPublishedCli': 'passed',
               'aotPublishedCli': 'passed', 'freshHostedConsumers': 'passed'}
     (output / 'acceptance.json').write_text(json.dumps(result, indent=2) + '\n')
-    print(json.dumps({key: value for key, value in result.items() if key != 'files'}))
+    print(json.dumps({key: value for key, value in result.items() if key not in ['files', 'sdk']}))
 
 
 if __name__ == '__main__':
