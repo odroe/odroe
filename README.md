@@ -218,11 +218,24 @@ report retained paths without turning a successful publication into a failure.
 | `router.dart`, `router_flutter.dart` | Typed routes, params/search, loaders, navigation |
 | `query.dart`, `query_flutter.dart` | Typed cache identities, async reads, mutations, hydration |
 | `rpc.dart` | Client references, HTTP transport, serialization, cancellation and budgets |
+| `query_rpc.dart` | Optional ordinary typed RPC reads and exact/collection Query filters |
 | `server.dart`, `server_io.dart` | Server functions, middleware, invocation, Dart IO hosting |
 | `database.dart` | Provider-neutral typed SQL and result contracts |
 | `database_sqlite.dart`, `database_postgres.dart`, `database_mysql.dart` | Native providers and owned connection lifetimes |
 | `database_d1.dart`, `server_fetch.dart` | Preview D1 and Fetch runtime adapters |
 | `document.dart`, `mdc.dart`, `press.dart`, `press_io.dart` | Semantic HTML, content parsing, page discovery |
+
+`query_rpc.dart` adds `ref.read(rpc, input, scope: ['tenant', 'account'])`,
+`ref.readAt(...)` and `ref.reads(...)` to existing value refs. Calling `read`
+explicitly declares repeat execution safe. It returns native `QueryOptions<O>`;
+filters use the same endpoint, scope and encoded input identity. Own each
+`RpcClient` per account/backend, and let its headers provider read only that
+account's refreshable credentials. Tokens and ambient cookies are not cache
+identity. Web relative URLs follow the document base; native reads require an
+explicit HTTP(S) server URI. Raw responses and streams use direct RPC instead.
+Pagination and mutation invalidation remain explicit native Query definitions.
+Client cancellation excludes late results; server notification is transport
+best-effort and may never arrive.
 
 Context keys are identity objects: construct one shared non-const `ContextKey<T>`
 for each binding. Query keys now carry the exact cached data type as
