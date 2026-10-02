@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:watcher/watcher.dart';
 
 import 'project.dart';
 
@@ -203,21 +204,30 @@ Future<int> runDevelopment(
     });
   }
 
-  final changes = <StreamSubscription<FileSystemEvent>>[];
+  final changes = <StreamSubscription<Object>>[];
+  final sourceWatcher = DirectoryWatcher(project.libDirectory.path);
   changes.add(
-    project.libDirectory.watch(recursive: true).listen((event) {
-      if (!event.path.endsWith('.dart')) return;
-      if (p.equals(event.path, project.compiler.outputFile.path) ||
-          p.equals(event.path, project.compiler.serverOutputFile.path)) {
-        return;
-      }
-      final name = p.basename(event.path);
-      final flutterOnlyModification =
-          event.type == FileSystemEvent.modify &&
-          (name == 'page.dart' || name == 'shell.dart');
-      queueRestart(server: !flutterOnlyModification);
-    }),
+    sourceWatcher.events.listen(
+      (event) {
+        if (!event.path.endsWith('.dart')) return;
+        if (p.equals(event.path, project.compiler.outputFile.path) ||
+            p.equals(event.path, project.compiler.serverOutputFile.path)) {
+          return;
+        }
+        final name = p.basename(event.path);
+        final flutterOnlyModification =
+            event.type == ChangeType.MODIFY &&
+            p.isWithin(project.compiler.routesDirectory.path, event.path) &&
+            (name == 'page.dart' || name == 'shell.dart');
+        queueRestart(server: !flutterOnlyModification);
+      },
+      onError: (Object error) {
+        err.writeln('Source watcher failed. $error');
+        if (!done.isCompleted) done.complete(1);
+      },
+    ),
   );
+  await sourceWatcher.ready;
   if (migrationsDirectory?.existsSync() ?? false) {
     changes.add(
       migrationsDirectory!.watch().listen((event) {

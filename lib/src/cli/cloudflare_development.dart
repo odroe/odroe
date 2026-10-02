@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:watcher/watcher.dart';
 
 import 'build.dart';
 import 'project.dart';
@@ -111,12 +112,12 @@ Future<int> runCloudflareDevelopment(
     }
   }
 
-  StreamSubscription<FileSystemEvent>? changes;
+  StreamSubscription<WatchEvent>? changes;
   final signals = <StreamSubscription<ProcessSignal>>[];
   Process? runtime;
   Future<int>? runtimeExitCode;
 
-  void sourceChanged(FileSystemEvent event) {
+  void sourceChanged(WatchEvent event) {
     if (stopping || !event.path.endsWith('.dart')) return;
     if (p.equals(event.path, project.compiler.outputFile.path) ||
         p.equals(event.path, project.compiler.serverOutputFile.path)) {
@@ -124,7 +125,7 @@ Future<int> runCloudflareDevelopment(
     }
     final name = p.basename(event.path);
     final flutterOnlyModification =
-        event.type == FileSystemEvent.modify &&
+        event.type == ChangeType.MODIFY &&
         p.isWithin(project.compiler.routesDirectory.path, event.path) &&
         (name == 'page.dart' || name == 'shell.dart');
     serverBuildNeeded |= !flutterOnlyModification;
@@ -154,16 +155,17 @@ Future<int> runCloudflareDevelopment(
   }
 
   try {
-    changes = project.libDirectory
-        .watch(recursive: true)
-        .listen(
-          sourceChanged,
-          onError: (Object error) {
-            if (stopping || done.isCompleted) return;
-            err.writeln('Cloudflare source watcher failed. $error');
-            done.complete(1);
-          },
-        );
+    final sourceWatcher = DirectoryWatcher(project.libDirectory.path);
+    changes = sourceWatcher.events.listen(
+      sourceChanged,
+      onError: (Object error) {
+        if (stopping || done.isCompleted) return;
+        err.writeln('Cloudflare source watcher failed. $error');
+        done.complete(1);
+      },
+    );
+    await sourceWatcher.ready;
+    if (done.isCompleted) return await done.future;
     final worker = File(p.join(artifact.parent.path, 'worker.mjs'));
     runtime = await startProjectProcess('node', <String>[
       wrangler.path,

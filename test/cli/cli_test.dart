@@ -39,6 +39,114 @@ void main() {
     expect(result.stderr, contains('ODROE_MIGRATIONS_PATH must not be empty.'));
   });
 
+  test(
+    'native dev reloads nested source changes into real HTTP responses',
+    () async {
+      await withDartCommandLock(() async {
+        final project = await Directory.systemTemp.createTemp(
+          'odroe-native-watch-',
+        );
+        addTearDown(() => project.delete(recursive: true));
+        File(p.join(project.path, 'pubspec.yaml')).writeAsStringSync('''
+name: native_watch_fixture
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dependencies:
+  odroe:
+    path: ${jsonEncode(Directory.current.absolute.path)}
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
+''');
+        final sharedPage =
+            File(p.join(project.path, 'lib', 'shared', 'nested', 'page.dart'))
+              ..createSync(recursive: true)
+              ..writeAsStringSync("const label = 'native watch one';\n");
+        File(p.join(project.path, 'lib', 'routes', 'route.dart'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(r'''
+import 'package:odroe/document.dart';
+import 'package:odroe/router.dart';
+import '../shared/nested/page.dart';
+
+final route = AppRoute<NoParams, NoSearch, NoData>().document(
+  (_) => const RouteDocument(body: HtmlText(label)),
+);
+''');
+        final pubGet = await runTestProcess(
+          'flutter',
+          const <String>['pub', 'get', '--offline'],
+          workingDirectory: project.path,
+          timeout: const Duration(minutes: 1),
+        );
+        expect(
+          pubGet.exitCode,
+          0,
+          reason: '${pubGet.stdout}\n${pubGet.stderr}',
+        );
+        final process = await Process.start(dartExecutable, <String>[
+          'run',
+          'odroe',
+          'dev',
+          '--project',
+          project.path,
+          '--server-only',
+          '--port',
+          '0',
+        ]);
+        final logs = StringBuffer();
+        final stdout = process.stdout
+            .transform(utf8.decoder)
+            .listen(logs.write);
+        final stderr = process.stderr
+            .transform(utf8.decoder)
+            .listen(logs.write);
+        final exitCode = process.exitCode;
+        addTearDown(() async {
+          await terminateTestProcess(process, exitCode);
+          await stdout.cancel();
+          await stderr.cancel();
+        });
+        final client = HttpClient();
+        addTearDown(client.close);
+        Future<void> waitForBody(String expected) async {
+          Object? lastError;
+          final deadline = DateTime.now().add(const Duration(seconds: 30));
+          while (DateTime.now().isBefore(deadline)) {
+            final origin = RegExp(
+              r'Odroe listening on (http://[^\s]+)',
+            ).allMatches(logs.toString()).lastOrNull;
+            if (origin != null) {
+              try {
+                final request = await client.getUrl(
+                  Uri.parse(origin.group(1)!),
+                );
+                final response = await request.close();
+                final body = await response.transform(utf8.decoder).join();
+                if (response.statusCode == 200 && body.contains(expected)) {
+                  return;
+                }
+              } on Object catch (error) {
+                lastError = error;
+              }
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          }
+          fail('Native development did not serve $expected. $lastError\n$logs');
+        }
+
+        await waitForBody('native watch one');
+        sharedPage.writeAsStringSync("const label = 'native watch two';\n");
+        await waitForBody('native watch two');
+        sharedPage.writeAsStringSync("const label = 'native watch three';\n");
+        await waitForBody('native watch three');
+      });
+    },
+  );
+
   test('dev serves the generated route tree and server functions', () async {
     final reservation = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
