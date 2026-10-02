@@ -1,5 +1,6 @@
 from pathlib import Path
 import json, os, queue, re, shutil, signal, subprocess, sys, tempfile, threading, time
+from urllib.parse import urljoin, urlparse, unquote
 
 root = Path(__file__).resolve().parents[2]
 dart = shutil.which('dart')
@@ -132,8 +133,36 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix='odroe-batch-consumer-', dir='/tmp') as temp:
             base = Path(temp); project = base / 'consumer'; db = base / 'persistent.sqlite3'
-            run([dart, 'run', 'odroe', 'create', str(project), '--platforms', 'web',
-                 '--project-name', 'batch_consumer', '--odroe-path', str(root), '--offline'], root)
+            hosted_version = os.environ.get('ODROE_HOSTED_VERSION')
+            if hosted_version:
+                run([flutter, 'create', '--empty', '--platforms', 'web',
+                     '--project-name', 'batch_consumer', str(project)], base)
+                descriptor = 'odroe:' + json.dumps({'version': hosted_version})
+                run([flutter, 'pub', 'add', descriptor], project)
+                config_file = project / '.dart_tool/package_config.json'
+                config = json.loads(config_file.read_text())
+                package = next(value for value in config['packages'] if value['name'] == 'odroe')
+                package_uri = urljoin(config_file.as_uri(), package['rootUri'])
+                package_root = Path(unquote(urlparse(package_uri).path)).resolve()
+                cache_root = Path(os.environ['PUB_CACHE']).resolve()
+                expected = cache_root / 'hosted/pub.dev' / ('odroe-' + hosted_version)
+                if package_root != expected:
+                    raise RuntimeError('Odroe did not resolve from the isolated official hosted cache')
+                lock = (project / 'pubspec.lock').read_text()
+                # Read through the whole dependency block, not only its first nested key.
+                match = re.search(r'^  odroe:\n(.*?)(?=^  [a-zA-Z_][\w]*:|^sdks:|\Z)', lock, re.M | re.S)
+                if not match or 'source: hosted' not in match.group(1):
+                    raise RuntimeError('Odroe lockfile source is not hosted')
+                if ('version: "' + hosted_version + '"') not in match.group(1):
+                    raise RuntimeError('Odroe hosted version does not match the requested exact preview')
+                if 'dependency_overrides:' in (project / 'pubspec.yaml').read_text():
+                    raise RuntimeError('Hosted consumer must not contain dependency overrides')
+                log.write('VERIFIED_HOSTED_ODROE ' + json.dumps({'version': hosted_version,
+                    'root': str(package_root), 'source': 'hosted', 'registry': 'https://pub.dev'}) + '\n')
+                run([dart, 'run', 'odroe', 'init', '--full-stack'], project)
+            else:
+                run([dart, 'run', 'odroe', 'create', str(project), '--platforms', 'web',
+                     '--project-name', 'batch_consumer', '--odroe-path', str(root), '--offline'], root)
             run([dart, 'run', 'odroe', 'generate'], project)
             (project / 'test').mkdir(exist_ok=True)
             (project / 'test/fullstack_smoke_test.dart').write_text(probe)
@@ -159,7 +188,9 @@ def main():
             result = {'create': True, 'generate': True, 'analyze': True, 'typedRpc': True,
                 'sqliteRestart': True, 'nativeBundle': True, 'relocatedBundle': True,
                 'nativeLibraries': sorted(p.name for p in (deployed/'lib').iterdir()),
-                'migrations': sorted(p.name for p in (deployed/'migrations').iterdir())}
+                'migrations': sorted(p.name for p in (deployed/'migrations').iterdir()),
+                'dependencySource': 'hosted' if hosted_version else 'path',
+                'hostedVersion': hosted_version}
             print(json.dumps(result))
         log.write('\nDisposable generated consumer, servers, database, and relocated bundle cleaned.\n')
     finally:

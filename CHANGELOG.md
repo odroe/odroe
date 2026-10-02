@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-dev.1
+
+### Framework preview and migration
+
+- Start a new full-stack framework generation under the existing `odroe` name.
+  This is a breaking change from the former 0.0.8 UI package: `setup`, `signal`,
+  reactive props and UI lifecycle APIs are not compatibility exports. See
+  [MIGRATION.md](MIGRATION.md); existing published versions remain available.
+- Restore the project's original MIT license and Odroe Inc. copyright notice.
+- Validate stable Dart 3.10.0 with stock Flutter 3.38.1 as the minimum pair.
+  Resolve analyzer/formatter/test versions normally without overrides and keep
+  declaration names, generated codecs and exact diagnostic contracts across
+  supported toolchains.
+- Consume the exact hosted preview in an empty Flutter application, then run
+  `odroe init --full-stack` and `odroe generate`. Source `create --odroe-path`
+  remains available for checkout-based development.
+
+### Integrated platform
 
 - Integrate the existing full-stack platform in one batch from the prior
   development branch, retaining public-main prerender ownership, real-path
@@ -8,8 +25,8 @@
   relative client RPC namespaces while keeping server namespaces absolute;
   reject invalid paths before constructing an owned HTTP client. Keep
   `ODROE_RPC_ORIGIN` as the starter's public native-client configuration name.
-  This source integration does not publish a new hosted version or establish
-  signed mobile, remote database, or Cloudflare deployment support.
+  This preview does not establish signed mobile, remote database, or
+  Cloudflare deployment support.
 
 - Publish Native full-stack builds as one complete, rollback-safe artifact.
   Odroe now keeps the AOT server staged through Flutter Web compilation and

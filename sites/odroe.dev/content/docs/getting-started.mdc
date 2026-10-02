@@ -17,8 +17,22 @@ Keep the official Flutter SDK and its bundled Dart together.
 
 ## Create the application
 
-Odroe is currently consumed from source. Let its create command own the complete
-source-stage setup while the next public package release is prepared:
+For the hosted framework preview, install the exact version into an empty
+Flutter application and reuse the full-stack initializer:
+
+```sh
+flutter create --empty --platforms web my_app
+cd my_app
+flutter pub add 'odroe:{"version":"0.1.0-dev.1"}'
+dart run odroe init --full-stack
+dart run odroe generate
+```
+
+The former `odroe` 0.0.8 UI package has a different API. Read the repository's
+MIGRATION.md before upgrading; old `setup` and `signal` APIs are not exported by
+this framework preview.
+
+For source development, let the create command own the complete setup:
 
 ```sh
 git clone https://github.com/odroe/odroe.git

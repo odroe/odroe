@@ -15,18 +15,20 @@ void main() {
     'source README links detailed contracts and identifies release limits',
     () async {
       final source = await File('../../README.md').readAsString();
+      final normalized = source.replaceAll(RegExp(r'\s+'), ' ');
       expect(source, contains('odroe create ../my_app --odroe-path .'));
       expect(source, contains('ODROE_RPC_ORIGIN'));
       expect(
         source,
         contains('sites/odroe.dev/content/docs/getting-started.mdc'),
       );
-      expect(source, contains('old `odroe` 0.0.8'));
+      expect(normalized, contains('old `odroe` 0.0.8'));
       expect(source, contains('`.odroe-prerender` marker'));
-      final normalized = source.replaceAll(RegExp(r'\s+'), ' ');
       expect(normalized, contains('Flutter 3.38.1 / Dart 3.10.0'));
       expect(source, contains('.github/workflows/minimum-sdk.yml'));
-      expect(normalized, contains("existing project's license source"));
+      expect(source, contains("[MIT license](LICENSE)"));
+      expect(source, contains("[migration guide](MIGRATION.md)"));
+      expect(source, contains("0.1.0-dev.1"));
       expect(normalized, contains('version/migration policy'));
       expect(normalized, contains('hosted-package consumer'));
     },
