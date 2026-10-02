@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-dev.2
 
 - Let `QueryClientProvider` create and own a client without App/modules setup.
   Keep it across rebuilds and clear it on disposal; use a new widget key for a
