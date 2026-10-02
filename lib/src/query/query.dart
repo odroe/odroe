@@ -63,6 +63,7 @@ final class Query<T> {
   Future<T>? _inFlight;
   Future<T>? _hydrationPending;
   QueryCancellationController? _cancellation;
+  QueryState<T>? _revertState;
   int _fetchId = 0;
   bool _destroyed = false;
 
@@ -274,6 +275,7 @@ final class Query<T> {
 
     final fetchId = ++_fetchId;
     final previous = state;
+    _revertState = previous;
     final cancellation = QueryCancellationController();
     _cancellation = cancellation;
     final canStart = _canStart(fetchOptions);
@@ -302,6 +304,7 @@ final class Query<T> {
           if (identical(_inFlight, future)) {
             _inFlight = null;
             _cancellation = null;
+            _revertState = null;
             if (identical(_hydrationPending, initialFuture)) {
               _hydrationPending = null;
             }
@@ -472,8 +475,25 @@ final class Query<T> {
   /// Cancels the active fetch and waits for it to stop.
   Future<void> cancel({bool silent = false, bool revert = true}) async {
     final future = _inFlight;
-    _cancellation?.cancel(silent: silent, revert: revert);
     if (future != null) {
+      _cancellation?.cancel(silent: silent, revert: revert);
+      // Detach cancelled work synchronously: a mount in the same turn must
+      // start a new fetch, and late completion must not overwrite that fetch.
+      _fetchId++;
+      _inFlight = null;
+      _cancellation = null;
+      _hydrationPending = null;
+      final previous = _revertState;
+      _revertState = null;
+      _setState(
+        revert && previous != null
+            ? previous.copyWith(fetchStatus: QueryFetchStatus.idle)
+            : state.copyWith(
+                fetchStatus: QueryFetchStatus.idle,
+                fetchMeta: null,
+              ),
+      );
+      scheduleGc();
       try {
         await future;
       } on QueryCancelledException {

@@ -111,6 +111,54 @@ void main() {
     unsubscribe();
     observer.dispose();
   });
+
+  test('same-key policy updates refresh timers without mounting', () async {
+    final scheduler = _ManualScheduler();
+    final client = QueryClient(scheduler: scheduler);
+    var calls = 0;
+    QueryOptions<int> options(QueryPolicy policy) => QueryOptions(
+      key: QueryKey('policy'),
+      policy: policy,
+      query: (_) => ++calls,
+    );
+    final observer = client.observe(options(const QueryPolicy()));
+    final remove = observer.subscribe((_) {});
+    addTearDown(client.clear);
+    addTearDown(observer.dispose);
+    await client.query(observer.options).promise;
+    expect(calls, 1);
+    observer.setOptions(
+      options(
+        const QueryPolicy(
+          freshness: QueryFreshness.staleAfter(Duration(seconds: 2)),
+          refetchOnMount: QueryRefetchPolicy.always,
+          refetchInterval: Duration(seconds: 3),
+        ),
+      ),
+    );
+    expect(calls, 1);
+    expect(observer.current.isStale, isFalse);
+    scheduler.elapse(const Duration(seconds: 2, milliseconds: 1));
+    expect(observer.current.isStale, isTrue);
+    scheduler.elapse(const Duration(milliseconds: 999));
+    await client.query(observer.options).promise;
+    expect(calls, 2);
+    observer.setOptions(
+      options(
+        const QueryPolicy(
+          freshness: QueryFreshness.static(),
+          refetchOnFocus: QueryRefetchPolicy.always,
+          refetchOnReconnect: QueryRefetchPolicy.always,
+        ),
+      ),
+    );
+    expect(observer.current.isStale, isFalse);
+    expect(observer.shouldRefetchOnFocus(), isFalse);
+    expect(observer.shouldRefetchOnReconnect(), isFalse);
+    scheduler.elapse(const Duration(seconds: 30));
+    expect(calls, 2);
+    remove();
+  });
 }
 
 final class _ManualScheduler implements QueryScheduler {

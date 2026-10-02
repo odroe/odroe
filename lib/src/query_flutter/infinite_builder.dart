@@ -55,14 +55,16 @@ final class _InfiniteQueryBuilderState<TPage, TPageParam>
   @override
   void didUpdateWidget(InfiniteQueryBuilder<TPage, TPageParam> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _connect(
-      widget.client ?? QueryClientProvider.of(context),
-      force: !identical(oldWidget.options, widget.options),
-    );
+    final client = widget.client ?? QueryClientProvider.of(context);
+    if (!identical(client, _client)) {
+      _connect(client);
+    } else if (!identical(oldWidget.options, widget.options)) {
+      _observer!.setOptions(widget.options);
+    }
   }
 
-  void _connect(QueryClient client, {bool force = false}) {
-    if (!force && identical(client, _client) && _observer != null) return;
+  void _connect(QueryClient client) {
+    if (identical(client, _client) && _observer != null) return;
     _remove?.call();
     _observer?.dispose();
     _client = client;
