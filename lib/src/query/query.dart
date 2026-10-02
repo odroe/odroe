@@ -40,6 +40,7 @@ final class Query<T> {
   }) : options = options,
        _sourceOptions = sourceOptions,
        state = state ?? _initialState(options) {
+    _requireExactKeyType<T>(options.key);
     _initialStateValue = this.state;
     scheduleGc();
   }
@@ -61,12 +62,19 @@ final class Query<T> {
   final Set<QueryObserverHandle> _observers = <QueryObserverHandle>{};
   Timer? _gcTimer;
   Future<T>? _inFlight;
+  Future<T>? _hydrationPending;
   QueryCancellationController? _cancellation;
   int _fetchId = 0;
   bool _destroyed = false;
 
   /// The query's cache key.
-  QueryKey get key => options.key;
+  QueryKey<T> get key => options.key;
+
+  /// Exact data type stored by this query.
+  ///
+  /// Cache lookups compare this token because Dart generic classes are
+  /// covariant and an `is Query<T>` check can accept a wider requested type.
+  Type get dataType => T;
 
   /// The active fetch, if any.
   Future<T>? get promise => _inFlight;
@@ -99,10 +107,57 @@ final class Query<T> {
   /// Applies a new source definition to this cache entry.
   void setOptions(QueryOptions<T> value) {
     if (identical(_sourceOptions, value)) return;
+    _requireExactKeyType<T>(value.key);
     _sourceOptions = value;
     options = client.resolve(value);
     scheduleGc();
   }
+
+  Query<R> _adoptHydrated<R>(QueryOptions<R> sourceOptions) {
+    if (T != dynamic || options.query != null) {
+      throw StateError('Only an untyped hydration placeholder can be adopted.');
+    }
+    final restoredState = _castHydratedState<R>(state, sourceOptions.key);
+    final pending = _hydrationPending;
+    final transferPending = pending != null && isFetching;
+    final resolved = client.resolve(sourceOptions);
+    final adopted = Query<R>(
+      client: client,
+      cache: cache,
+      options: resolved,
+      sourceOptions: sourceOptions,
+      state: restoredState,
+    );
+
+    replaceQueryCacheEntry(cache, this, adopted);
+    if (transferPending) {
+      unawaited(
+        fetchHydratedQuery(
+          adopted,
+          pending,
+        ).then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+      );
+    }
+    return adopted;
+  }
+
+  void _setHydratedState(QueryState<dynamic> value) {
+    _setState(_castHydratedState<T>(value, key));
+  }
+
+  QueryState<R> _readHydratedState<R>(QueryKey<R> typedKey) {
+    if (T != dynamic || options.query != null) {
+      throw StateError('Only an untyped hydration placeholder can be read.');
+    }
+    return _castHydratedState<R>(state, typedKey);
+  }
+
+  Future<T> _fetchHydrated(Future<Object?> pending) => fetch(
+    cancelRefetch: false,
+    initialFuture: pending.then<T>(
+      (value) => _castHydratedValue<T>(value, key),
+    ),
+  );
 
   /// Attaches a reactive observer.
   void addObserver(QueryObserverHandle observer) {
@@ -214,6 +269,9 @@ final class Query<T> {
         StateError('No query function is registered for ${key.canonical}.'),
       );
     }
+    if (T == dynamic && fetchOptions.query == null && initialFuture != null) {
+      _hydrationPending = initialFuture;
+    }
 
     final fetchId = ++_fetchId;
     final previous = state;
@@ -245,6 +303,9 @@ final class Query<T> {
           if (identical(_inFlight, future)) {
             _inFlight = null;
             _cancellation = null;
+            if (identical(_hydrationPending, initialFuture)) {
+              _hydrationPending = null;
+            }
             scheduleGc();
           }
         });
@@ -300,7 +361,9 @@ final class Query<T> {
           rethrow;
         } on Object catch (error, stackTrace) {
           failureCount++;
-          final retry = options.retry.shouldRetry(failureCount, error);
+          final retry =
+              error is! _HydratedQueryTypeError &&
+              options.retry.shouldRetry(failureCount, error);
           if (!retry) {
             if (fetchId == _fetchId) {
               _setState(
@@ -456,6 +519,66 @@ final class Query<T> {
     _gcTimer?.cancel();
     _cancellation?.cancel(silent: true, revert: false);
     _observers.clear();
+  }
+}
+
+/// @nodoc
+Query<R> adoptHydratedQuery<R>(
+  Query<dynamic> query,
+  QueryOptions<R> sourceOptions,
+) => query._adoptHydrated(sourceOptions);
+
+/// @nodoc
+void setHydratedQueryState(Query<dynamic> query, QueryState<dynamic> state) =>
+    query._setHydratedState(state);
+
+/// @nodoc
+QueryState<R> readHydratedQueryState<R>(
+  Query<dynamic> query,
+  QueryKey<R> key,
+) => query._readHydratedState(key);
+
+/// @nodoc
+Future<T> fetchHydratedQuery<T>(Query<T> query, Future<Object?> pending) =>
+    query._fetchHydrated(pending);
+
+QueryState<R> _castHydratedState<R>(
+  QueryState<dynamic> state,
+  QueryKey<Object?> key,
+) => QueryState<R>(
+  status: state.status,
+  fetchStatus: state.fetchStatus,
+  hasData: state.hasData,
+  data: state.hasData ? _castHydratedValue<R>(state.data, key) : null,
+  dataUpdatedAt: state.dataUpdatedAt,
+  error: state.error,
+  errorStackTrace: state.errorStackTrace,
+  errorUpdatedAt: state.errorUpdatedAt,
+  dataUpdateCount: state.dataUpdateCount,
+  errorUpdateCount: state.errorUpdateCount,
+  fetchFailureCount: state.fetchFailureCount,
+  fetchFailureReason: state.fetchFailureReason,
+  isInvalidated: state.isInvalidated,
+  fetchMeta: state.fetchMeta,
+);
+
+R _castHydratedValue<R>(Object? value, QueryKey<Object?> key) {
+  if (value is R) return value;
+  throw _HydratedQueryTypeError(
+    'Hydrated data for ${key.canonical} has type ${value.runtimeType}, '
+    'not $R.',
+  );
+}
+
+final class _HydratedQueryTypeError extends StateError {
+  _HydratedQueryTypeError(super.message);
+}
+
+void _requireExactKeyType<T>(QueryKey<T> key) {
+  if (key.dataType != T) {
+    throw StateError(
+      'Query key ${key.canonical} has data type ${key.dataType}, not $T.',
+    );
   }
 }
 

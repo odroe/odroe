@@ -24,7 +24,7 @@ final class DehydratedQuery {
   });
 
   /// The query's cache key.
-  final QueryKey key;
+  final QueryKey<Object?> key;
 
   /// The serialized query state.
   final Map<String, Object?> state;
@@ -49,7 +49,7 @@ final class DehydratedQuery {
   /// Decodes a query from JSON-compatible data.
   factory DehydratedQuery.fromJson(Map<String, Object?> json) =>
       DehydratedQuery(
-        key: QueryKey.fromJson(json['key']),
+        key: QueryKey<Object?>.fromJson(json['key']),
         state: Map<String, Object?>.from(json['state']! as Map),
         dehydratedAt: DateTime.fromMillisecondsSinceEpoch(
           json['dehydratedAt']! as int,
@@ -71,7 +71,7 @@ final class DehydratedMutation {
   });
 
   /// The mutation key used to restore its options.
-  final QueryKey key;
+  final QueryKey<Object?> key;
 
   /// The serialized mutation state.
   final Map<String, Object?> state;
@@ -93,7 +93,7 @@ final class DehydratedMutation {
   /// Decodes a mutation from JSON-compatible data.
   factory DehydratedMutation.fromJson(Map<String, Object?> json) =>
       DehydratedMutation(
-        key: QueryKey.fromJson(json['key']),
+        key: QueryKey<Object?>.fromJson(json['key']),
         state: Map<String, Object?>.from(json['state']! as Map),
         scope: json['scope'] as String?,
         meta: json['meta'] == null
@@ -281,17 +281,19 @@ void hydrate(
     );
     final query =
         existing ??
-        client.restoreQuery<dynamic>(item.key, state, meta: item.meta);
-    if (existing != null) query.setState(state);
+        client.restoreQuery<dynamic>(
+          QueryKey<dynamic>(item.key.namespace, item.key.parts),
+          state,
+          meta: item.meta,
+        );
+    if (existing != null) setHydratedQueryState(query, state);
     final pending = item.pending;
     if (pending != null && existing?.isFetching != true) {
       unawaited(
-        query
-            .fetch(
-              cancelRefetch: false,
-              initialFuture: pending.then(deserializeData),
-            )
-            .then<void>((_) {}, onError: (_) {}),
+        fetchHydratedQuery(
+          query,
+          pending.then(deserializeData),
+        ).then<void>((_) {}, onError: (_) {}),
       );
     }
   }

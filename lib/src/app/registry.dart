@@ -1,5 +1,34 @@
 import 'binding.dart';
-import 'key.dart';
+
+/// A typed key for one value stored in an [AppContext].
+final class ContextKey<T extends Object> {
+  /// Creates a key with a human-readable [name].
+  ///
+  /// Keys use instance identity. Keep one key and reuse that exact instance
+  /// when providing and reading a value. The name is only for diagnostics.
+  ContextKey(this.name);
+
+  /// The name used in diagnostics.
+  final String name;
+
+  /// Stores [value] in [registry] under this key.
+  ///
+  /// A later module may deliberately replace a value registered earlier under
+  /// the same key instance.
+  void provide(ModuleRegistry registry, T value) {
+    registry._values[this] = value;
+  }
+
+  /// Stores a lazily created value in [registry] under this key.
+  ///
+  /// The factory runs once, when the application first reads the value.
+  void provideFactory(ModuleRegistry registry, T Function() create) {
+    registry._values[this] = _Factory<T>(create);
+  }
+
+  @override
+  String toString() => 'ContextKey<$T>($name)';
+}
 
 /// Collects values and platform bindings while modules are registered.
 final class ModuleRegistry {
@@ -8,23 +37,7 @@ final class ModuleRegistry {
 
   final Map<Object, Object> _values = <Object, Object>{};
   final List<ModuleBinding> _bindings = <ModuleBinding>[];
-
-  /// Stores [value] under [key].
-  ///
-  /// A later module may deliberately replace a value registered earlier.
-  void provide<T extends Object>(ContextKey<T> key, T value) {
-    _values[key] = value;
-  }
-
-  /// Stores a lazily created value under [key].
-  ///
-  /// The factory runs once, when the application first reads the value.
-  void provideFactory<T extends Object>(
-    ContextKey<T> key,
-    T Function() create,
-  ) {
-    _values[key] = _Factory<T>(create);
-  }
+  bool _lazyFactoriesSealed = false;
 
   /// Reads a value already registered under [key].
   T read<T extends Object>(ContextKey<T> key) {
@@ -33,6 +46,11 @@ final class ModuleRegistry {
       throw StateError('No value is registered for ${key.name}.');
     }
     if (value is _Factory<T>) {
+      if (_lazyFactoriesSealed) {
+        throw StateError(
+          'Cannot create ${key.name} while the application is disposing.',
+        );
+      }
       value = value.create();
       _values[key] = value;
     }
@@ -52,6 +70,14 @@ final class ModuleRegistry {
 
   /// Returns registered bindings assignable to [T], in registration order.
   Iterable<T> bindings<T extends ModuleBinding>() => _bindings.whereType<T>();
+
+  /// Prevents uninitialized lazy values from being created during disposal.
+  ///
+  /// Existing values remain readable so modules can release dependencies in
+  /// reverse order. This lifecycle hook is idempotent.
+  void sealLazyFactories() {
+    _lazyFactoriesSealed = true;
+  }
 }
 
 final class _Factory<T extends Object> {

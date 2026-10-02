@@ -1,0 +1,228 @@
+---
+title: Query workflows
+description: Build loading, error, retry, cancellation, invalidation, and handoff flows.
+order: 32
+language: en
+---
+# Query workflows
+
+Query is server-state coordination. It does not choose HTTP, RPC, SQL, local
+storage, persistence, or a widget tree for the application.
+
+## Name cache identity first
+
+```dart
+final QueryKey<InfiniteData<PostPage, int?>> listKey =
+    QueryKey<InfiniteData<PostPage, int?>>(
+      'posts.list',
+      <Object?>['newest'],
+    );
+final QueryKey<Post> detailKey =
+    QueryKey<Post>('posts.detail', <Object?>[42]);
+```
+
+Keys snapshot JSON-like parts, including nested lists and string-keyed maps.
+Prefer a small scalar identity. Use structured parts only when they really
+distinguish resources. A standalone key must name its data type; the same
+canonical value cannot hold a different exact type in one query cache. Mutation
+keys remain operation identities and do not bind mutation result types. The
+query data type is not serialized and does not change prefix matching.
+
+## Connect typed RPC with cancellation
+
+The full-stack product uses its generated record reference directly. Create the
+options once in the list widget's `State`, then replace them only when the sort
+input or captured RPC client actually changes:
+
+```dart
+late InfiniteQueryOptions<PostPage, int?> _listOptions;
+
+@override
+void initState() {
+  super.initState();
+  _listOptions = _createListOptions();
+}
+
+@override
+void didUpdateWidget(PostsPage oldWidget) {
+  super.didUpdateWidget(oldWidget);
+  if (oldWidget.sort != widget.sort ||
+      !identical(oldWidget.rpc, widget.rpc)) {
+    _listOptions = _createListOptions();
+  }
+}
+
+InfiniteQueryOptions<PostPage, int?> _createListOptions() {
+  final sort = widget.sort;
+  final rpc = widget.rpc;
+  return InfiniteQueryOptions<PostPage, int?>(
+    key: QueryKey<InfiniteData<PostPage, int?>>(
+      'posts.list',
+      <Object?>[EnumName(sort).name],
+    ),
+    initialPageParam: null,
+    getNextPageParam: (lastPage, _, _, _) => lastPage.nextCursor,
+    query: (page) => routes.listPosts(
+      rpc,
+      (
+        cursor: page.pageParam,
+        ids: const <int>[],
+        limit: 20,
+        sort: sort,
+      ),
+      cancelled: page.query.cancelToken.whenCancelled.then<void>((_) {}),
+    ),
+  );
+}
+```
+
+The widget owns `PostSort`; parse and normalize the URL/search string before
+constructing it. The RPC and server handler then receive an exhaustive enum,
+while `EnumName(sort).name` provides the source declaration name for the
+JSON-like Query key even if an enhanced enum defines its own `name` field.
+
+The database handler orders by unique ID, applies the strict cursor predicate,
+reads `limit + 1`, and returns at most `limit` items plus `nextCursor`. Infinite
+Query passes that cursor back as the next page parameter. Returning `null`
+means the server has no next page; the client never guesses from list length.
+
+Reading the nested query cancel token marks the page fetch as
+cancellation-aware. Removing the last observer or explicitly cancelling the
+query can then abort `HttpTransport`. RPC reports `RpcCancelledException`;
+Query keeps normal cancellation out of error state.
+
+## Render every useful state
+
+Keep stale data visible during a background refresh, but make an initial error
+actionable:
+
+```dart
+InfiniteQueryBuilder<PostPage, int?>(
+  options: _listOptions,
+  builder: (_, result, fetchNextPage, _) {
+    final query = result.query;
+    if (!query.hasData && query.isFetching) {
+      return const CircularProgressIndicator();
+    }
+    if (query.isError && !query.hasData) {
+      return FilledButton(
+        onPressed: () => client.invalidateQueries(
+          QueryFilter(key: _listOptions.key, exact: true),
+        ),
+        child: const Text('Retry'),
+      );
+    }
+    final posts = <Post>[
+      for (final page in query.requireData.pages) ...page.items,
+    ];
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: ListView(
+            children: <Widget>[
+              for (final post in posts) ListTile(title: Text(post.title)),
+            ],
+          ),
+        ),
+        if (result.hasNextPage)
+          FilledButton.tonal(
+            onPressed: result.isFetchingNextPage ? null : fetchNextPage,
+            child: const Text('Load more'),
+          ),
+      ],
+    );
+  },
+)
+```
+
+An exact filter targets only this resource. A prefix filter is appropriate
+after a mutation that invalidates a collection and its members together.
+
+`result.query` owns the ordinary loading, data, and error state. The outer
+result owns paging state such as `hasNextPage` and `isFetchingNextPage`. When a
+background refresh fails and cached pages still exist, keep them visible, mark
+them as stale, and provide a retry. Do not silently clear a successful mutation
+input while presenting an unchanged list as fresh server truth.
+
+## Keep mutations and queries separate
+
+Mutation results have their own cache, observers, retry policy, and scope. The
+starter sends `CreatePost` and receives the complete inserted `Post` from one
+typed `INSERT ... RETURNING` statement. The form widget's `State` owns one
+reusable mutation options instance:
+
+```dart
+final QueryKey<Object?> _postListsPrefix = QueryKey('posts.list');
+late MutationOptions<Post, CreatePost, void> _createOptions;
+
+@override
+void initState() {
+  super.initState();
+  _createOptions = _createMutationOptions();
+}
+
+@override
+void didUpdateWidget(CreatePostForm oldWidget) {
+  super.didUpdateWidget(oldWidget);
+  if (!identical(oldWidget.rpc, widget.rpc)) {
+    _createOptions = _createMutationOptions();
+  }
+}
+
+MutationOptions<Post, CreatePost, void> _createMutationOptions() {
+  final rpc = widget.rpc;
+  return MutationOptions<Post, CreatePost, void>(
+    key: QueryKey('posts.create'),
+    mutation: (input, _) => routes.createPost(rpc, input),
+    onSuccess: (_, _, _, mutation) => mutation.client.invalidateQueries(
+      QueryFilter(key: _postListsPrefix),
+    ),
+  );
+}
+
+@override
+Widget build(BuildContext context) =>
+    MutationBuilder<Post, CreatePost, void>(
+      options: _createOptions,
+      builder: (_, state, mutate, _) => FilledButton(
+        onPressed: state.isPending
+            ? null
+            : () => mutate((title: titleController.text)),
+        child: Text(state.isPending ? 'Creating…' : 'Create'),
+      ),
+    );
+```
+
+Options identity belongs to the observer lifecycle. Recreating query options
+inside `build` reconfigures the query observer and may refetch stale data.
+Mutation options update the definition used by the next execution while an
+active execution and its state stay attached. Reuse stored instances for
+unrelated rebuilds; replace them only when a real input, captured client, or
+operation policy changes.
+
+The prefix filter uses `_postListsPrefix` to invalidate every sorted post list
+while leaving unrelated resources alone. The UI disables duplicate submission,
+waits for invalidation, and clears the input only after success. It does not
+optimistically invent a database ID.
+
+After any successful side effect, invalidate only the queries whose server
+truth may have changed. Cache removal cannot interrupt a mutation Future that
+already started and cannot roll back its side effects.
+
+When offline retry is enabled, a paused mutation waits for the online manager.
+`QueryClient.clear()` cancels a mutation before its next attempt and releases
+listeners, but still does not revoke completed external work.
+
+## Share initial server state deliberately
+
+When Query and Document are installed for one server request, Document can
+serialize completed and pending Query values into the handoff. Flutter restores
+them before taking over. Use the same `Serializer` adapter set on the server,
+`RpcModule`, and `DocumentModule`; a custom wire tag available on only one side
+is rejected.
+
+Persistence is another explicit adapter. Installing Query never silently
+writes cache state to disk.
+
+See [Query](/docs/concepts/query) for the complete lifecycle and
+[Server and RPC](/docs/concepts/server-rpc) for the transport boundary.

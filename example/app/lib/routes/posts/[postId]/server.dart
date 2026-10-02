@@ -1,25 +1,21 @@
+import 'package:odroe/database.dart';
 import 'package:odroe/router.dart';
-import 'package:odroe/rpc.dart';
 import 'package:odroe/server.dart';
 
-import '../../../models.dart' as models;
+import '../../../posts.dart' as models;
+import '../../../posts_database.dart';
 import 'route.dart' as definition;
 
 final route = definition.route.server(load: (context) => const NoData());
 
-final readTitle = ServerFunction<int, String>(
+final readPost = ServerFunction<int, models.Post>(
+  id: 'posts.read',
   method: HttpMethod.get,
-  handler: (context) => 'Post ${context.data}',
-);
-
-final watchViews = ServerFunction<NoServerInput, Stream<int>>(
-  handler: (_) => Stream<int>.fromIterable(const <int>[1, 2, 3]),
-);
-
-final doubleValues = ServerFunction<List<int>, List<int>>(
-  handler: (context) => context.data.map((value) => value * 2).toList(),
-);
-
-final normalizePost = ServerFunction<models.PostId, models.PostId>(
-  handler: (context) => models.PostId(context.data.value.abs()),
+  handler: (context) async {
+    final post = await postQueries
+        .selectTable(posts, where: posts.id.equals(context.data))
+        .oneOrNull(context.request.read(databaseKey));
+    if (post == null) throw const NotFound('Post not found.');
+    return post;
+  },
 );

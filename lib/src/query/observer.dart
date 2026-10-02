@@ -152,11 +152,16 @@ final class QueryObserver<T> implements QueryObserverHandle {
 
   /// Fetches the query and returns the resulting state projection.
   Future<QueryResult<T>> refetch({bool cancelRefetch = true}) async {
+    if (_listeners.isEmpty) {
+      _query = client.query(_options);
+      _resolved = _query.options;
+    }
     try {
       await _query.fetch(options: _resolved, cancelRefetch: cancelRefetch);
     } on Object {
       // The returned result carries the error state.
     }
+    _updateResult();
     return _result;
   }
 
@@ -235,9 +240,12 @@ final class QueryObserver<T> implements QueryObserverHandle {
 
   void _poll() {
     if (_listeners.isEmpty || !enabled) return;
-    if (_resolved.refetchInBackground || client.focusManager.isFocused) {
+    if ((_resolved.refetchInBackground || client.focusManager.isFocused) &&
+        !_query.isFetching) {
       unawaited(
-        _query.fetch(options: _resolved).then<void>((_) {}, onError: (_) {}),
+        _query
+            .fetch(options: _resolved, cancelRefetch: false)
+            .then<void>((_) {}, onError: (_) {}),
       );
     }
     _updateTimers();

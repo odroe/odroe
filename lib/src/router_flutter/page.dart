@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart' as flutter show PageRoute;
 
 import '../app/binding.dart';
 import '../app/context.dart';
-import '../app/key.dart';
+import '../app/registry.dart';
 import '../router/codec.dart';
 import '../router/load.dart';
 import '../router/match.dart';

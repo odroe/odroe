@@ -2,18 +2,18 @@
 
 import 'package:odroe/router.dart';
 import 'package:odroe/rpc.dart';
-import 'models.dart' as posts_post_id_models_type;
-import 'routes/page.dart' as root_page;
-import 'routes/shell.dart' as root_shell;
-import 'routes/(account)/settings/page.dart' as account_settings_page;
-import 'routes/(marketing)/pricing/page.dart' as marketing_pricing_page;
-import 'routes/about/route.dart' as about_definition;
-import 'routes/docs/[...slug]/route.dart' as docs_rest_slug_definition;
-import 'routes/docs/[...slug]/page.dart' as docs_rest_slug_page;
-import 'routes/posts/route.dart' as posts_definition;
-import 'routes/posts/page.dart' as posts_page;
-import 'routes/posts/[postId]/route.dart' as posts_post_id_definition;
-import 'routes/posts/[postId]/page.dart' as posts_post_id_page;
+import "posts.dart" as posts_models_type;
+import "routes/page.dart" as root_page;
+import "routes/shell.dart" as root_shell;
+import "routes/(account)/settings/page.dart" as account_settings_page;
+import "routes/(marketing)/pricing/page.dart" as marketing_pricing_page;
+import "routes/about/route.dart" as about_definition;
+import "routes/docs/[...slug]/route.dart" as docs_rest_slug_definition;
+import "routes/docs/[...slug]/page.dart" as docs_rest_slug_page;
+import "routes/posts/route.dart" as posts_definition;
+import "routes/posts/page.dart" as posts_page;
+import "routes/posts/[postId]/route.dart" as posts_post_id_definition;
+import "routes/posts/[postId]/page.dart" as posts_post_id_page;
 
 final _routePostsPostId = posts_post_id_page.route.compiled(
   path: ":postId",
@@ -223,6 +223,89 @@ final class AppPostsRoutes {
   /// Routes below filesystem route "/posts/[postId]".
   final AppPostsPostIdRoutes postId = const AppPostsPostIdRoutes();
 
+  static Object? _encodelistPosts(posts_models_type.ListPostsInput value) =>
+      <String, Object?>{
+        "cursor": value.cursor,
+        "ids": value.ids,
+        "limit": value.limit,
+        "sort": EnumName(value.sort).name,
+      };
+
+  static posts_models_type.PostPage _decodelistPosts(Object? value) =>
+      ((Map<String, Object?> record) {
+        if (record.length != 2 ||
+            !record.containsKey("items") ||
+            !record.containsKey("nextCursor")) {
+          throw FormatException(
+            "Expected models.PostPage fields: items, nextCursor",
+          );
+        }
+        return (
+          items: (record["items"] as List)
+              .map(
+                (item) => ((Map<String, Object?> record) {
+                  if (record.length != 2 ||
+                      !record.containsKey("id") ||
+                      !record.containsKey("title")) {
+                    throw FormatException(
+                      "Expected models.Post fields: id, title",
+                    );
+                  }
+                  return (
+                    id: record["id"] as int,
+                    title: record["title"] as String,
+                  );
+                })(item as Map<String, Object?>),
+              )
+              .toList(growable: false),
+          nextCursor: (record["nextCursor"] == null
+              ? null
+              : record["nextCursor"] as int),
+        );
+      })(value as Map<String, Object?>);
+
+  /// Calls `listPosts` on the application server.
+  ServerFunctionRef<
+    posts_models_type.ListPostsInput,
+    posts_models_type.PostPage
+  >
+  get listPosts =>
+      const ServerFunctionRef<
+        posts_models_type.ListPostsInput,
+        posts_models_type.PostPage
+      >(
+        id: "posts.list",
+        method: HttpMethod.get,
+        encodeInput: _encodelistPosts,
+        decodeOutput: _decodelistPosts,
+      );
+
+  static Object? _encodecreatePost(posts_models_type.CreatePost value) =>
+      <String, Object?>{"title": value.title};
+
+  static posts_models_type.Post _decodecreatePost(Object? value) =>
+      ((Map<String, Object?> record) {
+        if (record.length != 2 ||
+            !record.containsKey("id") ||
+            !record.containsKey("title")) {
+          throw FormatException("Expected models.Post fields: id, title");
+        }
+        return (id: record["id"] as int, title: record["title"] as String);
+      })(value as Map<String, Object?>);
+
+  /// Calls `createPost` on the application server.
+  ServerFunctionRef<posts_models_type.CreatePost, posts_models_type.Post>
+  get createPost =>
+      const ServerFunctionRef<
+        posts_models_type.CreatePost,
+        posts_models_type.Post
+      >(
+        id: "posts.create",
+        method: HttpMethod.post,
+        encodeInput: _encodecreatePost,
+        decodeOutput: _decodecreatePost,
+      );
+
   /// Builds a destination for this route.
   Destination to({posts_definition.Search? search}) {
     return _routeRoot.ref().then(_routePosts.ref(search: search)).destination;
@@ -234,41 +317,22 @@ final class AppPostsPostIdRoutes {
   /// Creates a stateless route reference group.
   const AppPostsPostIdRoutes();
 
-  /// Calls `readTitle` on the application server.
-  ServerFunctionRef<int, String> get readTitle =>
-      const ServerFunctionRef<int, String>(
-        id: "lib/routes/posts/[postId]/server.dart#readTitle",
+  static posts_models_type.Post _decodereadPost(Object? value) =>
+      ((Map<String, Object?> record) {
+        if (record.length != 2 ||
+            !record.containsKey("id") ||
+            !record.containsKey("title")) {
+          throw FormatException("Expected models.Post fields: id, title");
+        }
+        return (id: record["id"] as int, title: record["title"] as String);
+      })(value as Map<String, Object?>);
+
+  /// Calls `readPost` on the application server.
+  ServerFunctionRef<int, posts_models_type.Post> get readPost =>
+      const ServerFunctionRef<int, posts_models_type.Post>(
+        id: "posts.read",
         method: HttpMethod.get,
-      );
-
-  /// Calls `watchViews` on the application server.
-  ServerStreamFunctionRef<NoServerInput, int> get watchViews =>
-      const ServerStreamFunctionRef<NoServerInput, int>(
-        id: "lib/routes/posts/[postId]/server.dart#watchViews",
-        method: HttpMethod.post,
-      );
-
-  /// Calls `doubleValues` on the application server.
-  ServerFunctionRef<List<int>, List<int>> get doubleValues =>
-      ServerFunctionRef<List<int>, List<int>>(
-        id: "lib/routes/posts/[postId]/server.dart#doubleValues",
-        method: HttpMethod.post,
-        decodeOutput: (value) =>
-            (value as List).map((item) => item as int).toList(growable: false),
-      );
-
-  /// Calls `normalizePost` on the application server.
-  ServerFunctionRef<
-    posts_post_id_models_type.PostId,
-    posts_post_id_models_type.PostId
-  >
-  get normalizePost =>
-      const ServerFunctionRef<
-        posts_post_id_models_type.PostId,
-        posts_post_id_models_type.PostId
-      >(
-        id: "lib/routes/posts/[postId]/server.dart#normalizePost",
-        method: HttpMethod.post,
+        decodeOutput: _decodereadPost,
       );
 
   /// Builds a destination for this route.

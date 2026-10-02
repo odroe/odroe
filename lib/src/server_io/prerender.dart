@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
+import '../filesystem_case.dart';
+
 /// One successfully generated route.
 final class PrerenderedRoute {
   /// Describes a generated route and its output file.
@@ -33,35 +35,114 @@ final class Prerenderer {
   /// Creates a prerenderer, optionally reusing [client].
   Prerenderer({HttpClient? client}) : _client = client;
 
+  /// Default number of concurrent route requests.
+  static const int defaultConcurrency = 4;
+
+  /// Default maximum number of explicit and discovered routes.
+  static const int defaultMaxRoutes = 1000;
+
+  /// Default maximum HTML response size for one route.
+  static const int defaultMaxResponseBytes = 1024 * 1024;
+
   final HttpClient? _client;
 
   /// Renders [routes] from [origin] into [output].
+  ///
+  /// Explicit routes must be same-origin absolute paths without queries.
+  /// Link crawling is opt-in. [maxRoutes] and [maxResponseBytes] bound work
+  /// regardless of whether routes are explicit or discovered.
   Future<List<PrerenderedRoute>> render({
     required Uri origin,
     required Iterable<String> routes,
     required Directory output,
-    int concurrency = 4,
-    bool crawlLinks = true,
+    int concurrency = defaultConcurrency,
+    bool crawlLinks = false,
+    int maxRoutes = defaultMaxRoutes,
+    int maxResponseBytes = defaultMaxResponseBytes,
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    final client = _client ?? HttpClient();
-    output.createSync(recursive: true);
+    if (concurrency < 1) {
+      throw ArgumentError.value(
+        concurrency,
+        'concurrency',
+        'Must be at least 1.',
+      );
+    }
+    if (maxRoutes < 1) {
+      throw ArgumentError.value(maxRoutes, 'maxRoutes', 'Must be at least 1.');
+    }
+    if (maxResponseBytes < 1) {
+      throw ArgumentError.value(
+        maxResponseBytes,
+        'maxResponseBytes',
+        'Must be at least 1.',
+      );
+    }
     final root = output.absolute;
+    final ignoreCase = usesCaseInsensitivePaths(root.path);
+    final client = _client ?? HttpClient();
     final queue = <Uri>[];
     final seen = <String>{};
-    void enqueue(Uri uri) {
+    final outputRoutes = <String, String>{};
+    void enqueue(Uri uri, {bool explicit = false}) {
+      if (explicit &&
+          (!uri.hasAbsolutePath ||
+              uri.hasScheme ||
+              uri.hasAuthority ||
+              uri.hasQuery ||
+              uri.hasFragment ||
+              uri.pathSegments.any(
+                (segment) => segment == '.' || segment == '..',
+              ))) {
+        throw ArgumentError.value(
+          uri,
+          'routes',
+          'Must be an absolute local path without query or fragment.',
+        );
+      }
       final normalized = _localRoute(origin, uri);
-      if (normalized == null || !seen.add(normalized.toString())) return;
+      if (normalized == null) {
+        if (explicit) {
+          throw ArgumentError.value(
+            uri,
+            'routes',
+            'Must be an absolute local path without query or fragment.',
+          );
+        }
+        return;
+      }
+      final route = normalized.toString();
+      if (seen.contains(route)) return;
+      if (seen.length >= maxRoutes) {
+        throw StateError(
+          'Prerender route limit of $maxRoutes exceeded while adding "$route".',
+        );
+      }
+      seen.add(route);
+      final file = _outputFile(root, normalized);
+      final relative = p.relative(file.path, from: root.path);
+      final normalizedPath = p.normalize(relative);
+      final outputKey = ignoreCase
+          ? normalizedPath.toLowerCase()
+          : normalizedPath;
+      final existing = outputRoutes[outputKey];
+      if (existing != null) {
+        throw StateError(
+          'Prerender routes "$existing" and "$route" both write "$relative".',
+        );
+      }
+      outputRoutes[outputKey] = route;
       queue.add(normalized);
     }
 
-    for (final route in routes) {
-      enqueue(Uri.parse(route));
-    }
     final generated = <PrerenderedRoute>[];
     var index = 0;
 
     try {
+      for (final route in routes) {
+        enqueue(Uri.parse(route), explicit: true);
+      }
+      output.createSync(recursive: true);
       while (index < queue.length) {
         final end = queue.length;
         Future<void> worker() async {
@@ -73,6 +154,7 @@ final class Prerenderer {
               route: route,
               output: root,
               crawlLinks: crawlLinks,
+              maxResponseBytes: maxResponseBytes,
               timeout: timeout,
               enqueue: enqueue,
             );
@@ -80,8 +162,10 @@ final class Prerenderer {
           }
         }
 
+        final remaining = end - index;
+        final workerCount = concurrency < remaining ? concurrency : remaining;
         final workers = List<Future<void>>.generate(
-          concurrency,
+          workerCount,
           (_) => worker(),
         );
         if (workers.isEmpty) break;
@@ -100,6 +184,7 @@ final class Prerenderer {
     required Uri route,
     required Directory output,
     required bool crawlLinks,
+    required int maxResponseBytes,
     required Duration timeout,
     required void Function(Uri) enqueue,
   }) async {
@@ -110,13 +195,23 @@ final class Prerenderer {
       ..followRedirects = false
       ..headers.set(HttpHeaders.acceptHeader, 'text/html')
       ..headers.set('x-odroe-prerender', 'true');
-    final response = await request.close().timeout(timeout);
+    final response = await request.close().timeout(
+      timeout,
+      onTimeout: () {
+        final error = TimeoutException(
+          'Prerender response headers timed out.',
+          timeout,
+        );
+        request.abort(error);
+        throw error;
+      },
+    );
     late final List<int> bytes;
     final status = response.statusCode;
     final generatedRedirect = _redirectStatuses.contains(status);
     if (generatedRedirect) {
-      await response.drain<void>();
       final location = response.headers.value(HttpHeaders.locationHeader);
+      await response.listen(null).cancel();
       if (location == null) {
         throw HttpException('Redirect has no location.', uri: target);
       }
@@ -135,25 +230,31 @@ final class Prerenderer {
         '</head></html>',
       );
     } else {
-      final body = await response
-          .fold<BytesBuilder>(
-            BytesBuilder(copy: false),
-            (builder, chunk) => builder..add(chunk),
-          )
-          .timeout(timeout);
-      bytes = body.takeBytes();
+      final contentType = response.headers.contentType?.mimeType;
+      String? rejection;
       if (status != HttpStatus.ok) {
-        throw HttpException(
-          'Route returned $status ${response.reasonPhrase}.',
-          uri: target,
-        );
+        rejection = 'Route returned $status ${response.reasonPhrase}.';
+      } else if (contentType != ContentType.html.mimeType) {
+        rejection =
+            'Expected text/html but received '
+            '${contentType ?? 'no content type'}.';
+      } else if (response.contentLength > maxResponseBytes) {
+        rejection = 'Route exceeds the $maxResponseBytes byte prerender limit.';
       }
+      if (rejection != null) {
+        await response.listen(null).cancel();
+        throw HttpException(rejection, uri: target);
+      }
+      bytes = await _readBody(
+        response,
+        target: target,
+        maxBytes: maxResponseBytes,
+        timeout: timeout,
+      );
     }
-
-    final contentType = response.headers.contentType?.mimeType;
-    if (!generatedRedirect && contentType != ContentType.html.mimeType) {
+    if (bytes.length > maxResponseBytes) {
       throw HttpException(
-        'Expected text/html but received ${contentType ?? 'no content type'}.',
+        'Route exceeds the $maxResponseBytes byte prerender limit.',
         uri: target,
       );
     }
@@ -164,7 +265,9 @@ final class Prerenderer {
     if (crawlLinks) {
       final html = utf8.decode(bytes, allowMalformed: true);
       for (final link in _extractLinks(html)) {
-        enqueue(route.resolveUri(link));
+        final discovered = route.resolveUri(link);
+        final extension = p.extension(discovered.path).toLowerCase();
+        if (extension.isEmpty || extension == '.html') enqueue(discovered);
       }
     }
     started.stop();
@@ -185,16 +288,15 @@ final class Prerenderer {
         absolute.query.isNotEmpty) {
       return null;
     }
-    final path = absolute.path.length > 1 && absolute.path.endsWith('/')
-        ? absolute.path.substring(0, absolute.path.length - 1)
-        : absolute.path;
+    var path = absolute.path;
+    while (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
     final route = Uri(path: path);
     if (!route.hasAbsolutePath ||
         route.pathSegments.any((segment) => segment == '..')) {
       return null;
     }
-    final extension = p.extension(route.path).toLowerCase();
-    if (extension.isNotEmpty && extension != '.html') return null;
     return route;
   }
 
@@ -227,6 +329,42 @@ final class Prerenderer {
 
   static String _attribute(String value) =>
       const HtmlEscape(HtmlEscapeMode.attribute).convert(value);
+}
+
+Future<List<int>> _readBody(
+  HttpClientResponse response, {
+  required Uri target,
+  required int maxBytes,
+  required Duration timeout,
+}) async {
+  final body = BytesBuilder(copy: false);
+  final chunks = StreamIterator<List<int>>(response);
+  final elapsed = Stopwatch()..start();
+  try {
+    while (true) {
+      final remaining = timeout - elapsed.elapsed;
+      if (remaining <= Duration.zero) {
+        throw TimeoutException('Prerender response timed out.', timeout);
+      }
+      final available = await chunks.moveNext().timeout(
+        remaining,
+        onTimeout: () {
+          throw TimeoutException('Prerender response timed out.', timeout);
+        },
+      );
+      if (!available) return body.takeBytes();
+      final chunk = chunks.current;
+      if (body.length + chunk.length > maxBytes) {
+        throw HttpException(
+          'Route exceeds the $maxBytes byte prerender limit.',
+          uri: target,
+        );
+      }
+      body.add(chunk);
+    }
+  } finally {
+    await chunks.cancel();
+  }
 }
 
 const Set<int> _redirectStatuses = <int>{301, 302, 303, 307, 308};

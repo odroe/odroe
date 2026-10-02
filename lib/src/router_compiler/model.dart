@@ -302,7 +302,7 @@ final class RouteNode {
         .replaceAll(']', '')
         .replaceAll('(', '')
         .replaceAll(')', '')
-        .split(RegExp(r'[-_]'))
+        .split(RegExp(r'[^A-Za-z0-9]+'))
         .where((part) => part.isNotEmpty)
         .map(_upperFirst)
         .join();
@@ -347,6 +347,7 @@ final class RouteNode {
     'for',
     'Function',
     'get',
+    'hashCode',
     'hide',
     'if',
     'implements',
@@ -358,6 +359,7 @@ final class RouteNode {
     'library',
     'mixin',
     'new',
+    'noSuchMethod',
     'null',
     'of',
     'on',
@@ -366,6 +368,7 @@ final class RouteNode {
     'required',
     'rethrow',
     'return',
+    'runtimeType',
     'sealed',
     'set',
     'show',
@@ -386,6 +389,7 @@ final class RouteNode {
     'with',
     'yield',
     'to',
+    'toString',
     'routes',
     'routeTree',
   };
@@ -414,14 +418,20 @@ final class ServerFunctionDeclaration {
   /// Creates a server-function declaration.
   const ServerFunctionDeclaration({
     required this.name,
+    required this.wireId,
     required this.inputType,
     required this.outputType,
     required this.streamType,
     required this.method,
+    required this.inputWireShape,
+    required this.outputWireShape,
   });
 
   /// Top-level variable name.
   final String name;
+
+  /// Stable identifier emitted into the client and server wire manifests.
+  final String wireId;
 
   /// Client-visible input type.
   final String inputType;
@@ -434,18 +444,138 @@ final class ServerFunctionDeclaration {
 
   /// Generated HTTP method expression.
   final String method;
+
+  /// Resolved input shape used to generate client and server wire codecs.
+  final WireShape inputWireShape;
+
+  /// Resolved output, or stream-item, shape used to generate wire codecs.
+  final WireShape outputWireShape;
+}
+
+/// A recursively resolved server-function wire type.
+sealed class WireShape {
+  /// Creates a wire shape.
+  const WireShape({required this.source, required this.nullable});
+
+  /// Dart source as written from the declaring `server.dart` library.
+  final String source;
+
+  /// Whether the complete value may be `null`.
+  final bool nullable;
+}
+
+/// A scalar or adapter-owned nominal wire value.
+final class WireValueShape extends WireShape {
+  /// Creates a scalar wire shape.
+  const WireValueShape({required super.source, required super.nullable});
+}
+
+/// A project-local enum transported by its stable declaration name.
+final class WireEnumShape extends WireShape {
+  /// Creates an enum wire shape.
+  const WireEnumShape({
+    required super.source,
+    required super.nullable,
+    required this.enumSource,
+  });
+
+  /// Concrete enum declaration used to access `values.byName`.
+  ///
+  /// This may differ from [source] when a non-generic typedef aliases the enum.
+  final String enumSource;
+}
+
+/// Supported JSON collection shapes.
+enum WireCollectionKind {
+  /// A Dart `List` encoded as a JSON array.
+  list,
+
+  /// A Dart `Set` encoded as a JSON array.
+  set,
+
+  /// A Dart `Iterable` encoded as a JSON array.
+  iterable,
+
+  /// A `Map<String, T>` encoded as a JSON object.
+  map,
+}
+
+/// A recursively typed collection wire value.
+final class WireCollectionShape extends WireShape {
+  /// Creates a collection wire shape.
+  const WireCollectionShape({
+    required super.source,
+    required super.nullable,
+    required this.kind,
+    required this.value,
+  });
+
+  /// Collection kind.
+  final WireCollectionKind kind;
+
+  /// Element or map-value shape.
+  final WireShape value;
+}
+
+/// A project-local named-record typedef transported as a JSON object.
+final class WireRecordShape extends WireShape {
+  /// Creates a named-record wire shape.
+  const WireRecordShape({
+    required super.source,
+    required super.nullable,
+    required this.fields,
+  });
+
+  /// Record fields in declaration order.
+  final List<WireRecordField> fields;
+}
+
+/// One field in a named-record wire shape.
+final class WireRecordField {
+  /// Creates a record field.
+  const WireRecordField({required this.name, required this.shape});
+
+  /// Stable JSON object key and Dart record field name.
+  final String name;
+
+  /// Recursively resolved field shape.
+  final WireShape shape;
 }
 
 /// An import declared by a route's `server.dart`.
 final class ServerImport {
   /// Creates an import description.
-  const ServerImport({required this.uri, required this.prefix});
+  const ServerImport({
+    required this.uri,
+    required this.prefix,
+    this.deferred = false,
+    this.conditional = false,
+    this.shownNames,
+    this.hiddenNames = const <String>{},
+  });
 
   /// Import URI.
   final String uri;
 
   /// Optional source prefix.
   final String? prefix;
+
+  /// Whether the source import is deferred.
+  final bool deferred;
+
+  /// Whether the source URI changes through an `if` configuration.
+  final bool conditional;
+
+  /// Names explicitly exposed by `show`, or `null` when all are exposed.
+  final Set<String>? shownNames;
+
+  /// Names removed by `hide`.
+  final Set<String> hiddenNames;
+
+  /// Whether this import exposes [name].
+  bool exposes(String name) =>
+      (shownNames == null || shownNames!.contains(name)) &&
+      !hiddenNames.contains(name);
 }
 
 /// Parsed type and capability declarations from `route.dart`.

@@ -1,0 +1,91 @@
+---
+title: Support and limits
+description: Current support status, known boundaries, diagnostics, and useful issue evidence.
+order: 42
+language: en
+---
+# Support and limits
+
+Odroe is evolving in public. The source tree contains the contract suites below;
+run them on the revision and platform you intend to use. “Preview” means the
+API is usable but the deployment or provider boundary remains narrow. The
+presence of a test is not evidence that it passed on every platform.
+
+## Current status
+
+| Surface | Status | Evidence boundary |
+| --- | --- | --- |
+| Flutter Web | Verified locally | Build, semantic handoff, Query/RPC application |
+| Flutter Android and iOS | Requires separate validation | This integration does not repeat APK or iOS builds; no signing, device, or store-release evidence |
+| Native server | Verified locally | Real socket, static files, streaming, shutdown |
+| Typed RPC records and enums | Verified | Four-way codecs; nested collections, aliases, nullable values, streams, malformed payloads; VM, Native AOT, and Dart2JS execution |
+| SQLite | Verified | CRUD, returning rows, batches, transactions, append-only migrations |
+| PostgreSQL | Verified | Real single connection, pool concurrency, transactions |
+| MySQL/MariaDB | Preview | Real provider tests require an explicitly configured disposable MySQL/MariaDB database; unit tests alone do not verify either provider |
+| Cloudflare Worker + D1 | Preview | Compiled Worker, local Workerd/D1 suite, transient-error classification |
+| Remote Cloudflare deploy | Not claimed | Deployment remains application-owned |
+
+## Deliberate boundaries
+
+- application composition can use one `odroe_flutter.dart` import, while
+  runtime-specific source still uses narrow entrypoints to keep IO, FFI, and
+  JavaScript interop out of the wrong reachable program;
+- Odroe's database layer is typed SQL with a focused native SQLite SQL runner,
+  not a full ORM or cross-provider migration framework;
+- MySQL/MariaDB exposes an owned lazy pool with an explicit connection ceiling,
+  bounded pending queue, and queue timeout, but has no portable `RETURNING` or
+  conflict-target insert contract. Saturation is `SqlErrorCode.unavailable`;
+  the pool does not retry writes or promise one session across top-level calls;
+- multi-row inserts are one statement and are not auto-chunked; callers must
+  respect provider bind limits. MySQL has no `RETURNING`, and other providers
+  do not guarantee that returned rows follow input order;
+- D1 exposes atomic batches, not an interactive transaction callback;
+- there is no streaming database query surface yet; drivers materialize result
+  sets, while typed single-row selects cap the SQL result at two rows;
+- browser RPC is same-origin; native apps must provide an explicit HTTP(S)
+  origin;
+- generated record and enum codecs require a project-local, prefixed source
+  with the typedef or enum declared directly in it. Records must be
+  non-generic and named-field-only; dependency enums, indirect declarations,
+  nominal classes, and values hidden by `Object` or `dynamic` use an explicit
+  `SerializationAdapter`;
+- local tests do not imply a remote deployment, signed mobile release, DNS
+  change, certificate result, or production database migration.
+
+## First diagnostics
+
+```sh
+dart run odroe generate
+dart analyze --fatal-infos
+dart test
+```
+
+For a generated project, confirm that `.dart_tool/package_config.json` resolves
+`odroe` to the checkout you intend to run. `init` intentionally refuses a
+transitive dependency, custom Dart source, conflicting configuration, or a
+symbolic-link target.
+
+For native RPC, confirm `ODROE_RPC_ORIGIN` is an absolute HTTP(S) origin with no
+path, query, fragment, or credentials. For local D1, run the locked sequence in
+[First product](/docs/getting-started) and keep every Wrangler command local.
+
+For a Query type conflict, find every definition using the reported canonical
+key. They must share the same exact `QueryKey<T>` data type; do not widen or cast
+a typed key to bypass the check. Give keys stored outside `QueryOptions<T>` an
+explicit type, and use `QueryKey<Object?>` only for prefix matching.
+
+## Report an actionable issue
+
+Include:
+
+- Odroe commit or package version and the imported entrypoint;
+- Dart, Flutter, operating system, Node, npm, and provider versions that matter;
+- the smallest route/function/schema that reproduces the problem;
+- exact command, exit code, and complete first error;
+- whether the failure is analyzer, unit test, native socket, browser, Workerd,
+  real database, or remote provider evidence;
+- generated target diff only when generation changed unexpectedly.
+
+Do not publish credentials, connection strings, access tokens, private request
+bodies, or production data. Open a focused report in the
+[Odroe issue tracker](https://github.com/odroe/odroe/issues).

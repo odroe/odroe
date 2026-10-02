@@ -23,6 +23,15 @@ enum MutationCacheEventType {
   observerRemoved,
 }
 
+/// Raised when a cached mutation is destroyed before its next attempt starts.
+final class MutationCancelledException implements Exception {
+  /// Creates a mutation cancellation result.
+  const MutationCancelledException();
+
+  @override
+  String toString() => 'MutationCancelledException';
+}
+
 /// One mutation cache change.
 final class MutationCacheEvent {
   /// Creates a cache event for [mutation].
@@ -102,9 +111,12 @@ final class MutationCache {
 
   /// Whether [mutation] is first in its serial scope.
   bool canRun(Mutation<dynamic, dynamic, dynamic> mutation) {
+    if (mutation._destroyed) return false;
     final scope = mutation.options.scope;
     if (scope == null) return true;
-    for (final pending in _scopes[scope]!) {
+    final scoped = _scopes[scope];
+    if (scoped == null) return false;
+    for (final pending in scoped) {
       if (pending.state.isPending) return identical(pending, mutation);
     }
     return true;
@@ -144,10 +156,14 @@ final class MutationCache {
     Mutation<dynamic, dynamic, dynamic> mutation,
   ) async {
     bool ready() =>
-        canRun(mutation) &&
-        (mutation.options.networkMode != QueryNetworkMode.online ||
-            client.onlineManager.isOnline);
-    if (ready()) return;
+        mutation._destroyed ||
+        (canRun(mutation) &&
+            (mutation.options.networkMode != QueryNetworkMode.online ||
+                client.onlineManager.isOnline));
+    if (ready()) {
+      if (mutation._destroyed) throw const MutationCancelledException();
+      return;
+    }
     final completer = Completer<void>();
     void check([Object? _]) {
       if (ready() && !completer.isCompleted) completer.complete();
@@ -156,7 +172,11 @@ final class MutationCache {
     final removeCache = subscribe((_) => check());
     final removeOnline = client.onlineManager.subscribe(check);
     try {
-      await completer.future;
+      await Future.any<void>(<Future<void>>[
+        completer.future,
+        mutation._whenDestroyed,
+      ]);
+      if (mutation._destroyed) throw const MutationCancelledException();
     } finally {
       removeCache();
       removeOnline();
@@ -215,9 +235,18 @@ final class Mutation<TData, TVariables, TOptimistic> {
   Timer? _gcTimer;
   Future<TData>? _future;
   bool _destroyed = false;
+  Completer<void>? _destroyedCompleter;
+
+  Future<void> get _whenDestroyed {
+    if (_destroyed) return Future<void>.value();
+    return (_destroyedCompleter ??= Completer<void>()).future;
+  }
 
   /// Starts execution or returns the active execution.
   Future<TData> execute(TVariables variables) {
+    if (_destroyed) {
+      return Future<TData>.error(const MutationCancelledException());
+    }
     final active = _future;
     if (active != null) return active;
     final execution = _execute(variables, restored: state.isPending);
@@ -490,7 +519,9 @@ final class Mutation<TData, TVariables, TOptimistic> {
 
   /// Stops timers and releases observers.
   void destroy() {
+    if (_destroyed) return;
     _destroyed = true;
+    _destroyedCompleter?.complete();
     _gcTimer?.cancel();
     _observers.clear();
   }

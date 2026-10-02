@@ -1,0 +1,56 @@
+---
+title: Content and documents
+description: Produce semantic HTML, static pages, and typed MDC content.
+order: 25
+language: en
+---
+# Content and documents
+
+Document is an optional platform-neutral binding owned by `route.dart`. It
+merges route-owned metadata and HTML trees, then renders a complete response
+without a JavaScript framework.
+
+## Semantic route
+
+```dart
+final route =
+    AppRoute<NoParams, NoSearch, NoData>().document(
+      (_) => const RouteDocument(
+        title: 'About',
+        body: HtmlElement(
+          'article',
+          children: <HtmlNode>[
+            HtmlElement(
+              'h1',
+              children: <HtmlNode>[HtmlText('About')],
+            ),
+          ],
+        ),
+      ),
+    );
+```
+
+When a route also has a Flutter page, the server emits readable HTML and
+handoff state before Flutter takes over. Completed and pending Query values use
+the same explicit serializer contract; see
+[Query server handoff](/docs/concepts/query#server-handoff).
+The browser handoff, streamed frames, semantic HTML transition, and external
+Router navigation use the same DOM implementation in JavaScript and
+WebAssembly builds.
+
+## Press
+
+Press turns an MDC directory into an immutable content snapshot.
+
+```dart
+final docs = PressDirectory('content/docs', mount: '/docs');
+final snapshot = await docs.snapshot();
+final page = snapshot.page(<String>['getting-started']);
+```
+
+Successful snapshots are atomic and cached. Changed files are reparsed;
+unchanged pages retain identity. Drafts, duplicate URLs, invalid frontmatter,
+and files changing during a read are handled explicitly.
+
+This website uses Press for the page you are reading and returns its locations
+from `lib/prerender.dart`.

@@ -44,6 +44,18 @@ final class DevelopmentProxy {
         request.response.headers.add(name, value);
       }
     });
+    final statusForbidsFraming =
+        response.statusCode < 200 ||
+        response.statusCode == HttpStatus.noContent;
+    final resetContent = response.statusCode == HttpStatus.resetContent;
+    final notModifiedWithoutHead =
+        response.statusCode == HttpStatus.notModified &&
+        request.method != 'HEAD';
+    if (statusForbidsFraming || notModifiedWithoutHead) {
+      request.response.headers.chunkedTransferEncoding = false;
+    } else if (resetContent) {
+      request.response.contentLength = 0;
+    }
     if (request.method != 'HEAD') {
       await request.response.addStream(response);
     } else {

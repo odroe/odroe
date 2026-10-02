@@ -2,7 +2,7 @@ import 'dart:async';
 
 import '../app/binding.dart';
 import '../app/context.dart';
-import '../app/key.dart';
+import '../app/registry.dart';
 import '../router/codec.dart';
 import '../router/load.dart';
 import '../router/match.dart';
@@ -156,16 +156,13 @@ final class _TypedDocumentBinding<P, S, D> implements _DocumentBinding {
   }
 }
 
-const _documentCapability = RouteCapability<_DocumentBinding>('document');
+final _documentCapability = RouteCapability<_DocumentBinding>('document');
 
 /// Attaches semantic HTML generation to a neutral route definition.
 extension AppRouteDocument<P, S, D> on AppRoute<P, S, D> {
   /// Returns the route with [builder] installed as an optional capability.
   AppRoute<P, S, D> document(DocumentBuilder<P, S, D> builder) =>
-      withCapability(
-        _documentCapability,
-        _TypedDocumentBinding<P, S, D>(builder),
-      );
+      _documentCapability.attach(this, _TypedDocumentBinding<P, S, D>(builder));
 }
 
 /// Builds document fragments for a fully loaded route branch.

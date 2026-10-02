@@ -98,6 +98,7 @@ ResolvedDocument resolveDocument(Iterable<RouteDocument> documents) {
 ///
 /// The returned source intentionally omits the closing body and html tags so
 /// the server can append handoff frames while queries are still resolving.
+/// Invalid element or attribute serialization names throw [ArgumentError].
 String renderDocumentStart(ResolvedDocument document, {String? baseHref}) {
   final output = StringBuffer('<!doctype html><html');
   if (!document.htmlAttributes.containsKey('lang')) {
@@ -232,6 +233,9 @@ void _writeNode(StringBuffer output, HtmlNode node) {
         _writeNode(output, child);
       }
     case HtmlElement(:final tag, :final attributes, :final children):
+      if (!_validTagName(tag)) {
+        throw ArgumentError.value(tag, 'tag', 'Invalid HTML element name.');
+      }
       output.write('<$tag');
       _writeAttributes(output, attributes);
       output.write('>');
@@ -254,6 +258,9 @@ void _writeAttributes(StringBuffer output, Map<String, String?> attributes) {
 }
 
 void _writeAttribute(StringBuffer output, String name, String? value) {
+  if (!_validAttributeName(name)) {
+    throw ArgumentError.value(name, 'name', 'Invalid HTML attribute name.');
+  }
   output
     ..write(' ')
     ..write(name);
@@ -264,6 +271,61 @@ void _writeAttribute(StringBuffer output, String name, String? value) {
       ..write('"');
   }
 }
+
+// Validate serialization names, not the semantics of caller-selected elements
+// or attributes. Intentional script/event attributes remain caller-owned.
+bool _validTagName(String name) {
+  if (name.isEmpty || !_asciiLetter(name.codeUnitAt(0))) return false;
+  return name.runes
+      .skip(1)
+      .every(
+        (unit) =>
+            _asciiLetter(unit) ||
+            (unit >= 0x30 && unit <= 0x39) ||
+            unit == 0x2d ||
+            unit == 0x2e ||
+            unit == 0x3a ||
+            unit == 0x5f ||
+            _customNameCharacter(unit),
+      );
+}
+
+bool _asciiLetter(int unit) =>
+    (unit >= 0x41 && unit <= 0x5a) || (unit >= 0x61 && unit <= 0x7a);
+
+// Non-ASCII PCENChar ranges preserve valid custom-element names.
+bool _customNameCharacter(int unit) =>
+    unit == 0xb7 ||
+    (unit >= 0xc0 && unit <= 0xd6) ||
+    (unit >= 0xd8 && unit <= 0xf6) ||
+    (unit >= 0xf8 && unit <= 0x37d) ||
+    (unit >= 0x37f && unit <= 0x1fff) ||
+    (unit >= 0x200c && unit <= 0x200d) ||
+    (unit >= 0x203f && unit <= 0x2040) ||
+    (unit >= 0x2070 && unit <= 0x218f) ||
+    (unit >= 0x2c00 && unit <= 0x2fef) ||
+    (unit >= 0x3001 && unit <= 0xd7ff) ||
+    (unit >= 0xf900 && unit <= 0xfdcf) ||
+    (unit >= 0xfdf0 && unit <= 0xfffd) ||
+    (unit >= 0x10000 && unit <= 0xeffff);
+
+// https://html.spec.whatwg.org/multipage/syntax.html#syntax-attribute-name
+bool _validAttributeName(String name) =>
+    name.isNotEmpty &&
+    name.runes.every(
+      (unit) =>
+          unit > 0x20 &&
+          !(unit >= 0x7f && unit <= 0x9f) &&
+          unit != 0x22 &&
+          unit != 0x27 &&
+          unit != 0x3e &&
+          unit != 0x2f &&
+          unit != 0x3d &&
+          !(unit >= 0xd800 && unit <= 0xdfff) &&
+          !(unit >= 0xfdd0 && unit <= 0xfdef) &&
+          (unit & 0xffff) != 0xfffe &&
+          (unit & 0xffff) != 0xffff,
+    );
 
 String _escapeText(String value) =>
     const HtmlEscape(HtmlEscapeMode.element).convert(value);

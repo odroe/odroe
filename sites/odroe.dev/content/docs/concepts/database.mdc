@@ -1,0 +1,238 @@
+---
+title: Database and typed SQL
+description: Understand Odroe's relational query boundary, dialects, capabilities, and ownership.
+order: 24
+language: en
+---
+# Database and typed SQL
+
+Odroe provides a small typed relational query layer over explicit database
+drivers. It is intentionally not a full identity-map ORM and it does not hide
+migrations, connection scope, or provider differences.
+
+## One shared transport
+
+```dart
+abstract interface class SqlExecutor {
+  Future<List<T>> query<T>(
+    BoundSql statement,
+    T Function(SqlRow row) decode,
+  );
+
+  Future<SqlWriteResult> execute(BoundSql statement);
+}
+
+abstract interface class SqlDatabase implements SqlExecutor {
+  Future<List<SqlWriteResult>> atomicWrite(List<BoundSql> statements);
+  Future<void> close();
+}
+```
+
+`TransactionalSqlDatabase` is a separate capability. D1 can support atomic
+batches without pretending to support an interactive transaction callback.
+
+## Types stop mistakes before I/O
+
+A `SqlTable<T>` owns columns and a projection. `SqlQueries` creates select,
+insert, update, and delete statements for an explicit dialect:
+
+```dart
+final posts = Posts();
+const queries = SqlQueries(SqlDialect.sqlite);
+
+final post = await queries
+    .selectTable(posts, where: posts.id.equals(42))
+    .oneOrNull(database);
+
+final totalPosts = await queries.countRows(posts).one(database);
+```
+
+Use `all` for collections. `oneOrNull` returns `null` for no row and rejects
+multiple rows, preserving an exact zero-or-one cardinality contract. The table
+projection can decode a complete application record; the caller does not need
+to rebuild an entity from unrelated scalar queries.
+
+Projection decoders receive `SqlProjectionRow` and call `row.read(selection)`.
+The same selection object declares the SQL result and decodes its Dart field,
+so reordering columns cannot silently exchange same-name, same-codec JOIN
+values. A missing or repeated selection and an unexpected result width fail
+before the application value is returned. Numeric indices remain only on the
+explicit raw `SqlRow` transport escape hatch.
+
+`countRows` compiles typed `COUNT(*)` through the same table, join, and
+predicate scope. It counts relation rows, so one-to-many joins can increase the
+result; an empty relation returns `0`. Ordering, pagination, grouping, and a
+general aggregate DSL are not part of this focused operation.
+
+## Membership stays typed
+
+Batch reads and filters remain on the same typed predicate path:
+
+```dart
+final selected = await queries
+    .selectTable(
+      posts,
+      where: posts.id.lessThan(cursor),
+      orderBy: <SqlOrder>[posts.id.descending],
+      limit: pageSize + 1,
+    )
+    .all(database);
+```
+
+This is the complete database primitive behind the generated product's cursor
+pages. The server orders by the unique ID, uses a strict comparison after the
+cursor, and fetches one extra row only to decide whether to expose
+`nextCursor`. It returns at most `pageSize` records through RPC. `offset` remains
+available for products that need it, but Odroe does not invent a paginator or
+run an implicit count.
+
+`isIn` and `isNotIn` consume the iterable immediately and encode every non-null
+candidate through the column codec. Adding, removing, or reordering source
+collection entries later cannot change the predicate; copying an element's
+mutable payload remains the codec's contract. Non-null candidate order and
+duplicates are retained; Odroe does not auto-deduplicate, chunk, or bypass a
+provider's bound-parameter limit.
+
+Empty collections are safe and explicit: `isIn([])` never matches, while
+`isNotIn([])` throws `ArgumentError`. A dynamic exclusion cannot silently turn
+an UPDATE or DELETE into a full-table mutation; intentional full-table writes
+keep using `updateAll` or `deleteAll` with `allRows`.
+
+An explicit Dart `null` candidate becomes an `IS NULL` or `IS NOT NULL` branch
+instead of entering the membership list. A custom codec remains authoritative
+for every non-null Dart candidate and may encode one as SQL `NULL`. Without a
+Dart null candidate, a nullable database value keeps SQL's three-valued
+behavior and matches neither `IN` nor `NOT IN`.
+
+Idempotent inserts keep the conflict key visible:
+
+```dart
+await queries
+    .insertOnConflictDoNothing(
+      posts,
+      <SqlAssignment>[
+        posts.id.set(42),
+        posts.title.set('First post'),
+      ],
+      target: [posts.id],
+    )
+    .execute(database);
+```
+
+The column list must match a conflict arbiter accepted by the selected
+database. Other index shapes remain explicit `BoundSql`. SQLite, D1, and
+PostgreSQL support this exact target-aware operation. MySQL is rejected before
+Odroe reads the inputs or performs database I/O because its conflict operations
+do not preserve this contract.
+
+## One statement for many rows
+
+Use `insertMany` when rows share one typed column shape and should be sent as a
+single multi-row `INSERT`:
+
+```dart
+final inserted = await queries
+    .insertMany(posts, <List<SqlAssignment>>[
+      <SqlAssignment>[posts.id.set(43), posts.title.set('First')],
+      <SqlAssignment>[posts.id.set(44), posts.title.set('Second')],
+    ])
+    .returning(posts.projection)
+    .all(database);
+final insertedById = <int, Post>{
+  for (final post in inserted) post.id: post,
+};
+```
+
+The outer collection and every row must be non-empty. Every row must use the
+same table, contain no duplicate columns, and preserve the first row's exact
+column objects and order. Odroe validates the complete input before building
+SQL. It does not split work automatically; the caller must stay within the
+provider's bound-parameter limit.
+
+This is one statement. `atomicWrite` is different: it makes several explicit
+statements one atomic unit. SQLite, D1, and PostgreSQL support `RETURNING` on
+the multi-row insert; MySQL/MariaDB accepts the write but not `RETURNING`.
+Returned row order is database-defined, so correlate by a stable key as above,
+never by input index.
+
+## Update numeric state in one statement
+
+Use `incrementBy` when a non-null numeric column must change relative to its
+current database value. Here `counters.value` is a `SqlTableColumn<int>`:
+
+```dart
+await queries.updateWhere(
+  counters,
+  <SqlUpdateAssignment>[counters.value.incrementBy(1)],
+  where: counters.id.equals(42),
+).execute(database);
+```
+
+The generated SQL is `value = value + ?`; there is no application-side
+read-modify-write race. A negative delta subtracts. Zero, `0.0`, and `-0.0` are
+rejected before SQL construction so affected-row behavior cannot depend on a
+provider-specific no-op. The delta is encoded immediately by the receiving
+column's codec. Nullable and non-numeric columns do not expose the method.
+
+`SqlUpdateAssignment` is the public heterogeneous UPDATE input. A constant
+`column.set(value)` is still a `SqlAssignment` and therefore also an update
+assignment. `incrementBy` cannot be passed to INSERT, and mixing `set` and
+`incrementBy` for the same column is rejected before I/O. Integer overflow and
+floating-point rounding continue to follow the selected database provider.
+
+Column assignment and predicate types are checked by Dart. Joined reads qualify
+columns; left joins require an explicitly optional result selection. Updating
+or deleting every row requires the `allRows` confirmation token. Mutations stay
+single-table.
+
+Generated statements retain their dialect. SQLite and D1 use
+`SqlDialect.sqlite`, PostgreSQL uses `postgres`, and MySQL/MariaDB uses `mysql`.
+An explicit mismatch throws `SqlException(SqlErrorCode.unsupported)` before
+the driver sends the statement.
+
+`BoundSql.parts` is the escape hatch for source-owned SQL. Fragments are
+trusted source and values are bound. Pin `dialect` and `kind` when known; Odroe
+does not parse arbitrary SQL to invent portability.
+
+## Ownership follows the host
+
+| Runtime | Resource scope | Odroe module contract |
+| --- | --- | --- |
+| Flutter + SQLite | Application | `DatabaseModule.owned`, closed with `AppContext` |
+| Native server + SQLite/PostgreSQL/MySQL | Process | requests borrow; `Server.onClose` closes |
+| Cloudflare D1 | Invocation | request-owned wrapper around the host binding |
+
+A request-scoped module must not close a shared process pool. A Fetch isolate
+has no reliable process-shutdown hook, so D1 remains invocation-scoped.
+
+## Provider status is explicit
+
+| Entrypoint | Status | Current boundary |
+| --- | --- | --- |
+| `database_sqlite.dart` | Verified | Native CRUD, returning rows, batches, transactions, migrations, open-time enforcement-setting verification |
+| `database_postgres.dart` | Verified | Single connection, bounded pool, transactions |
+| `database_mysql.dart` | Preview | MySQL and MariaDB, serialized connection or owned pool with bounded connections and waiters |
+| `database_d1.dart` | Preview | Local Workerd/D1 contract, atomic batches, transient-error classification |
+
+All drivers are in the same Dart package but use separate entrypoints so the
+wrong implementation is not reachable from a target. Package dependency
+resolution and native build hooks still have cost; inspect real artifacts when
+binary size matters.
+
+Every native `SqliteDatabase.open` and `openInMemory` connection enables and
+reads back `PRAGMA foreign_keys = ON` before it is returned. A connection that
+cannot confirm the setting is closed, and later violations use
+`SqlErrorCode.constraint`. Opening does not run `PRAGMA foreign_key_check`,
+scan, reject, or repair historical orphan rows. Caller-authored raw `PRAGMA`
+can still change this trusted connection setting; do not turn it off.
+
+Schema files remain application-owned. Native SQLite and D1 may consume the
+same append-only `NNNN_snake_case.sql` history while keeping provider-owned
+ledgers. Native verifies the exact SQL string and applies one file atomically before
+the listener starts; D1 remains an explicit Wrangler deployment step. This is
+not a universal schema abstraction: PostgreSQL and MySQL/MariaDB still use an
+application-owned provider path, and Odroe does not generate models, schema
+diffs, or down migrations.
+
+Continue with [Database providers](/docs/guides/database-providers) for working
+code, pool ownership, D1 bindings, and the complete runtime matrix.

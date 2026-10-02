@@ -1,5 +1,5 @@
 import 'browser_stub.dart'
-    if (dart.library.html) 'browser_web.dart'
+    if (dart.library.js_interop) 'browser_web.dart'
     as platform;
 
 /// Reads and removes the embedded initial handoff payload.

@@ -40,7 +40,7 @@ final class QueryCache {
   /// Returns a cached query when its data type matches [T].
   Query<T>? get<T>(String canonicalKey) {
     final query = _queries[canonicalKey];
-    return query is Query<T> ? query : null;
+    return query?.dataType == T ? query as Query<T> : null;
   }
 
   /// Returns a cached query without checking its data type.
@@ -53,6 +53,23 @@ final class QueryCache {
   void add(Query<dynamic> query) {
     if (_queries.putIfAbsent(query.key.canonical, () => query) == query) {
       notify(QueryCacheEvent(QueryCacheEventType.added, query));
+    }
+  }
+
+  void _replace(Query<dynamic> current, Query<dynamic> replacement) {
+    final key = current.key.canonical;
+    if (replacement.key.canonical != key) {
+      throw ArgumentError('Replacement query must use the same key.');
+    }
+    if (!identical(_queries[key], current)) {
+      throw StateError('Current query is not cached for $key.');
+    }
+
+    _queries[key] = replacement;
+    current.destroy();
+    notify(QueryCacheEvent(QueryCacheEventType.removed, current));
+    if (identical(_queries[key], replacement)) {
+      notify(QueryCacheEvent(QueryCacheEventType.added, replacement));
     }
   }
 
@@ -87,3 +104,10 @@ final class QueryCache {
     }
   }
 }
+
+/// @nodoc
+void replaceQueryCacheEntry(
+  QueryCache cache,
+  Query<dynamic> current,
+  Query<dynamic> replacement,
+) => cache._replace(current, replacement);

@@ -15,5 +15,9 @@ abstract class Module {
   FutureOr<void> initialize(AppContext context) {}
 
   /// Releases resources owned by this module.
+  ///
+  /// The application owns a module as soon as it is yielded to
+  /// `AppContext.create`. This method must therefore tolerate registration or
+  /// initialization that did not start or complete.
   FutureOr<void> dispose(AppContext context) {}
 }

@@ -5,14 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:odroe/odroe.dart';
 import 'package:odroe/router_flutter.dart';
 
-const _messageKey = ContextKey<String>('message');
+final _messageKey = ContextKey<String>('message');
 
 final class _MessageModule extends Module {
   const _MessageModule();
 
   @override
   void register(ModuleRegistry registry) {
-    registry.provide(_messageKey, 'from module');
+    _messageKey.provide(registry, 'from module');
   }
 }
 

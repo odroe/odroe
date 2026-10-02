@@ -133,11 +133,13 @@ final class ServerRequest {
     required Uri uri,
     Headers? headers,
     List<int> body = const <int>[],
+    Future<void>? cancelled,
   }) => ServerRequest(
     method: method,
     uri: uri,
     headers: headers,
     body: Stream<List<int>>.value(body),
+    cancelled: cancelled,
   );
 
   /// The request method.
@@ -152,7 +154,9 @@ final class ServerRequest {
   /// The request body chunks.
   final Stream<List<int>> body;
 
-  /// Completes when the adapter observes client disconnection.
+  /// Completes when the caller cancels or an adapter observes disconnection.
+  ///
+  /// Some transports can observe this only after response delivery begins.
   final Future<void>? cancelled;
 
   /// Reads and buffers the body, up to [maxBytes].
@@ -282,14 +286,14 @@ final class ServerResponse {
       encoding.decode(await readBytes());
 }
 
-/// Raised before buffering a request body beyond its configured limit.
+/// Raised when a request payload exceeds its configured byte limit.
 final class PayloadTooLargeException implements Exception {
   /// Creates an exception for the enforced [maxBytes].
   const PayloadTooLargeException(this.maxBytes);
 
-  /// The maximum accepted body size.
+  /// The maximum accepted payload size.
   final int maxBytes;
 
   @override
-  String toString() => 'Request body exceeds $maxBytes bytes.';
+  String toString() => 'Request payload exceeds $maxBytes bytes.';
 }

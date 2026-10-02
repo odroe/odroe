@@ -190,7 +190,7 @@ final class QueryFetchMeta {
 }
 
 /// Input supplied to a query function.
-final class QueryContext {
+final class QueryContext<T> {
   /// Creates the context passed to a query function.
   QueryContext({
     required this.client,
@@ -204,7 +204,7 @@ final class QueryContext {
   final QueryClient client;
 
   /// The query's cache key.
-  final QueryKey key;
+  final QueryKey<T> key;
 
   /// User metadata from the query definition.
   final Map<String, Object?> meta;
@@ -218,7 +218,7 @@ final class QueryContext {
 }
 
 /// Fetches one typed resource.
-typedef QueryFunction<T> = FutureOr<T> Function(QueryContext context);
+typedef QueryFunction<T> = FutureOr<T> Function(QueryContext<T> context);
 
 /// Custom reference-preserving data merger.
 typedef QueryDataMerger<T> = T Function(T? previous, T next);
@@ -236,7 +236,7 @@ final class QueryOptions<T> {
   });
 
   /// The query's cache key.
-  final QueryKey key;
+  final QueryKey<T> key;
 
   /// The function that fetches data.
   final QueryFunction<T> query;
@@ -252,7 +252,35 @@ final class QueryOptions<T> {
 
   /// Optional custom structural-sharing merger.
   final QueryDataMerger<T>? merge;
+
+  Future<T> _fetch(QueryClient client) {
+    final target = client.query<T>(this);
+    if (!target.isStale()) return Future<T>.value(target.state.requireData);
+    return target.fetch(cancelRefetch: false);
+  }
+
+  Future<T> _ensure(QueryClient client, {required bool revalidateIfStale}) {
+    final target = client.query<T>(this);
+    if (target.state.hasData) {
+      if (revalidateIfStale && target.isStale()) {
+        unawaited(target.fetch().then<void>((_) {}, onError: (_) {}));
+      }
+      return Future<T>.value(target.state.requireData);
+    }
+    return target.fetch(cancelRefetch: false);
+  }
 }
+
+/// @nodoc
+Future<T> dispatchQueryFetch<T>(QueryOptions<T> options, QueryClient client) =>
+    options._fetch(client);
+
+/// @nodoc
+Future<T> dispatchQueryEnsure<T>(
+  QueryOptions<T> options,
+  QueryClient client, {
+  required bool revalidateIfStale,
+}) => options._ensure(client, revalidateIfStale: revalidateIfStale);
 
 /// Fully resolved options owned by one query cache entry.
 final class ResolvedQueryOptions<T> {
@@ -278,7 +306,7 @@ final class ResolvedQueryOptions<T> {
   });
 
   /// The query's cache key.
-  final QueryKey key;
+  final QueryKey<T> key;
 
   /// The function that fetches data, if registered.
   final QueryFunction<T>? query;
