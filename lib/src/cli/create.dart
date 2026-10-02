@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:pub_semver/pub_semver.dart';
 import 'package:yaml/yaml.dart';
 
 import 'initialize.dart';
@@ -37,6 +38,7 @@ const _supportedPlatforms = <String>{
 Future<void> createProject({
   required String directory,
   required String? odroePath,
+  String? odroeVersion,
   required String platforms,
   required String? organization,
   required String? projectName,
@@ -47,7 +49,13 @@ Future<void> createProject({
   CreateProjectInitializer? initialize,
 }) async {
   final target = _targetDirectory(directory);
-  final source = _odroeDirectory(odroePath);
+  if ((odroePath == null) == (odroeVersion == null)) {
+    throw const FormatException(
+      'Provide exactly one of --odroe-path or --odroe-version.',
+    );
+  }
+  final version = odroeVersion == null ? null : _hostedVersion(odroeVersion);
+  final source = version == null ? _odroeDirectory(odroePath) : null;
   final selectedPlatforms = _platforms(platforms);
   final selectedOrganization = _optionalValue(organization, 'org');
   final selectedProjectName = _projectName(
@@ -124,6 +132,9 @@ Future<void> createProject({
       err: err,
       environment: flutter.environment,
     );
+    final dependency = version == null
+        ? <String, String>{'path': p.relative(source!.path, from: staging.path)}
+        : <String, String>{'version': version};
     await _requireSuccess(
       runner,
       flutter.executable,
@@ -132,7 +143,7 @@ Future<void> createProject({
         'pub',
         'add',
         if (offline) '--offline',
-        'odroe:{"path":${jsonEncode(p.relative(source.path, from: staging.path))}}',
+        'odroe:${jsonEncode(dependency)}',
       ],
       workingDirectory: staging.path,
       stage: 'Odroe dependency resolution',
@@ -143,11 +154,28 @@ Future<void> createProject({
     out.writeln('Odroe starter initialization...');
     _requireNotInterrupted(interruption);
     final initializationOutput = StringBuffer();
-    final initialized = (initialize ?? _initializeFullStackProject)(
-      staging,
-      initializationOutput,
-      err,
-    );
+    var initialized = true;
+    if (version == null) {
+      initialized = (initialize ?? _initializeFullStackProject)(
+        staging,
+        initializationOutput,
+        err,
+      );
+    } else {
+      _validateHostedResolution(staging, version);
+      // Resolve the executable in the new application, not in this CLI's
+      // package configuration: its compiler and templates must match its API.
+      await _requireSuccess(
+        runner,
+        Platform.resolvedExecutable,
+        const <String>['run', 'odroe', 'init', '--full-stack'],
+        workingDirectory: staging.path,
+        stage: 'Hosted Odroe starter initialization',
+        out: initializationOutput,
+        err: err,
+        environment: flutter.environment,
+      );
+    }
     // Deliver a signal queued while the synchronous initializer was running
     // before its result can be accepted or the staging directory published.
     await Future<void>.delayed(Duration.zero);
@@ -345,6 +373,45 @@ Directory _odroeDirectory(String? value) {
     );
   }
   return resolved;
+}
+
+String _hostedVersion(String value) {
+  try {
+    final parsed = Version.parse(value);
+    final canonical =
+        '${parsed.major}.${parsed.minor}.${parsed.patch}'
+        '${parsed.preRelease.isEmpty ? '' : '-${parsed.preRelease.join('.')}'}'
+        '${parsed.build.isEmpty ? '' : value.substring(value.indexOf('+'))}';
+    if (canonical == value) return value;
+  } on FormatException {
+    // Ranges, floating versions, and malformed input must fail before staging.
+  }
+  throw const FormatException(
+    '--odroe-version requires an exact version, for example 0.1.0-dev.1.',
+  );
+}
+
+void _validateHostedResolution(Directory project, String version) {
+  final lock = File(p.join(project.path, 'pubspec.lock'));
+  Object? document;
+  try {
+    document = loadYaml(lock.readAsStringSync());
+  } on YamlException {
+    throw FileSystemException(
+      'The resolved pubspec.lock is invalid.',
+      lock.path,
+    );
+  }
+  final packages = document is Map ? document['packages'] : null;
+  final odroe = packages is Map ? packages['odroe'] : null;
+  if (odroe is! Map ||
+      odroe['source'] != 'hosted' ||
+      odroe['version'] != version) {
+    throw FileSystemException(
+      'The new application must resolve hosted Odroe $version.',
+      lock.path,
+    );
+  }
 }
 
 List<String> _platforms(String value) {

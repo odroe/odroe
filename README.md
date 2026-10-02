@@ -47,6 +47,21 @@ dart run odroe dev -- -d chrome
 source. It refuses conflicts rather than overwriting them. A native client can
 add its desired Flutter platforms and select its actual API origin.
 
+The next CLI revision also supports creating an application from an exact
+hosted version. From this checkout with dependencies resolved:
+
+```sh
+dart run odroe create ../my_app --odroe-version 0.1.0-dev.1 --platforms web
+```
+
+`--odroe-version` is not available in the published `0.1.0-dev.1` CLI itself.
+The new application depends entirely on the selected hosted package; its own
+installed CLI supplies the initializer, templates, and generated routes.
+Choose exactly one of `--odroe-version` and `--odroe-path`. Version ranges and
+`latest` are rejected; `--offline` requires that exact package and its
+dependencies in the local cache. A failed download or initialization removes
+only the command's private staging directory and preserves existing targets.
+
 For checkout-based development, use the source create flow:
 
 ```sh

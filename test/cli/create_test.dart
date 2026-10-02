@@ -537,6 +537,7 @@ dependencies:
     expect(await runOdroe(<String>['create', '--help'], output: createHelp), 0);
     expect(createHelp.toString(), contains('--platforms'));
     expect(createHelp.toString(), contains('--odroe-path'));
+    expect(createHelp.toString(), contains('--odroe-version'));
     expect(
       await runOdroe(
         <String>['create'],

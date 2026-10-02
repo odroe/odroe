@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add `odroe create --odroe-version <exact-version>` for hosted full-stack
+  applications without a checkout dependency. Resolve the requested version,
+  verify its lockfile, and run its installed initializer from the staged
+  application so templates and generated code match the selected package.
+  Keep `--odroe-path` as the exclusive source-development alternative, reject
+  floating versions before staging, and preserve target protection and rollback
+  across resolution and initialization failures.
+
 ## 0.1.0-dev.1
 
 ### Framework preview and migration

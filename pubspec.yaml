@@ -23,6 +23,7 @@ dependencies:
   mysql_dart: ^3.0.0
   path: ^1.9.1
   postgres: ^3.5.12
+  pub_semver: ^2.2.0
   roux: ^1.0.1
   sqlite3: ^3.5.0
   watcher: ^1.2.1

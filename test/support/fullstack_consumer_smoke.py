@@ -133,7 +133,11 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix='odroe-batch-consumer-', dir='/tmp') as temp:
             base = Path(temp); project = base / 'consumer'; db = base / 'persistent.sqlite3'
+            create_hosted_version = os.environ.get('ODROE_CREATE_HOSTED_VERSION')
             hosted_version = os.environ.get('ODROE_HOSTED_VERSION')
+            if create_hosted_version and hosted_version:
+                raise RuntimeError('Select one hosted consumer mode, not both.')
+            hosted_version = create_hosted_version or hosted_version
             consumer_env = None
             if hosted_version:
                 # Own a fresh cache even when callers supply a populated or seeded cache.
@@ -141,10 +145,19 @@ def main():
                 cache_root.mkdir()
                 consumer_env = dict(os.environ, PUB_CACHE=str(cache_root),
                     PUB_HOSTED_URL='https://pub.dev')
-                run([flutter, 'create', '--empty', '--platforms', 'web',
-                     '--project-name', 'batch_consumer', str(project)], base, env=consumer_env)
-                descriptor = 'odroe:' + json.dumps({'version': hosted_version})
-                run([flutter, 'pub', 'add', descriptor], project, env=consumer_env)
+                if create_hosted_version:
+                    # Run the candidate dispatcher without re-resolving its own
+                    # checkout into the disposable cache. The new application
+                    # and its initializer must use the actual hosted package.
+                    run([dart, '--packages=' + str(root / '.dart_tool/package_config.json'),
+                         str(root / 'bin/odroe.dart'), 'create', str(project),
+                         '--platforms', 'web', '--project-name', 'batch_consumer',
+                         '--odroe-version', hosted_version], base, env=consumer_env)
+                else:
+                    run([flutter, 'create', '--empty', '--platforms', 'web',
+                         '--project-name', 'batch_consumer', str(project)], base, env=consumer_env)
+                    descriptor = 'odroe:' + json.dumps({'version': hosted_version})
+                    run([flutter, 'pub', 'add', descriptor], project, env=consumer_env)
                 config_file = project / '.dart_tool/package_config.json'
                 config = json.loads(config_file.read_text())
                 package = next(value for value in config['packages'] if value['name'] == 'odroe')
@@ -164,7 +177,8 @@ def main():
                     raise RuntimeError('Hosted consumer must not contain dependency overrides')
                 log.write('VERIFIED_HOSTED_ODROE ' + json.dumps({'version': hosted_version,
                     'root': str(package_root), 'source': 'hosted', 'registry': 'https://pub.dev'}) + '\n')
-                run([dart, 'run', 'odroe', 'init', '--full-stack'], project, env=consumer_env)
+                if not create_hosted_version:
+                    run([dart, 'run', 'odroe', 'init', '--full-stack'], project, env=consumer_env)
             else:
                 run([dart, 'run', 'odroe', 'create', str(project), '--platforms', 'web',
                      '--project-name', 'batch_consumer', '--odroe-path', str(root), '--offline'], root)
@@ -195,7 +209,9 @@ def main():
                 'nativeLibraries': sorted(p.name for p in (deployed/'lib').iterdir()),
                 'migrations': sorted(p.name for p in (deployed/'migrations').iterdir()),
                 'dependencySource': 'hosted' if hosted_version else 'path',
-                'hostedVersion': hosted_version}
+                'hostedVersion': hosted_version,
+                'creationMode': 'hosted-create' if create_hosted_version else
+                    'hosted-init' if hosted_version else 'source-create'}
             print(json.dumps(result))
         log.write('\nDisposable generated consumer, servers, database, and relocated bundle cleaned.\n')
     finally:
