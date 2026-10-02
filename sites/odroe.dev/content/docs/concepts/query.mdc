@@ -116,8 +116,13 @@ that entry directly.
 
 ## Flutter
 
-Install `QueryModule` from `query_flutter.dart`, then use focused builders for
-query, infinite-query, or mutation state. The query function can call a
+Use `QueryClientProvider` around an existing Flutter application, or select
+`QueryModule` when using Odroe's shared App context. The next preview's ordinary
+provider constructor owns one client; `.value(client: ...)` borrows an existing
+one. See [incremental adoption](/docs/guides/incremental-adoption) for lifecycle
+rules and migration from the `0.1.0-dev.1` constructor.
+
+Use focused builders for query, infinite-query, or mutation state. The query function can call a
 generated RPC ref without coupling either subsystem. Keep the options object in
 the owning `State`; ordinary widget rebuilds should reuse its identity.
 

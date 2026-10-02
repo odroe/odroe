@@ -9,6 +9,11 @@ language: en
 `AppContext` is the smallest shared composition root. It owns explicit modules,
 typed bindings, and reverse-order disposal.
 
+It is optional when adopting individual capabilities in an existing Flutter
+application. QueryClientProvider and AppRouter can operate without App or
+modules; see [incremental adoption](/docs/guides/incremental-adoption). Choose a
+shared context when multiple capabilities need to share resources and lifetimes.
+
 ## Install only product capabilities
 
 ```dart

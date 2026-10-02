@@ -1,0 +1,191 @@
+---
+title: Adopt Odroe incrementally
+description: Add Query to an existing Flutter app, then choose manual routing and an HTTP backend when needed.
+order: 16
+language: en
+---
+# Add capabilities to an existing Flutter app
+
+Start with the part your application needs. Query does not require Odroe's App,
+modules, routing, server, configuration files, or initializer.
+
+The owning `QueryClientProvider` constructor and `.value` constructor described
+here are part of the next preview. For checkout evaluation, add the local
+package as a direct dependency. The published `0.1.0-dev.1` provider still takes
+`client:` on its ordinary constructor; follow the migration note below when
+upgrading.
+
+## Add Query around the existing application
+
+```dart
+import 'package:flutter/widgets.dart';
+import 'package:odroe/query_flutter.dart';
+
+void main() => runApp(QueryClientProvider(child: ExistingApp()));
+```
+
+Keep the existing application, theme, navigation, and local widget state. The
+provider creates one QueryClient for its mounted lifetime and clears that
+client's cache when removed. Ordinary parent rebuilds keep the same cache.
+
+Define a stable query for a resource, then add a builder where that data belongs:
+
+```dart
+final greeting = QueryOptions<String>(
+  key: QueryKey<String>('greeting'),
+  query: (_) async => 'Hello from local data',
+);
+
+QueryBuilder<String>(
+  options: greeting,
+  builder: (_, result) => Text(
+    result.hasData
+        ? result.requireData
+        : result.isError
+        ? 'Could not load greeting'
+        : 'Loading',
+  ),
+)
+```
+
+The key identifies cached data; the query function supplies it. Keep a reusable
+options object outside `build`, or in the owning widget's State. Query does not
+replace local UI state such as a counter or text field.
+
+Run the app with `flutter run` and build it with `flutter build web --release`.
+No Odroe command or generated route manifest is needed.
+
+## Choose client ownership explicitly
+
+The ordinary constructor owns its client. Use `create` when it needs custom
+defaults or runtime components:
+
+```dart
+QueryClientProvider(
+  create: () => QueryClient(
+    options: const QueryClientOptions(
+      queries: QueryPolicy(
+        freshness: QueryFreshness.staleAfter(Duration(minutes: 5)),
+      ),
+    ),
+  ),
+  child: ExistingApp(),
+)
+```
+
+`create` runs once per owned lifetime. Changing the callback does not replace
+the current client. Use a new widget key when a new lifetime is intended, such
+as replacing an account's entire cache. The old owned client is cleared.
+
+When another part of the application already owns a client, borrow it:
+
+```dart
+QueryClientProvider.value(client: sharedClient, child: ExistingApp())
+```
+
+Replacing or removing a borrowing provider detaches it without clearing either
+external client's cache. Its owner remains responsible for `clear()`. Read the
+nearest mounted client with `QueryClientProvider.of(context)`. Nested providers
+can intentionally isolate a subtree's cache.
+
+Switching an owned provider to `.value` clears the former owned client unless
+the same instance is being passed back as the borrowed value; in that case,
+cleanup responsibility transfers to the caller and the cache is preserved.
+Switching back to the ordinary constructor starts a new owned lifetime.
+
+For migration from `0.1.0-dev.1`, replace
+`QueryClientProvider(client: client, child: child)` with
+`QueryClientProvider.value(client: client, child: child)` to retain borrowing
+semantics. Read the live client with `of(context)` instead of reading a
+provider widget's old `client` field. `QueryModule` already manages its client's
+ownership and needs no application-side migration.
+
+## Add routes when the application needs them
+
+Keep the provider above `WidgetsApp.router` or your existing Flutter app shell.
+Create an `AppRouter` once in State, pass it to `routerConfig`, and call its
+`dispose()` when that State is removed. The same Query cache then survives page
+navigation.
+
+Manual routes attach pages directly:
+
+```dart
+final details = AppRoute<NoParams, NoSearch, NoData>(path: '/details').page(
+  build: (_) => const Center(child: Text('Details')),
+);
+final router = AppRouter(routes: [home, details]);
+
+router.go(details.to());
+```
+
+`to()` derives the destination from the route, so the navigation call does not
+repeat `/details`. Declare paths, params, search state, and loaders where the
+application needs them. File routing is an optional alternative that uses the
+route compiler; manually declared routes need no generation.
+
+## Connect the same query to a real backend
+
+Query accepts any asynchronous function. When the application gains an Odroe
+server, a client-safe RPC reference can become the query's data source:
+
+```dart
+const readGreeting = ServerFunctionRef<NoServerInput, String>(
+  id: 'greeting.read',
+);
+
+final greeting = QueryOptions<String>(
+  key: QueryKey<String>('greeting'),
+  query: (query) => readGreeting(
+    rpc,
+    const NoServerInput(),
+    cancelled: query.cancelToken.whenCancelled.then<void>((_) {}),
+  ),
+);
+```
+
+The RPC client and HTTP transport belong to the layer that owns the connection.
+That owner supplies the actual server URI and closes the transport when done.
+Keep this resource key only while it denotes the same data; change or
+invalidate it when its meaning changes. The QueryBuilder and existing counter
+can stay unchanged.
+
+A small native server can bind the matching function without file generation:
+
+```dart
+final app = Server(
+  routes: const [],
+  functions: {
+    readGreeting.id: ServerFunctionBinding(
+      ServerFunction<NoServerInput, String>(
+        handler: (_) => 'Hello from the real server',
+      ),
+    ),
+  },
+);
+final server = await IoServer.bind(app.handle, port: 3000);
+```
+
+Import Query through `query_flutter.dart` in widgets, routing through
+`router_flutter.dart`, RPC references through `rpc.dart`, and native server
+code through `server_io.dart`. Keep shared function contracts free of Flutter
+and native imports. Shut down the IO listener and the application Server in
+the backend's own lifecycle.
+
+This example uses the built-in wire types `NoServerInput` and `String`.
+Manually declared record or custom-type contracts need explicit codecs or
+serialization adapters; generated record/enum codecs remain a separate
+file-route compiler feature. A real endpoint and authentication policy are
+application decisions, not initialization requirements for Query or routing.
+
+## Use shared modules when they help
+
+`App` and modules are useful when route loaders, RPC, server-rendered data, and
+widgets need one shared application context with coordinated disposal. They
+remain an explicit composition choice. A provider can instead borrow a
+module-owned Query client; it must not become a second cleanup owner.
+
+The [complete consumer](https://github.com/odroe/odroe/tree/main/test/fixtures/incremental_adoption)
+contains three runnable Flutter entrypoints: Query in an existing counter app,
+manual routing with the same cache, and HTTP RPC against a real IO server.
+The consumer regression analyzes the application, tests all three stages, and
+builds each with ordinary Flutter commands without invoking an Odroe CLI.

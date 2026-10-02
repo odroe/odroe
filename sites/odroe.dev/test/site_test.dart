@@ -121,7 +121,7 @@ void main() {
   test(
     'documentation navigation exposes the five-part information architecture',
     () async {
-      expect(await docs.locations(), hasLength(17));
+      expect(await docs.locations(), hasLength(18));
       final server = Server(
         routes: generated.serverRouteTree,
         functions: generated.serverFunctions,
@@ -152,6 +152,7 @@ void main() {
       );
       expect(body, contains('href="/docs/tutorials/full-stack"'));
       expect(body, contains('href="/docs/guides/typed-rpc-records"'));
+      expect(body, contains('href="/docs/guides/incremental-adoption"'));
       expect(body, contains('href="/docs/reference/api"'));
     },
   );

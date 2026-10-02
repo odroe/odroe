@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Let `QueryClientProvider` create and own a client without App/modules setup.
+  Keep it across rebuilds and clear it on disposal; use a new widget key for a
+  fresh lifetime. Borrow existing clients with `QueryClientProvider.value`.
+  Existing `client:` constructor calls must migrate to `.value`, and mounted
+  clients are read with `of(context)` instead of the removed widget field.
+  Add a tested incremental Flutter path through Query, manual routing, and a
+  real HTTP RPC server without initialization or generation.
+
 - Let `odroe create <directory>` use its own exact hosted package version by
   default, with `--version <exact-version>` and `--odroe-path` as optional
   overrides. Resolve the requested version,

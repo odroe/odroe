@@ -87,6 +87,8 @@ footnotes.
 
 - [First application](/docs/getting-started): add Odroe to a Flutter app, then
   choose optional full-stack scaffolding when needed.
+- [Adopt incrementally](/docs/guides/incremental-adoption): keep an existing
+  Flutter app and add Query, routing, and a backend as needed.
 - [Full-stack vertical slice](/docs/tutorials/full-stack): trace one feature
   through every generated and runtime boundary.
 - [Typed RPC records and enums](/docs/guides/typed-rpc-records): share domain
