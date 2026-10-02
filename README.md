@@ -218,13 +218,14 @@ report retained paths without turning a successful publication into a failure.
 | `router.dart`, `router_flutter.dart` | Typed routes, params/search, loaders, navigation |
 | `query.dart`, `query_flutter.dart` | Typed cache identities, async reads, mutations, hydration |
 | `rpc.dart` | Client references, HTTP transport, serialization, cancellation and budgets |
-| `query_rpc.dart` | Optional ordinary typed RPC reads and exact/collection Query filters |
+| `query_rpc.dart` | Repository / next preview only; not in `0.1.0-dev.2`. Ordinary typed RPC reads and exact/collection Query filters |
 | `server.dart`, `server_io.dart` | Server functions, middleware, invocation, Dart IO hosting |
 | `database.dart` | Provider-neutral typed SQL and result contracts |
 | `database_sqlite.dart`, `database_postgres.dart`, `database_mysql.dart` | Native providers and owned connection lifetimes |
 | `database_d1.dart`, `server_fetch.dart` | Preview D1 and Fetch runtime adapters |
 | `document.dart`, `mdc.dart`, `press.dart`, `press_io.dart` | Semantic HTML, content parsing, page discovery |
 
+**Repository / next preview — not included in `0.1.0-dev.2`:**
 `query_rpc.dart` adds `ref.read(rpc, input, scope: ['tenant', 'account'])`,
 `ref.readAt(...)` and `ref.reads(...)` to existing value refs. Calling `read`
 explicitly declares repeat execution safe. It returns native `QueryOptions<O>`;
