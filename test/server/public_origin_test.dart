@@ -129,6 +129,32 @@ void main() {
     },
   );
 
+  test('fixed IPv6 origin accepts the matching Referer', () async {
+    final app = Server(
+      routes: const [],
+      publicOrigin: Uri.parse('https://[::1]:8443'),
+      functions: {
+        'write': ServerFunctionBinding(
+          ServerFunction<NoServerInput, int>(handler: (_) => 1),
+        ),
+      },
+    );
+    addTearDown(app.close);
+    final response = await app.handle(
+      ServerRequest.bytes(
+        method: HttpMethod.post,
+        uri: Uri.parse('http://internal.example/__odroe/functions/write'),
+        headers: Headers.single({
+          'referer': 'https://[::1]:8443/products',
+          'x-odroe-server-function': 'true',
+          'content-type': 'application/json',
+        }),
+        body: utf8.encode('{"data":null}'),
+      ),
+    );
+    expect(response.status, 200, reason: await response.readText());
+  });
+
   test(
     'default origin policy keeps the adapter requestedUri behavior',
     () async {

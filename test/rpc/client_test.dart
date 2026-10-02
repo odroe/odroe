@@ -46,6 +46,25 @@ void main() {
     }
   });
 
+  test('serializes a bracketed IPv6 RPC origin', () async {
+    final transport = _RecordingTransport(<ServerResponse>[_dataResponse(1)]);
+    final client = RpcClient(
+      baseUri: Uri.parse('https://[::1]:8443'),
+      transport: transport,
+    );
+    expect(
+      await const ServerFunctionRef<NoServerInput, int>(id: 'read')(
+        client,
+        const NoServerInput(),
+      ),
+      1,
+    );
+    expect(
+      transport.requests.single.headers.value('origin'),
+      'https://[::1]:8443',
+    );
+  });
+
   test('resolves fresh application headers once per RPC request', () async {
     final applicationHeaders = Headers.single(<String, String>{
       'accept': 'text/plain',

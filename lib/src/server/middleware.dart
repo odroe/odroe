@@ -65,6 +65,9 @@ ServerResponse? rejectCrossOriginRpc(
 }
 
 String _origin(Uri uri) {
+  if (uri.hasAuthority && (uri.scheme == 'http' || uri.scheme == 'https')) {
+    return uri.origin;
+  }
   final defaultPort = uri.scheme == 'https' ? 443 : 80;
   final port = uri.hasPort && uri.port != defaultPort ? ':${uri.port}' : '';
   return '${uri.scheme}://${uri.host}$port';
