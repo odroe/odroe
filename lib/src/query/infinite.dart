@@ -258,8 +258,11 @@ final class InfiniteQueryResult<TPage, TPageParam> {
 /// Observer for infinite-query controls; storage remains a normal Query entry.
 final class InfiniteQueryObserver<TPage, TPageParam> {
   /// Creates an observer for [options] on [client].
-  InfiniteQueryObserver(this.client, this.options)
-    : _observer = QueryObserver<InfiniteData<TPage, TPageParam>>(
+  InfiniteQueryObserver(
+    this.client,
+    InfiniteQueryOptions<TPage, TPageParam> options,
+  ) : _options = options,
+      _observer = QueryObserver<InfiniteData<TPage, TPageParam>>(
         client,
         options.queryOptions,
       );
@@ -268,8 +271,32 @@ final class InfiniteQueryObserver<TPage, TPageParam> {
   final QueryClient client;
 
   /// The infinite query definition.
-  final InfiniteQueryOptions<TPage, TPageParam> options;
+  InfiniteQueryOptions<TPage, TPageParam> get options => _options;
+  InfiniteQueryOptions<TPage, TPageParam> _options;
   final QueryObserver<InfiniteData<TPage, TPageParam>> _observer;
+  final Set<void Function()> _listeners = <void Function()>{};
+
+  /// Updates future fetches and paging controls without remounting the same key.
+  void setOptions(InfiniteQueryOptions<TPage, TPageParam> value) {
+    final previous = current;
+    final previousOptions = _options;
+    _options = value;
+    try {
+      _observer.setOptions(value.queryOptions);
+    } on Object {
+      _options = previousOptions;
+      rethrow;
+    }
+    // Paging controls may change even when the underlying query result does not.
+    final next = current;
+    if (next.query == previous.query &&
+        (next.hasNextPage != previous.hasNextPage ||
+            next.hasPreviousPage != previous.hasPreviousPage)) {
+      for (final listener in List<void Function()>.of(_listeners)) {
+        listener();
+      }
+    }
+  }
 
   /// The current result projection.
   InfiniteQueryResult<TPage, TPageParam> get current =>
@@ -278,7 +305,15 @@ final class InfiniteQueryObserver<TPage, TPageParam> {
   /// Subscribes to infinite query results.
   QueryDispose subscribe(
     void Function(InfiniteQueryResult<TPage, TPageParam> result) listener,
-  ) => _observer.subscribe((result) => listener(_result(result)));
+  ) {
+    void update() => listener(current);
+    final remove = _observer.subscribe((result) => listener(_result(result)));
+    _listeners.add(update);
+    return () {
+      _listeners.remove(update);
+      remove();
+    };
+  }
 
   /// Fetches and appends the next page when available.
   Future<InfiniteQueryResult<TPage, TPageParam>> fetchNextPage({
@@ -330,5 +365,8 @@ final class InfiniteQueryObserver<TPage, TPageParam> {
   }
 
   /// Releases resources held by the underlying observer.
-  void dispose() => _observer.dispose();
+  void dispose() {
+    _listeners.clear();
+    _observer.dispose();
+  }
 }

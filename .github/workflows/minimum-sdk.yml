@@ -49,7 +49,10 @@ jobs:
       - name: Verify compiler and reference Flutter consumption
         run: |
           flutter test --no-pub --concurrency=2 test/router/file_router_test.dart \
-            test/query/flutter_provider_test.dart test/query/flutter_query_test.dart
+            test/query/flutter_provider_test.dart test/query/flutter_query_test.dart \
+            test/query/flutter_options_test.dart
+          dart test test/query/observer_test.dart test/query/options_update_test.dart \
+            test/query/remount_test.dart
           (cd example/app && flutter test --no-pub --concurrency=2 test)
       - name: Verify compiler, create, native RPC and SQLite semantics
         run: |

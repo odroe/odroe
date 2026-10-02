@@ -106,6 +106,7 @@ final class QueryObserver<T> implements QueryObserverHandle {
   QueryDispose subscribe(void Function(QueryResult<T> result) listener) {
     if (_disposed) throw StateError('QueryObserver is disposed.');
     final first = _listeners.isEmpty;
+    if (first) _result = _createResult();
     _listeners.add(listener);
     if (first) {
       _query.addObserver(this);
@@ -128,12 +129,18 @@ final class QueryObserver<T> implements QueryObserverHandle {
     };
   }
 
-  /// Rebinds this observer to [value].
+  /// Updates the definition without remounting the same cached query.
+  ///
+  /// A different key or a disabled-to-enabled transition may fetch using the
+  /// mount policy. Other updates preserve the current request and only affect
+  /// future fetches, result freshness, and timers.
   void setOptions(QueryOptions<T> value) {
     if (_disposed) throw StateError('QueryObserver is disposed.');
     final oldQuery = _query;
+    final wasEnabled = enabled;
+    final nextQuery = client.query(value);
     _options = value;
-    _query = client.query(value);
+    _query = nextQuery;
     _resolved = _query.options;
     if (!identical(oldQuery, _query) && _listeners.isNotEmpty) {
       oldQuery.removeObserver(this);
@@ -141,7 +148,9 @@ final class QueryObserver<T> implements QueryObserverHandle {
     }
     _updateResult();
     _updateTimers();
-    if (_listeners.isNotEmpty && _shouldFetchOnMount()) {
+    if (_listeners.isNotEmpty &&
+        (!identical(oldQuery, _query) || (!wasEnabled && enabled)) &&
+        _shouldFetchOnMount()) {
       unawaited(
         _query
             .fetch(options: _resolved, cancelRefetch: false)
