@@ -165,8 +165,7 @@ Future<int> runDevelopment(
           ...resolvedFlutterArguments,
         ], project: project);
       } on Object {
-        server.kill(ProcessSignal.sigterm);
-        await server.exitCode;
+        await _terminateNativeProcess(server, err);
         if (developmentOriginFile?.existsSync() ?? false) {
           developmentOriginFile!.deleteSync();
         }
@@ -215,8 +214,7 @@ Future<int> runDevelopment(
             environment: environment,
           );
           if (stopping) {
-            nextServer.kill(ProcessSignal.sigterm);
-            await nextServer.exitCode;
+            await _terminateNativeProcess(nextServer, err);
             break;
           }
           server = nextServer;
@@ -285,14 +283,23 @@ Future<int> runDevelopment(
     for (final signal in signals) {
       await signal.cancel();
     }
+    // A restart may already be awaiting this server's graceful drain. Stop
+    // children with escalation before joining it, so active work cannot keep
+    // the development CLI and its children alive indefinitely.
     final pendingRestart = restartFuture;
-    if (pendingRestart != null) await pendingRestart;
-    server.kill(ProcessSignal.sigterm);
-    flutter?.kill(ProcessSignal.sigterm);
     await Future.wait<void>(<Future<void>>[
-      server.exitCode.then<void>((_) {}),
-      if (flutter != null) flutter.exitCode.then<void>((_) {}),
+      _terminateNativeProcess(server, err),
+      if (flutter != null) _terminateNativeProcess(flutter, err),
     ]);
+    if (pendingRestart != null) {
+      try {
+        await pendingRestart.timeout(const Duration(seconds: 5));
+      } on TimeoutException {
+        err.writeln(
+          'Native development restart did not stop within 5 seconds.',
+        );
+      }
+    }
     if (developmentOriginFile?.existsSync() ?? false) {
       developmentOriginFile!.deleteSync();
     }
@@ -300,6 +307,24 @@ Future<int> runDevelopment(
   } finally {
     dispatchSourceChange = null;
     await sourceChanges.cancel();
+  }
+}
+
+Future<void> _terminateNativeProcess(Process process, StringSink err) async {
+  final exitCode = process.exitCode;
+  process.kill(ProcessSignal.sigterm);
+  try {
+    await exitCode.timeout(const Duration(seconds: 5));
+    return;
+  } on TimeoutException {
+    process.kill(ProcessSignal.sigkill);
+  }
+  try {
+    await exitCode.timeout(const Duration(seconds: 5));
+  } on TimeoutException {
+    err.writeln(
+      'Native development child ${process.pid} did not exit after SIGKILL.',
+    );
   }
 }
 
