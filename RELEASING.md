@@ -54,17 +54,33 @@ Published versions cannot be replaced.
 ## After publication
 
 Run the `Published release acceptance` workflow manually with the exact version,
-full main commit SHA, and preflight archive SHA256. It has read-only permissions
-and does not publish. The same acceptance can run locally:
+full release source commit SHA (S), and preflight archive SHA256. It has read-only
+permissions and does not publish. The workflow revision (H) supplies the harness
+and is checked out separately from S; both exact revisions must remain clean.
+Consumers execute H's scripts with fixtures from S. A later harness fix must
+never relabel H as the published source. The receipt records both revisions.
+
+Keep the frozen preflight manifest in `test/fixtures/releases/odroe-VERSION.json`
+in the reviewed harness checkout. Retain the release identity, necessary SDK
+versions/revisions and complete file list, removing machine-local paths from
+this public fixture. Preserve the original private receipt separately. The
+verifier reads only this fixed fixture and checks its bytes against H's Git
+blob; the receipt records the public fixture's own SHA256. A filtered fixture
+is not byte-identical to the original preflight JSON. It is excluded from
+published packages. The
+same acceptance can run locally with separate clean checkouts:
 
 ```sh
 python3 test/support/release_verify.py \
-  --version 0.1.0-dev.3 --commit FULL_MAIN_COMMIT \
+  --version 0.1.0-dev.3 --commit FULL_RELEASE_SOURCE_COMMIT \
+  --source-root /path/to/release-source \
+  --harness-commit FULL_HARNESS_COMMIT \
   --archive-sha256 PREFLIGHT_ARCHIVE_SHA256 --output .odroe/published-release
 ```
 
 The official index and downloaded archive must match the frozen identity. Every
-shipped file must also match pub's archive of the exact source commit. The
+shipped file must also match the complete frozen preflight manifest and the
+exact source commit's Git blob. Acceptance does not regenerate a pub archive. The
 downloaded official package supplies both the interpreted and compiled CLI;
 each default create resolves the same exact version in a fresh official cache.
 Direct and incremental consumers also use fresh hosted dependencies without

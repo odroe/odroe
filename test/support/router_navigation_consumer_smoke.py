@@ -18,14 +18,15 @@ def main():
     if not flutter:
         raise RuntimeError('Put the selected Flutter SDK on PATH.')
     with tempfile.TemporaryDirectory(prefix='odroe-router-consumer-') as temporary:
-        project = Path(temporary)
-        (project / 'test').mkdir()
+        base = Path(temporary).resolve()
+        project = base / 'app'
+        (project / 'test').mkdir(parents=True)
         shutil.copyfile(root / 'test/router/flutter_route_identity_test.dart',
                         project / 'test/navigation_test.dart')
         env = dict(os.environ)
         version = env.get('ODROE_HOSTED_VERSION')
         if version:
-            env['PUB_CACHE'] = str(project / 'cache')
+            env['PUB_CACHE'] = str(base / 'cache')
             env['PUB_HOSTED_URL'] = 'https://pub.dev'
         dependency = {'version': version} if version else {'path': str(package_root)}
         pubspec = (
@@ -42,7 +43,7 @@ def main():
         config = json.loads(config_file.read_text())
         package = next(p for p in config['packages'] if p['name'] == 'odroe')
         resolved = Path(unquote(urlparse(urljoin(config_file.as_uri(), package['rootUri'])).path)).resolve()
-        expected = Path(env['PUB_CACHE']) / 'hosted/pub.dev' / ('odroe-' + version) if version else package_root
+        expected = (Path(env['PUB_CACHE']) / 'hosted/pub.dev' / ('odroe-' + version)).resolve() if version else package_root
         if resolved != expected:
             raise RuntimeError('Route consumer did not resolve the requested dependency directly.')
         print('Native route dependency: ' + str(resolved), flush=True)
