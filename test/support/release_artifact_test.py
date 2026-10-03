@@ -13,9 +13,9 @@ class ReleaseArchiveTest(unittest.TestCase):
     def archive(self, base, extra=()):
         archive = base / 'package.tar.gz'
         with tarfile.open(archive, 'w:gz') as output:
-            files = {'pubspec.yaml': b'name: odroe\nversion: 0.1.0-dev.2\n',
+            files = {'pubspec.yaml': b'name: odroe\nversion: 0.1.0-dev.3\n',
                      'bin/odroe.dart': b'void main() {}\n',
-                     'lib/src/cli/version.dart': b"const cliVersion = '0.1.0-dev.2';\n"}
+                     'lib/src/cli/version.dart': b"const cliVersion = '0.1.0-dev.3';\n"}
             for name, content in files.items():
                 entry = tarfile.TarInfo(name)
                 entry.size = len(content)

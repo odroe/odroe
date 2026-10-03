@@ -30,7 +30,7 @@ reference app and documentation without overrides, checks their contracts,
 and runs a fresh generated RPC/SQLite application through a relocated native
 server bundle. Platform-specific delivery still needs its own verification.
 
-This checkout targets `0.1.0-dev.2`. Hosted installation requires that exact
+This checkout targets `0.1.0-dev.3`. Hosted installation requires that exact
 version to be available on pub.dev; publication is verified separately.
 
 ## Add Odroe to your Flutter app
@@ -40,7 +40,7 @@ Use an existing Flutter application, or start with an empty one:
 ```sh
 flutter create --empty --platforms web my_app
 cd my_app
-flutter pub add 'odroe:{"version":"0.1.0-dev.2"}'
+flutter pub add 'odroe:{"version":"0.1.0-dev.3"}'
 ```
 
 Replace `lib/main.dart` with this application:
@@ -117,7 +117,7 @@ above, create a separate empty Flutter project:
 cd ..
 flutter create --empty --platforms web full_stack_app
 cd full_stack_app
-flutter pub add 'odroe:{"version":"0.1.0-dev.2"}'
+flutter pub add 'odroe:{"version":"0.1.0-dev.3"}'
 dart run odroe init --full-stack
 dart run odroe dev -- -d chrome
 ```
@@ -218,17 +218,18 @@ report retained paths without turning a successful publication into a failure.
 | `router.dart`, `router_flutter.dart` | Typed routes, params/search, loaders, navigation |
 | `query.dart`, `query_flutter.dart` | Typed cache identities, async reads, mutations, hydration |
 | `rpc.dart` | Client references, HTTP transport, serialization, cancellation and budgets |
-| `query_rpc.dart` | Repository / next preview only; not in `0.1.0-dev.2`. Ordinary typed RPC reads and exact/collection Query filters |
+| `query_rpc.dart` | Since `0.1.0-dev.3`. Ordinary typed RPC reads and exact/collection Query filters |
 | `server.dart`, `server_io.dart` | Server functions, middleware, invocation, Dart IO hosting |
 | `database.dart` | Provider-neutral typed SQL and result contracts |
 | `database_sqlite.dart`, `database_postgres.dart`, `database_mysql.dart` | Native providers and owned connection lifetimes |
 | `database_d1.dart`, `server_fetch.dart` | Preview D1 and Fetch runtime adapters |
 | `document.dart`, `mdc.dart`, `press.dart`, `press_io.dart` | Semantic HTML, content parsing, page discovery |
 
-**Repository / next preview — not included in `0.1.0-dev.2`:**
+**Since `0.1.0-dev.3`:**
 `query_rpc.dart` adds `ref.read(rpc, input, scope: ['tenant', 'account'])`,
 `ref.readAt(...)` and `ref.reads(...)` to existing value refs. Calling `read`
-explicitly declares repeat execution safe. It returns native `QueryOptions<O>`;
+explicitly declares the function idempotent and safe for retries and refetches.
+It returns native `QueryOptions<O>`;
 filters use the same endpoint, scope and encoded input identity. Own each
 `RpcClient` per account/backend, and let its headers provider read only that
 account's refreshable credentials. Tokens and ambient cookies are not cache

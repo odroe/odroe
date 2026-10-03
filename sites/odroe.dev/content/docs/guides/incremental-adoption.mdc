@@ -9,9 +9,10 @@ language: en
 Start with the part your application needs. Query does not require Odroe's App,
 modules, routing, server, configuration files, or initializer.
 
-The owning `QueryClientProvider` constructor and `.value` constructor described
-here target `0.1.0-dev.2`. Before that exact version is available on pub.dev,
-add the local checkout as a direct dependency. The published `0.1.0-dev.1` provider still takes
+This guide targets `0.1.0-dev.3`. Hosted installation requires that exact
+version to be available on pub.dev; until then, add the local checkout as a
+direct dependency. The owning `QueryClientProvider` and `.value` constructors
+have been available since `0.1.0-dev.2`. The `0.1.0-dev.1` provider takes
 `client:` on its ordinary constructor; follow the migration note below when
 upgrading.
 
@@ -107,6 +108,11 @@ Create an `AppRouter` once in State, pass it to `routerConfig`, and call its
 `dispose()` when that State is removed. The same Query cache then survives page
 navigation.
 
+Since `0.1.0-dev.3`, destinations from shared definitions or wrappers navigate
+locally when their route identity has a registered Page or Shell binding.
+Unbound destinations stay external, even if their pathname matches a bound
+route.
+
 Manual routes attach pages directly:
 
 ```dart
@@ -176,6 +182,34 @@ Manually declared record or custom-type contracts need explicit codecs or
 serialization adapters; generated record/enum codecs remain a separate
 file-route compiler feature. A real endpoint and authentication policy are
 application decisions, not initialization requirements for Query or routing.
+
+## Optional ordinary RPC read bridge
+
+Since `0.1.0-dev.3`, import `package:odroe/query_rpc.dart` to define the same
+ordinary query with:
+
+```dart
+final greeting = readGreeting.read(
+  rpc,
+  const NoServerInput(),
+  scope: ['tenant', 'account'],
+);
+```
+
+Calling `read` explicitly declares the function idempotent and safe for retries
+and refetches. Own each RpcClient per account/backend, with a headers provider
+that reads only that account's refreshable credentials. The explicit `scope`
+contains stable identity; tokens and ambient cookies do not identify cache
+entries. The bridge freezes encoded input and the resolved destination.
+`readAt(rpc, input, scope: ...)` selects one encoded input; `reads(rpc, scope:
+...)` selects that function's ordinary reads for the same endpoint and scope.
+Use these filters in your own mutation invalidation logic.
+
+Web relative URLs follow the document base for both identity and transport;
+native reads require an explicit HTTP(S) endpoint. Raw responses and streams
+are rejected; use direct RPC for resource calls. Client cancellation excludes
+late results, while server notification is transport best-effort and may never
+arrive. Pagination and mutation invalidation remain application-defined.
 
 ## Use shared modules when they help
 

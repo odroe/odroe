@@ -126,6 +126,21 @@ Use focused builders for query, infinite-query, or mutation state. The query fun
 generated RPC ref without coupling either subsystem. Keep the options object in
 the owning `State`; ordinary widget rebuilds should reuse its identity.
 
+### Ordinary RPC reads
+
+Since `0.1.0-dev.3`, the optional `query_rpc.dart` entrypoint exposes `read`,
+`readAt`, and `reads` on value RPC references. Calling `read` explicitly declares
+idempotent execution for Query retries and refetches. Supply a stable tenant/
+account scope and own each RPC client per account/backend. Encoded input and
+the resolved endpoint define cache identity; credentials do not.
+
+Web relative URLs use the document base for identity and transport. Native
+reads require an explicit HTTP(S) endpoint. Raw responses and streams are
+rejected by the bridge; direct RPC still handles resources. Cancellation stops
+client work and excludes late results; server notification is transport
+best-effort. Pagination and mutation invalidation remain explicit Query
+contracts. See [incremental adoption](/docs/guides/incremental-adoption) for use.
+
 ### Keep page bounds across every layer
 
 The full-stack product returns `PostPage` with at most the requested `items`

@@ -28,8 +28,11 @@ CLI and path dependency while obtaining fixtures from the checkout. Generated
 RPC/SQLite and a relocated native server, direct dependency adoption, and
 incremental Query/routing/HTTP RPC, and the ordinary read bridge must all pass.
 The read bridge consumer uses the extracted public entrypoint on native HTTP
-and real Chrome, including document-base URL resolution. Research files and
-test fixtures must not enter the archive.
+and real Chrome, including document-base URL resolution. Route identity uses
+the extracted dependency for native navigation, then a temporary copy with only
+the browser external-navigation adapter instrumented for Chrome. Its fixtures
+come from the checkout. Research files and test fixtures must not enter the
+archive.
 
 Keep the archive and `manifest.json` together. The manifest records the exact
 source commit, version, SDK, archive SHA256, and every shipped file's checksum.
@@ -39,7 +42,7 @@ preflight. These results do not establish official hosted availability.
 Publish that same validated archive after reviewing the frozen identity:
 
 ```sh
-flutter pub publish --from-archive=.odroe/release-preflight/odroe-0.1.0-dev.2.tar.gz
+flutter pub publish --from-archive=.odroe/release-preflight/odroe-0.1.0-dev.3.tar.gz
 ```
 
 Pub's archive input does not rerun the original source validation, which is why
@@ -56,7 +59,7 @@ and does not publish. The same acceptance can run locally:
 
 ```sh
 python3 test/support/release_verify.py \
-  --version 0.1.0-dev.2 --commit FULL_MAIN_COMMIT \
+  --version 0.1.0-dev.3 --commit FULL_MAIN_COMMIT \
   --archive-sha256 PREFLIGHT_ARCHIVE_SHA256 --output .odroe/published-release
 ```
 
