@@ -5,8 +5,11 @@ import 'package:odroe/router_flutter.dart';
 
 import '../fixtures/router_scalar/scalar_app.dart' as scalar;
 import '../fixtures/router_scalar/explicit_app.dart' as explicit;
+import '../support/router_history_stub.dart'
+    if (dart.library.js_interop) '../support/router_history_web.dart';
 
 void main() {
+  disableBrowserHistory();
   TestWidgetsFlutterBinding.ensureInitialized();
   final reported = <Map<Object?, Object?>>[];
   setUp(() {

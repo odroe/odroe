@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Return to the existing browser history entry when popping a pushed Flutter
+  page. Back no longer repeats the list; Forward can reopen the detail by URL
+  without reviving a completed push Future. Preserve retained page state,
+  order asynchronous history operations, and replace the parent URL when an
+  initial deep link has no known application history to return to.
+  Discard unprovable history distances after retention changes or write failures;
+  keep local pop results and use URL replacement when traversal cannot be proven.
+  Validate and submit native traversal synchronously, reject stale notifications,
+  and acknowledge only the target entry while honoring external navigation.
 - Add `PathParams.integer`, `SearchParams.optionalInteger`, and
   `SearchParams.integer` for handwritten bidirectional integer URL codecs.
   The non-null search helper validates its default at construction, before any

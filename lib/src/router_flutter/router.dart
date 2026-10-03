@@ -11,6 +11,8 @@ import '../router/codec.dart';
 import '../router/load.dart';
 import '../router/match.dart';
 import '../router/route.dart';
+import 'browser_history_stub.dart'
+    if (dart.library.js_interop) 'browser_history_web.dart';
 import 'external_navigation.dart';
 import 'page.dart';
 
@@ -181,7 +183,7 @@ final class _TypedNavigationCompletion<T> implements _NavigationCompletion {
 }
 
 final class _NavigationRequest {
-  const _NavigationRequest({required this.operation, this.completion});
+  _NavigationRequest({required this.operation, this.completion});
 
   final _NavigationOperation operation;
   final _NavigationCompletion? completion;
@@ -202,7 +204,7 @@ final class _RouteInformationParser extends RouteInformationParser<Object> {
     final state = routeInformation.state;
     final request = state is _NavigationRequest
         ? state
-        : const _NavigationRequest(operation: _NavigationOperation.external);
+        : _NavigationRequest(operation: _NavigationOperation.external);
     return SynchronousFuture<Object>(
       _RouteConfiguration(uri: routeInformation.uri, request: request),
     );
@@ -215,18 +217,58 @@ final class _RouteInformationParser extends RouteInformationParser<Object> {
   }
 }
 
+final class _HistoryEntry {
+  _HistoryEntry(this.id, this.uri);
+  final String id;
+  final Uri uri;
+  String? browserState;
+}
+
+typedef _HistoryUpdate = ({
+  RouteInformation information,
+  bool replace,
+  _NavigationRequest? restore,
+});
+
+final class _HistoryTraversal {
+  _HistoryTraversal(this.target, this.information);
+  final _HistoryEntry target;
+  final RouteInformation information;
+  final completed = Completer<bool>();
+  bool superseded = false;
+}
+
 final class _RouteInformationProvider extends RouteInformationProvider
     with WidgetsBindingObserver, ChangeNotifier {
   _RouteInformationProvider(Uri initialLocation)
     : _value = RouteInformation(
         uri: initialLocation,
-        state: const _NavigationRequest(
-          operation: _NavigationOperation.external,
-        ),
-      );
+        state: _NavigationRequest(operation: _NavigationOperation.external),
+      ) {
+    if (browserHistoryEnabled) {
+      _removeHistoryListener = listenBrowserHistory(_nativeHistoryChanged);
+    }
+  }
 
   RouteInformation _value;
+  RouteInformation? _lastWebReport;
   bool _reportedToEngine = false;
+  static int _sessions = 0;
+  final _session = '${DateTime.now().microsecondsSinceEpoch}:${_sessions++}';
+  int _nextEntry = 0;
+  final _entries = <_HistoryEntry>[];
+  final _anchors = Expando<_HistoryEntry>();
+  final _restored = Expando<bool>();
+  final _updates = Queue<_HistoryUpdate>();
+  int _position = -1;
+  int? _historyLength;
+  bool _writing = false;
+  bool _disposed = false;
+  _HistoryTraversal? _traversal;
+  void Function()? _removeHistoryListener;
+  String? _lastHistoryEvent;
+  int _historyRevision = 0;
+  static const _historyTimeout = Duration(seconds: 5);
 
   @override
   RouteInformation get value => _value;
@@ -259,12 +301,31 @@ final class _RouteInformationProvider extends RouteInformationProvider
   }) {
     final state = routeInformation.state;
     final request = state is _NavigationRequest ? state : null;
+    if (request != null && _restored[request] == true) return;
     final replace =
         !_reportedToEngine ||
         type == RouteInformationReportingType.neglect ||
         request?.operation == _NavigationOperation.replace ||
         request?.operation == _NavigationOperation.external;
     _reportedToEngine = true;
+    _value = routeInformation;
+    if (browserHistoryEnabled) {
+      // Some framework versions report one request again after a reentrant
+      // delegate notification. It still represents a single browser write.
+      if (type == RouteInformationReportingType.none &&
+          identical(_lastWebReport?.state, request) &&
+          _lastWebReport?.uri == routeInformation.uri) {
+        return;
+      }
+      _lastWebReport = routeInformation;
+      _updates.add((
+        information: routeInformation,
+        replace: replace,
+        restore: null,
+      ));
+      unawaited(_writeHistory());
+      return;
+    }
     SystemNavigator.selectMultiEntryHistory();
     SystemNavigator.routeInformationUpdated(
       uri: routeInformation.uri,
@@ -273,16 +334,231 @@ final class _RouteInformationProvider extends RouteInformationProvider
       state: null,
       replace: replace,
     );
-    _value = routeInformation;
+  }
+
+  // Called before notifying delegate listeners, so a reentrant navigation
+  // cannot publish ahead of the pop it follows. The later Router report is
+  // suppressed; loaders and retained pages continue to use the same records.
+  void restore(RouteInformation information, _NavigationRequest target) {
+    if (!browserHistoryEnabled) return;
+    _reportedToEngine = true;
+    _restored[information.state!] = true;
+    _value = information;
+    _updates.add((information: information, replace: true, restore: target));
+    unawaited(_writeHistory());
+  }
+
+  Future<void> _writeHistory() async {
+    if (_writing || _disposed) return;
+    _writing = true;
+    try {
+      while (_updates.isNotEmpty && !_disposed) {
+        final update = _updates.removeFirst();
+        _checkHistoryLength();
+        final target = update.restore == null
+            ? null
+            : _anchors[update.restore!];
+        final index = target == null ? -1 : _entries.indexOf(target);
+        final source = _position < 0 ? null : _entries[_position].browserState;
+        if (index >= 0 &&
+            index < _position &&
+            target!.uri == update.information.uri &&
+            source != null) {
+          final traversal = _HistoryTraversal(target, update.information);
+          _traversal = traversal;
+          var acknowledged = false;
+          try {
+            if (moveBrowserHistory(index - _position, source)) {
+              acknowledged = await traversal.completed.future.timeout(
+                _historyTimeout,
+                onTimeout: () => false,
+              );
+              // Recover a missing Flutter notification only from the browser's
+              // actual current entry, never from an elapsed timer or length.
+              if (!acknowledged &&
+                  !traversal.superseded &&
+                  !_disposed &&
+                  browserHistoryState != source) {
+                _nativeHistoryChanged();
+                if (traversal.completed.isCompleted) {
+                  acknowledged = await traversal.completed.future;
+                }
+              }
+            }
+          } on Object catch (error, stack) {
+            _historyError(error, stack);
+          } finally {
+            _traversal = null;
+          }
+          if (_disposed) return;
+          if (acknowledged || traversal.superseded) continue;
+          // No submitted move or no matching event: retire the whole chain.
+          // The local pop is already complete; replace its URL below.
+          _forgetHistory();
+        }
+        try {
+          await SystemNavigator.selectMultiEntryHistory().timeout(
+            _historyTimeout,
+          );
+          if (_disposed) return;
+          final beforeLength = _checkHistoryLength();
+          final beforeState = browserHistoryState;
+          // A host can replace state without changing the URL or length.
+          // Do not carry that unowned entry into a new predecessor chain.
+          if (_position >= 0 &&
+              beforeState != _entries[_position].browserState) {
+            _forgetHistory();
+          }
+          final revision = _historyRevision;
+          final knownForward = _entries.length - _position - 1;
+          final expectedLength = update.replace
+              ? beforeLength
+              : beforeLength + 1 - knownForward;
+          final entry = _HistoryEntry(
+            '$_session:${_nextEntry++}',
+            update.information.uri,
+          );
+          // A write can change native history even if its acknowledgement
+          // fails. An earlier popstate is no longer a duplicate after it.
+          _lastHistoryEvent = null;
+          await SystemNavigator.routeInformationUpdated(
+            uri: entry.uri,
+            state: <String, Object?>{'odroe.history': entry.id},
+            replace: update.replace,
+          ).timeout(_historyTimeout);
+          if (_disposed) return;
+          final afterLength = _historyLength = browserHistoryLength;
+          final afterState = browserHistoryState;
+          // Commit ownership only after a successful, observed native write.
+          // Opaque state comparison does not depend on engine wrapper fields.
+          if (revision != _historyRevision ||
+              afterState == null ||
+              afterState == beforeState ||
+              browserHistoryLocation != entry.uri) {
+            _forgetHistory();
+            continue;
+          }
+          entry.browserState = afterState;
+          if (update.replace && _position >= 0) {
+            _entries[_position] = entry;
+          } else {
+            _entries.removeRange(_position + 1, _entries.length);
+            _entries.add(entry);
+            _position++;
+          }
+          final request = update.information.state;
+          if (request is _NavigationRequest) _anchors[request] = entry;
+          if (update.restore != null) _anchors[update.restore!] = entry;
+          if (afterLength != expectedLength) {
+            // Known Forward truncation is included in the expected delta.
+            // Any other delta invalidates ALL old distances. Growth later
+            // cannot restore old anchors; only this fresh entry stays owned.
+            _entries
+              ..clear()
+              ..add(entry);
+            _position = 0;
+          }
+        } on Object catch (error, stack) {
+          _forgetHistory();
+          _historyError(error, stack);
+        }
+      }
+    } finally {
+      _writing = false;
+    }
+  }
+
+  void _historyError(Object error, StackTrace stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'odroe router',
+        context: ErrorDescription('synchronizing browser history'),
+      ),
+    );
+  }
+
+  void _forgetHistory() {
+    _entries.clear();
+    _position = -1;
+    _historyLength = browserHistoryLength;
+  }
+
+  int _checkHistoryLength() {
+    final length = browserHistoryLength;
+    if (_historyLength != null && _historyLength != length) _forgetHistory();
+    _historyLength = length;
+    return length;
+  }
+
+  void _nativeHistoryChanged() {
+    if (_disposed) return;
+    final state = browserHistoryState;
+    final location = browserHistoryLocation;
+    if (location == null) return;
+    final entry = _entries
+        .where((entry) => entry.browserState == state && entry.uri == location)
+        .firstOrNull;
+    _platformRoute(
+      RouteInformation(
+        uri: location,
+        state: entry == null
+            ? null
+            : <String, Object?>{'odroe.history': entry.id},
+      ),
+    );
   }
 
   void _platformRoute(RouteInformation routeInformation) {
-    _value = RouteInformation(
-      uri: routeInformation.uri,
-      state:
-          routeInformation.state ??
-          const _NavigationRequest(operation: _NavigationOperation.external),
+    _checkHistoryLength();
+    final state = routeInformation.state;
+    final id = state is Map ? state['odroe.history'] : null;
+    final index = _entries.indexWhere((entry) => entry.id == id);
+    if (browserHistoryEnabled) {
+      final current = browserHistoryState;
+      final currentEntry = _entries
+          .where((entry) => entry.browserState == current)
+          .firstOrNull;
+      if (currentEntry != null && currentEntry.id != id) return;
+      if (routeInformation.uri != browserHistoryLocation ||
+          (index >= 0 && _entries[index].browserState != current)) {
+        return;
+      }
+      // The engine and the native observer can report the same event. Delayed
+      // engine notifications must not replay an event over newer application UI.
+      if (current != null && current == _lastHistoryEvent) return;
+      if (index == _position &&
+          index >= 0 &&
+          _anchors[_value.state!] == _entries[index] &&
+          _value.uri == routeInformation.uri) {
+        return;
+      }
+      _lastHistoryEvent = current;
+    }
+    _historyRevision++;
+    _position = index;
+    if (index < 0) _entries.clear();
+    final traversal = _traversal;
+    if (traversal != null) {
+      if (!traversal.superseded && id == traversal.target.id && index >= 0) {
+        _anchors[traversal.information.state!] = traversal.target;
+        if (!traversal.completed.isCompleted) {
+          traversal.completed.complete(true);
+        }
+        return;
+      }
+      traversal.superseded = true;
+      if (!traversal.completed.isCompleted) traversal.completed.complete(false);
+    }
+    // External navigation supersedes older queued writes, including writes
+    // waiting behind a native update whose acknowledgement has not arrived.
+    _updates.clear();
+    final request = _NavigationRequest(
+      operation: _NavigationOperation.external,
     );
+    if (index >= 0) _anchors[request] = _entries[index];
+    _value = RouteInformation(uri: routeInformation.uri, state: request);
     notifyListeners();
   }
 
@@ -306,6 +582,14 @@ final class _RouteInformationProvider extends RouteInformationProvider
 
   @override
   void dispose() {
+    _disposed = true;
+    _removeHistoryListener?.call();
+    _updates.clear();
+    final traversal = _traversal;
+    if (traversal != null && !traversal.completed.isCompleted) {
+      traversal.superseded = true;
+      traversal.completed.complete(false);
+    }
     if (hasListeners) WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -679,9 +963,11 @@ final class _RouterDelegate extends RouterDelegate<Object>
       final active = _records.last.configuration;
       _configuration = _RouteConfiguration(
         uri: active.uri,
-        request: const _NavigationRequest(
-          operation: _NavigationOperation.replace,
-        ),
+        request: _NavigationRequest(operation: _NavigationOperation.replace),
+      );
+      _provider.restore(
+        RouteInformation(uri: active.uri, state: _configuration!.request),
+        active.request,
       );
       notifyListeners();
       return;
