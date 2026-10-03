@@ -49,7 +49,7 @@ async function scenario(hash, initial, test) {
   const contextLost = error => /Execution context was destroyed|Cannot find context with specified id/.test(error.message);
   const snapshot = () => evaluate(`({
     ...(typeof routeHistorySnapshot === 'function' ? JSON.parse(routeHistorySnapshot()) : {}),
-    url: ${hash ? "location.hash.slice(1) || '/'" : 'location.pathname + location.search'},
+    url: ${hash ? "location.hash.slice(1) || '/'" : 'location.href.slice(location.origin.length)'},
     origin: location.origin,
     title: document.title,
     length: history.length,
@@ -433,6 +433,18 @@ const cases = {
     assert.deepEqual(recovered.results, ['saved', 'saved']);
     await act('pop'); const parent = await at('parent push completes only on its own pop', '/');
     assert.deepEqual(parent.results, ['saved', 'saved', 'saved']);
+  },
+  async 'route fragments retain owned history across pop and Forward'({at, act, traverse}) {
+    const route = '/post/1#comments';
+    await act('list'); await at('list', list);
+    await act('pushFragment'); await at('fragment push', route);
+    await act('pop'); const popped = await at('fragment app pop', list);
+    assert.deepEqual(popped.results, ['saved']);
+    await traverse('back'); await at('Back reaches home', '/');
+    assert.equal(popped.traversals, 1);
+    await traverse('forward'); await at('Forward list', list);
+    await traverse('forward'); const forward = await at('Forward preserves fragment', route);
+    assert.deepEqual(forward.results, ['saved']);
   },
 };
 for (const count of [1, 2]) {

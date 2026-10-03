@@ -19,9 +19,20 @@ String? get browserHistoryState {
   }
 }
 
-/// The current URL decoded by the host's selected strategy.
-Uri? get browserHistoryLocation =>
-    urlStrategy == null ? null : Uri.parse(urlStrategy!.getPath());
+/// The current URL decoded by the host's strategy, retaining route fragments.
+Uri? get browserHistoryLocation {
+  final strategy = urlStrategy;
+  if (strategy == null) return null;
+  var path = strategy.getPath();
+  if (strategy is PathUrlStrategy && !path.contains('#')) {
+    // Default path strategies omit fragments. Read the raw suffix so an empty
+    // fragment is preserved too; hash strategies already include it in path.
+    final href = web.window.location.href;
+    final fragment = href.indexOf('#');
+    if (fragment >= 0) path += href.substring(fragment);
+  }
+  return Uri.parse(path);
+}
 
 /// Validates and submits in one synchronous step. A custom strategy's `go`
 /// method can defer its side effect and cannot be cancelled after a user Back.

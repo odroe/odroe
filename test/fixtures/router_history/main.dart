@@ -151,6 +151,15 @@ class _HistoryAppState extends State<_HistoryApp> {
         router.push<String>(_posts.to(search: 7)).then(results.add);
       case 'push':
         router.push<String>(_post.to(params: 1)).then(results.add);
+      case 'pushFragment':
+        router
+            .push<String>(
+              Destination.forRoute(
+                route: _post,
+                uri: _post.to(params: 1).uri.replace(fragment: 'comments'),
+              ),
+            )
+            .then(results.add);
       case 'pushNext':
         router.push<String>(_post.to(params: 3)).then(results.add);
       case 'goNext':
