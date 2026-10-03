@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Navigate locally from shared route definitions and wrappers when their
+  identity has a registered Flutter page or shell binding. Keep unbound server
+  destinations external, including independent routes with the same pathname.
 - Add optional `query_rpc.dart` with `ServerFunctionRef.read`, `readAt`, and
   `reads`, returning existing Query options and filters. Reads explicitly opt
   into repeat execution and use a frozen codec/serializer payload, resolved

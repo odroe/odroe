@@ -45,6 +45,14 @@ server-only tree. It does not use annotations, parts, registries, or
 Generated route references encode params and search values through the same
 typed codec used for matching.
 
+Flutter navigation uses the registered page or shell binding's shared route
+identity. Once that binding is in `AppRouter.routes`, destinations from its
+neutral definition or another wrapper navigate locally through `go`, `push`,
+and `replace`. Compiled routes preserve this identity. A separate definition
+with the same pathname does not acquire the binding. Server destinations
+without a registered Flutter binding use browser navigation; native platforms
+report that the route has no Flutter page.
+
 Search values use the complete `defaults` record when decoding fails. Set
 `invalid: InvalidSearchBehavior.error` for strict URLs instead: Flutter sends
 the parsing failure to the router error builder, while server dispatch returns
