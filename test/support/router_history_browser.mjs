@@ -45,11 +45,13 @@ async function scenario(hash, initial, test) {
     if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
     return response.result.value;
   };
-  const snapshot = () => evaluate(`typeof routeHistorySnapshot === 'function' ? {
-    ...JSON.parse(routeHistorySnapshot()),
+  const snapshot = () => evaluate(`({
+    ...(typeof routeHistorySnapshot === 'function' ? JSON.parse(routeHistorySnapshot()) : {}),
     url: ${hash ? "location.hash.slice(1) || '/'" : 'location.pathname + location.search'},
+    origin: location.origin,
+    title: document.title,
     length: history.length
-  } : null`);
+  })`);
   const sequence = [];
   const at = async (label, route) => {
     await until(snapshot, s => s?.route === route && s.url === route, label);
@@ -165,6 +167,28 @@ const cases = {
     assert.deepEqual(popped.results, ['saved', 'saved']);
     assert.equal(popped.traversals, 1);
     await traverse('back'); await at('Back', '/');
+  },
+  async 'browser-pruned entries never send app pop outside'({at, act}) {
+    await act('list'); const before = await at('list', list);
+    await act('draft');
+    // Chrome limits retained history. Keep the loop bounded while exercising
+    // removal of old same-document entries behind a cross-origin predecessor.
+    for (let i = 0; i < 55; i++) {
+      await act(i % 2 ? 'pushNext' : 'push');
+      await at('capacity push ' + i, i % 2 ? '/post/3' : '/post/1');
+    }
+    for (let i = 54; i >= 0; i--) {
+      await act('pop');
+      await at('capacity pop ' + i, i === 0 ? list : (i % 2 ? '/post/1' : '/post/3'));
+    }
+    const restored = await at('retained list after capacity', list);
+    assert.equal(restored.mount, before.mount);
+    assert.equal(restored.draft, 1);
+    assert.deepEqual(restored.results, Array(55).fill('saved'));
+    await act('pushNext'); await at('new push after capacity', '/post/3');
+    await act('pop');
+    const popped = await at('new pop after capacity', list);
+    assert.deepEqual(popped.results, Array(56).fill('saved'));
   },
   async 'consecutive pops during asynchronous traversal'({at, act, waiting, traverse}) {
     await act('list'); await at('list', list);
