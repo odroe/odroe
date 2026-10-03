@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Restrict URL path/search integer decoding and encoding to the inclusive
+  cross-platform safe range -9007199254740991 to 9007199254740991. Parse exactly
+  before range checks so Chrome cannot silently select a different integer ID.
+  This beta behavior change also narrows the native accepted range. Keep
+  supported signs, hexadecimal and leading-zero syntax within the range;
+  migrate larger IDs to strings or custom BigInt codecs as described in
+  [MIGRATION.md](MIGRATION.md#unreleased-safe-url-integers).
+
 ## 0.1.0-dev.3
 
 - Navigate locally from shared route definitions and wrappers when their

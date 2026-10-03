@@ -1,5 +1,36 @@
 import 'dart:collection';
 
+const _maxSafeInteger = 9007199254740991;
+final _maxSafeBigInteger = BigInt.from(_maxSafeInteger);
+
+int _parseInteger(String value, String parameter) {
+  // Check the exact value before converting to a possibly JavaScript-backed int.
+  final result = BigInt.tryParse(value);
+  if (result == null) {
+    throw ParameterFormatException(
+      '$parameter must be an integer.',
+      source: value,
+    );
+  }
+  if (result.abs() > _maxSafeBigInteger) {
+    throw _integerRangeError(parameter, value);
+  }
+  return result.toInt();
+}
+
+String _encodeInteger(int value, String parameter) {
+  if (value < -_maxSafeInteger || value > _maxSafeInteger) {
+    throw _integerRangeError(parameter, value);
+  }
+  return value.toString();
+}
+
+ParameterFormatException _integerRangeError(String parameter, Object value) =>
+    ParameterFormatException(
+      '$parameter must be between -$_maxSafeInteger and $_maxSafeInteger.',
+      source: value,
+    );
+
 /// The behavior used when a URL contains invalid search values.
 enum InvalidSearchBehavior {
   /// Use the route's default search state.
@@ -60,13 +91,12 @@ final class PathInput {
   }
 
   /// Returns the integer stored for [name].
+  ///
+  /// Throws [ParameterFormatException] outside the cross-platform safe range
+  /// -9007199254740991 to 9007199254740991, inclusive.
   int requiredInt(String name) {
     final value = requiredString(name);
-    return int.tryParse(value) ??
-        (throw ParameterFormatException(
-          'Path parameter "$name" must be an integer.',
-          source: value,
-        ));
+    return _parseInteger(value, 'Path parameter "$name"');
   }
 
   /// Returns the finite double stored for [name].
@@ -113,7 +143,11 @@ final class PathOutput {
   void string(String name, String value) => _write(name, <String>[value]);
 
   /// Writes an integer path parameter.
-  void integer(String name, int value) => string(name, value.toString());
+  ///
+  /// Throws [ParameterFormatException] outside the cross-platform safe range
+  /// -9007199254740991 to 9007199254740991, inclusive.
+  void integer(String name, int value) =>
+      string(name, _encodeInteger(value, 'Path parameter "$name"'));
 
   /// Writes a finite double path parameter.
   void decimal(String name, double value) {
@@ -216,14 +250,13 @@ final class SearchInput {
   }
 
   /// Returns an integer query value, or `null` when it is absent.
+  ///
+  /// Throws [ParameterFormatException] outside the cross-platform safe range
+  /// -9007199254740991 to 9007199254740991, inclusive.
   int? integer(String name) {
     final value = string(name);
     if (value == null) return null;
-    return int.tryParse(value) ??
-        (throw ParameterFormatException(
-          'Search parameter "$name" must be an integer.',
-          source: value,
-        ));
+    return _parseInteger(value, 'Search parameter "$name"');
   }
 
   /// Returns a finite double query value, or `null` when it is absent.
@@ -278,9 +311,15 @@ final class SearchOutput {
   }
 
   /// Writes an integer, omitting `null` and [omitIf].
+  ///
+  /// Throws [ParameterFormatException] for non-null values outside the
+  /// cross-platform safe range -9007199254740991 to 9007199254740991, inclusive,
+  /// even when the value equals [omitIf].
   void integer(String name, int? value, {int? omitIf}) {
-    if (value == null || value == omitIf) return;
-    _write(name, <String>[value.toString()]);
+    if (value == null) return;
+    final encoded = _encodeInteger(value, 'Search parameter "$name"');
+    if (value == omitIf) return;
+    _write(name, <String>[encoded]);
   }
 
   /// Writes a finite double, omitting `null` and [omitIf].

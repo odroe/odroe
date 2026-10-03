@@ -17,6 +17,49 @@ For source evaluation, use Flutter 3.38.1 / stable Dart 3.10.0 or a newer valida
 
 Framework App/Module/Context, Query/Mutation, typed routes, generated RPC and SQL are separate contracts from the former UI API. Roux is the actual matching dependency; Spry and oxy are not integrated.
 
+## Unreleased: Safe URL integers
+
+URL integer codecs now accept only **-9007199254740991 through
+9007199254740991, inclusive**, on native, JavaScript and Wasm. This is an
+intentional beta behavior change: native previously accepted larger integers,
+while JavaScript could silently round an ID such as `9007199254740993` to
+`9007199254740992`. This source change is not yet published.
+
+`PathInput.requiredInt`, `SearchInput.integer`, `PathOutput.integer` and
+`SearchOutput.integer` share this boundary. Decoding parses exactly before
+checking the range. Encoding rejects out-of-range non-null values even if they
+equal `omitIf`; native code cannot emit an integer URL that Web cannot read
+exactly. Negative numbers, zero, signs, hexadecimal and leading zeros remain
+supported within the range, with canonical decimal output.
+
+Out-of-range path values fail matching. Invalid search values follow the
+existing fallback or strict error policy, retaining the original input in the
+format error. Missing optional search values still decode to null. Database
+integers and RPC serialization are unaffected.
+
+For larger identifiers, keep them as strings from their original source through
+URL encoding. Do not first convert them to a Web `int`, because precision may
+already have been lost:
+
+```dart
+final post = AppRoute<String, NoSearch, NoData>(
+  path: '/posts/:postId',
+  params: PathParams<String>.codec(
+    decode: (input) => input.requiredString('postId'),
+    encode: (value, output) => output.string('postId', value),
+  ),
+);
+final destination = post.to(params: '9007199254740993');
+```
+
+For query IDs, use `SearchInput.string` / `SearchOutput.string` in an explicit
+codec. For generated schemas, change the relevant ID field from `int` to
+`String` and regenerate routes. If the application needs arithmetic, use a
+custom `PathParams<BigInt>.codec` or `SearchParams<BigInt>.codec`: decode the raw
+string with `BigInt.tryParse`, throw `ParameterFormatException` for invalid
+input, and encode via `output.string(name, value.toString())`. Avoid `toInt()`
+on this large-ID path. Custom codecs own their grammar and business limits.
+
 ## 0.1.0-dev.3: Ordinary RPC reads and route identity
 
 Import the optional `query_rpc.dart` entrypoint to use `ref.read`, `readAt`,
