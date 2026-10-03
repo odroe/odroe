@@ -125,10 +125,10 @@ rules and migration from the `0.1.0-dev.1` constructor.
 Use focused builders for query, infinite-query, or mutation state. The query
 function can call a generated RPC ref without coupling either subsystem.
 A stable query key preserves the subscription and cache across ordinary
-rebuilds. New options with the same key update future definitions without
+rebuilds. Ordinary same-key options updates affect future definitions without
 refetching or replacing the current request. Reusing an options object can
-reduce construction work, but is not required for correctness. Actual remounts
-and key changes follow the query's configured policies.
+reduce construction work, but is not required for correctness. Remounts, key changes, and disabled-to-enabled transitions may fetch according
+to the query's configured policies.
 
 ### Ordinary RPC reads
 
