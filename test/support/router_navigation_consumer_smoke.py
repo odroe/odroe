@@ -20,9 +20,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix='odroe-router-consumer-') as temporary:
         base = Path(temporary).resolve()
         project = base / 'app'
-        (project / 'test').mkdir(parents=True)
+        (project / 'test/router').mkdir(parents=True)
         shutil.copyfile(root / 'test/router/flutter_route_identity_test.dart',
-                        project / 'test/navigation_test.dart')
+                        project / 'test/router/navigation_test.dart')
+        (project / 'test/support').mkdir()
+        for name in ['router_history_stub.dart', 'router_history_web.dart']:
+            shutil.copyfile(root / 'test/support' / name, project / 'test/support' / name)
         env = dict(os.environ)
         version = env.get('ODROE_HOSTED_VERSION')
         if version:
@@ -49,7 +52,7 @@ def main():
         print('Native route dependency: ' + str(resolved), flush=True)
         run([flutter, 'analyze', '--no-pub', '--fatal-infos'], project, env=env)
         run([flutter, 'test', '--no-pub', '--concurrency=1',
-             '--reporter=expanded', 'test/navigation_test.dart'], project, env=env)
+             '--reporter=expanded', 'test/router/navigation_test.dart'], project, env=env)
 
         vendor = project / 'vendor/odroe'
         vendor.mkdir(parents=True)
@@ -76,7 +79,7 @@ def main():
             raise RuntimeError('Unexpected product changes in the browser consumer: ' + repr(changed))
         run([flutter, 'test', '--no-pub', '--platform=chrome', '--concurrency=1',
              '--reporter=expanded', '--dart-define=ODROE_TEST_CONTROLLED_EXTERNAL=true',
-             'test/navigation_test.dart'], project, env=env)
+             'test/router/navigation_test.dart'], project, env=env)
     print('Route identity consumer, controlled external adapter and Chrome profile cleaned.')
 
 

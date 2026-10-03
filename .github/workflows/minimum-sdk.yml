@@ -43,6 +43,9 @@ jobs:
           python3 test/support/release_verify_test.py
           python3 test/support/router_navigation_consumer_smoke_test.py
       - run: flutter pub get
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
       - run: flutter pub get
         working-directory: example/app
       - run: flutter pub get
@@ -55,6 +58,8 @@ jobs:
           dart test --platform chrome --compiler dart2wasm test/router/integer_codec_test.dart test/router/scalar_codec_test.dart
       - name: Verify scalar routes in a fresh native and Chrome consumer
         run: python3 test/support/router_scalar_consumer_smoke.py
+      - name: Verify real browser history and asynchronous pop races
+        run: python3 test/support/router_history_consumer_smoke.py
       - name: Verify compiler and reference Flutter consumption
         run: |
           flutter test --no-pub --concurrency=2 test/router/file_router_test.dart \

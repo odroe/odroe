@@ -9,12 +9,21 @@ import subprocess
 import tempfile
 import threading
 import time
+from urllib.parse import unquote, urljoin, urlparse
 
 from fullstack_consumer_smoke import flutter, package_root, root, run, stop
 
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/outside':
+            body = b'<title>Outside</title><p>Unowned history entry</p>'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if not Path(self.translate_path(self.path)).is_file():
             self.path = '/index.html'
         super().do_GET()
@@ -40,6 +49,12 @@ def main():
             '  odroe: ' + json.dumps({'path': str(package_root)}) + '\n')
         shutil.copyfile(root / 'test/fixtures/router_history/main.dart', project / 'lib/main.dart')
         run([flutter, 'pub', 'get'], project)
+        config_file = project / '.dart_tool/package_config.json'
+        config = json.loads(config_file.read_text())
+        package = next(p for p in config['packages'] if p['name'] == 'odroe')
+        resolved = Path(unquote(urlparse(urljoin(config_file.as_uri(), package['rootUri'])).path)).resolve()
+        if resolved != package_root:
+            raise RuntimeError('History consumer resolved an unexpected Odroe source.')
         run([flutter, 'build', 'web', '--release', '--no-pub',
              '--no-web-resources-cdn', '--no-wasm-dry-run'], project)
         server = ThreadingHTTPServer(('127.0.0.1', 0), partial(

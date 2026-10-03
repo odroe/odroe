@@ -18,6 +18,8 @@ def main():
             'test/fixtures/router_scalar/explicit_app.dart',
             'test/fixtures/router_scalar/scalar_app.dart',
             'test/router/flutter_scalar_navigation_test.dart',
+            'test/support/router_history_stub.dart',
+            'test/support/router_history_web.dart',
         ]
         for name in files:
             target = project / name

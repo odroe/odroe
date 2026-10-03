@@ -8,6 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:odroe/router_flutter.dart';
 import 'package:odroe/server.dart';
 
+import '../support/router_history_stub.dart'
+    if (dart.library.js_interop) '../support/router_history_web.dart';
+
 typedef _Params = ({int postId});
 typedef _Search = ({bool preview});
 typedef _ParentParams = ({String teamId});
@@ -138,6 +141,7 @@ void _pop(AppRouter router, [String? result]) {
 }
 
 void main() {
+  disableBrowserHistory();
   TestWidgetsFlutterBinding.ensureInitialized();
   // The browser consumer instruments only its temporary external-navigation
   // copy, recording calls through this Zone key without leaving the test page.

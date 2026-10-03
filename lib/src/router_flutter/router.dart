@@ -11,6 +11,8 @@ import '../router/codec.dart';
 import '../router/load.dart';
 import '../router/match.dart';
 import '../router/route.dart';
+import 'browser_history_stub.dart'
+    if (dart.library.js_interop) 'browser_history_web.dart';
 import 'external_navigation.dart';
 import 'page.dart';
 
@@ -181,7 +183,7 @@ final class _TypedNavigationCompletion<T> implements _NavigationCompletion {
 }
 
 final class _NavigationRequest {
-  const _NavigationRequest({required this.operation, this.completion});
+  _NavigationRequest({required this.operation, this.completion});
 
   final _NavigationOperation operation;
   final _NavigationCompletion? completion;
@@ -202,7 +204,7 @@ final class _RouteInformationParser extends RouteInformationParser<Object> {
     final state = routeInformation.state;
     final request = state is _NavigationRequest
         ? state
-        : const _NavigationRequest(operation: _NavigationOperation.external);
+        : _NavigationRequest(operation: _NavigationOperation.external);
     return SynchronousFuture<Object>(
       _RouteConfiguration(uri: routeInformation.uri, request: request),
     );
@@ -215,18 +217,45 @@ final class _RouteInformationParser extends RouteInformationParser<Object> {
   }
 }
 
+final class _HistoryEntry {
+  _HistoryEntry(this.id, this.uri);
+  final String id;
+  final Uri uri;
+}
+
+typedef _HistoryUpdate = ({
+  RouteInformation information,
+  bool replace,
+  _NavigationRequest? restore,
+});
+
+final class _HistoryTraversal {
+  _HistoryTraversal(this.target);
+  final _HistoryEntry target;
+  final completed = Completer<void>();
+}
+
 final class _RouteInformationProvider extends RouteInformationProvider
     with WidgetsBindingObserver, ChangeNotifier {
   _RouteInformationProvider(Uri initialLocation)
     : _value = RouteInformation(
         uri: initialLocation,
-        state: const _NavigationRequest(
-          operation: _NavigationOperation.external,
-        ),
+        state: _NavigationRequest(operation: _NavigationOperation.external),
       );
 
   RouteInformation _value;
   bool _reportedToEngine = false;
+  static int _sessions = 0;
+  final _session = '${DateTime.now().microsecondsSinceEpoch}:${_sessions++}';
+  int _nextEntry = 0;
+  final _entries = <_HistoryEntry>[];
+  final _anchors = Expando<_HistoryEntry>();
+  final _restored = Expando<bool>();
+  final _updates = Queue<_HistoryUpdate>();
+  int _position = -1;
+  bool _writing = false;
+  bool _disposed = false;
+  _HistoryTraversal? _traversal;
 
   @override
   RouteInformation get value => _value;
@@ -259,12 +288,23 @@ final class _RouteInformationProvider extends RouteInformationProvider
   }) {
     final state = routeInformation.state;
     final request = state is _NavigationRequest ? state : null;
+    if (request != null && _restored[request] == true) return;
     final replace =
         !_reportedToEngine ||
         type == RouteInformationReportingType.neglect ||
         request?.operation == _NavigationOperation.replace ||
         request?.operation == _NavigationOperation.external;
     _reportedToEngine = true;
+    _value = routeInformation;
+    if (browserHistoryEnabled) {
+      _updates.add((
+        information: routeInformation,
+        replace: replace,
+        restore: null,
+      ));
+      unawaited(_writeHistory());
+      return;
+    }
     SystemNavigator.selectMultiEntryHistory();
     SystemNavigator.routeInformationUpdated(
       uri: routeInformation.uri,
@@ -273,16 +313,92 @@ final class _RouteInformationProvider extends RouteInformationProvider
       state: null,
       replace: replace,
     );
-    _value = routeInformation;
+  }
+
+  // Called before notifying delegate listeners, so a reentrant navigation
+  // cannot publish ahead of the pop it follows. The later Router report is
+  // suppressed; loaders and retained pages continue to use the same records.
+  void restore(RouteInformation information, _NavigationRequest target) {
+    if (!browserHistoryEnabled) return;
+    _reportedToEngine = true;
+    _restored[information.state!] = true;
+    _value = information;
+    _updates.add((information: information, replace: true, restore: target));
+    unawaited(_writeHistory());
+  }
+
+  Future<void> _writeHistory() async {
+    if (_writing || _disposed) return;
+    _writing = true;
+    try {
+      while (_updates.isNotEmpty && !_disposed) {
+        final update = _updates.removeFirst();
+        final target = update.restore == null
+            ? null
+            : _anchors[update.restore!];
+        final index = target == null ? -1 : _entries.indexOf(target);
+        if (index >= 0 &&
+            index < _position &&
+            target!.uri == update.information.uri) {
+          final traversal = _HistoryTraversal(target);
+          _traversal = traversal;
+          // Await both the URL strategy and Flutter's route notification. The
+          // engine may deliver the latter after the native popstate listener.
+          try {
+            await Future.wait<void>([
+              moveBrowserHistory(index - _position),
+              traversal.completed.future,
+            ], eagerError: true);
+          } finally {
+            _traversal = null;
+          }
+          continue;
+        }
+        final entry = _HistoryEntry(
+          '$_session:${_nextEntry++}',
+          update.information.uri,
+        );
+        if (update.replace && _position >= 0) {
+          _entries[_position] = entry;
+        } else {
+          _entries.removeRange(_position + 1, _entries.length);
+          _entries.add(entry);
+          _position++;
+        }
+        final request = update.information.state;
+        if (request is _NavigationRequest) _anchors[request] = entry;
+        if (update.restore != null) _anchors[update.restore!] = entry;
+        await SystemNavigator.selectMultiEntryHistory();
+        if (_disposed) return;
+        await SystemNavigator.routeInformationUpdated(
+          uri: entry.uri,
+          // Only opaque, serializable ownership metadata crosses this boundary.
+          // Futures and widget state stay local; Forward restores by URL.
+          state: <String, Object?>{'odroe.history': entry.id},
+          replace: update.replace,
+        );
+      }
+    } finally {
+      _writing = false;
+    }
   }
 
   void _platformRoute(RouteInformation routeInformation) {
-    _value = RouteInformation(
-      uri: routeInformation.uri,
-      state:
-          routeInformation.state ??
-          const _NavigationRequest(operation: _NavigationOperation.external),
+    final state = routeInformation.state;
+    final id = state is Map ? state['odroe.history'] : null;
+    final index = _entries.indexWhere((entry) => entry.id == id);
+    _position = index;
+    if (index < 0) _entries.clear();
+    final traversal = _traversal;
+    if (traversal != null) {
+      if (!traversal.completed.isCompleted) traversal.completed.complete();
+      if (id == traversal.target.id || _updates.isNotEmpty) return;
+    }
+    final request = _NavigationRequest(
+      operation: _NavigationOperation.external,
     );
+    if (index >= 0) _anchors[request] = _entries[index];
+    _value = RouteInformation(uri: routeInformation.uri, state: request);
     notifyListeners();
   }
 
@@ -306,6 +422,12 @@ final class _RouteInformationProvider extends RouteInformationProvider
 
   @override
   void dispose() {
+    _disposed = true;
+    _updates.clear();
+    final traversal = _traversal;
+    if (traversal != null && !traversal.completed.isCompleted) {
+      traversal.completed.complete();
+    }
     if (hasListeners) WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -679,9 +801,11 @@ final class _RouterDelegate extends RouterDelegate<Object>
       final active = _records.last.configuration;
       _configuration = _RouteConfiguration(
         uri: active.uri,
-        request: const _NavigationRequest(
-          operation: _NavigationOperation.replace,
-        ),
+        request: _NavigationRequest(operation: _NavigationOperation.replace),
+      );
+      _provider.restore(
+        RouteInformation(uri: active.uri, state: _configuration!.request),
+        active.request,
       );
       notifyListeners();
       return;

@@ -115,6 +115,14 @@ a controlled HTTP 400 without running the route or reporting a server failure.
 
 ## Browser URLs and handoff
 
+In the next release (not in hosted `0.1.0-dev.3`), popping a pushed Flutter page
+returns to its existing browser history entry. For home → list → pushed detail,
+an in-app pop returns to the retained list, Back returns home, and Forward can
+reopen the detail by URL. The original push Future completes once; Forward
+starts a new navigation. An initial deep link has no known predecessor owned
+by the router, so returning to its parent replaces the current URL. History
+traversal preserves the host's path or hash URL strategy.
+
 Routed Flutter applications set `webPathUrls: true` on the composition root
 `App` to install Flutter's official path URL strategy before `runApp`. This
 remains early enough when modules are provided by a lazy iterable, and gives
