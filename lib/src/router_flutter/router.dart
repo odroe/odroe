@@ -412,6 +412,9 @@ final class _RouteInformationProvider extends RouteInformationProvider
             '$_session:${_nextEntry++}',
             update.information.uri,
           );
+          // A write can change native history even if its acknowledgement
+          // fails. An earlier popstate is no longer a duplicate after it.
+          _lastHistoryEvent = null;
           await SystemNavigator.routeInformationUpdated(
             uri: entry.uri,
             state: <String, Object?>{'odroe.history': entry.id},
@@ -430,7 +433,6 @@ final class _RouteInformationProvider extends RouteInformationProvider
             continue;
           }
           entry.browserState = afterState;
-          _lastHistoryEvent = null;
           if (update.replace && _position >= 0) {
             _entries[_position] = entry;
           } else {

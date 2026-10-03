@@ -377,6 +377,22 @@ const cases = {
     await act('pop'); const state = await at('next pop', list);
     assert.deepEqual(state.results, ['saved', 'saved']);
   },
+  async 'Back after a failed write following app pop'({at, act, traverse, snapshot}) {
+    await act('list'); await at('list', list);
+    await act('push'); await at('push', '/post/1');
+    await act('pop'); const popped = await at('app pop', list);
+    assert.equal(popped.traversals, 1);
+    assert.deepEqual(popped.results, ['saved']);
+    await act('failWriteAfter'); await act('pushNext');
+    await until(snapshot, s => s.route === '/post/3' && s.errors.length > 0, 'observed write failure');
+    await at('native write completed before failure', '/post/3');
+    await traverse('back');
+    const restored = await at('Back after failed write', list);
+    assert.deepEqual(restored.results, ['saved', null]);
+    await traverse('forward');
+    const forward = await at('Forward after failed write', '/post/3');
+    assert.deepEqual(forward.results, ['saved', null]);
+  },
 };
 for (const count of [1, 2]) {
   cases[`push truncates ${count} known Forward entries`] = async ({at, act, traverse}) => {
