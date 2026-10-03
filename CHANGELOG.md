@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add `PathParams.integer`, `SearchParams.optionalInteger`, and
+  `SearchParams.integer` for handwritten bidirectional integer URL codecs.
+  The non-null search helper validates its default at construction, before any
+  fallback or omission. Explicit `.codec` contracts remain application-owned.
 - Restrict URL path/search integer decoding and encoding to the inclusive
   cross-platform safe range -9007199254740991 to 9007199254740991. Parse exactly
   before range checks so Chrome cannot silently select a different integer ID.

@@ -6,6 +6,61 @@ language: en
 ---
 # Routing
 
+Handwritten routes work directly through `AppRoute`, `PathParams.codec` and
+`SearchParams.codec`. File routing is optional and adds generated structure.
+
+## Integer helpers — next release, unpublished
+
+`PathParams.integer`, `SearchParams.optionalInteger` and `SearchParams.integer`
+are source APIs for the next release. They are **not available in the published
+`0.1.0-dev.3` package**.
+
+```dart
+import 'package:odroe/router.dart';
+
+final post = AppRoute<int, NoSearch, NoData>(
+  path: '/posts/:postId',
+  params: PathParams.integer('postId'),
+);
+final posts = AppRoute<NoParams, int?, NoData>(
+  path: '/posts',
+  search: SearchParams.optionalInteger('authorId'),
+);
+final pagedPosts = AppRoute<NoParams, int, NoData>(
+  path: '/paged-posts',
+  search: SearchParams.integer('page', defaults: 1, omitDefault: true),
+);
+```
+
+Each helper returns the existing bidirectional codec, retaining typed
+destinations and matching. The path-template name still needs to agree with
+the codec name. These helpers need no initialization or generation.
+
+- Integer input and output use the inclusive cross-platform safe range
+  -9007199254740991 to 9007199254740991. Signs, hexadecimal and leading zeros
+  follow the existing parser; encoding produces canonical decimal text.
+- `optionalInteger` returns `int?`: a missing key becomes null, and null is
+  omitted on encode. The key remains owned by the route even when absent.
+- `integer` requires an `int` default and returns `int`. It throws
+  `ParameterFormatException` **during construction** if that default is outside
+  the safe range. Missing values use the default; invalid values use it only
+  under `InvalidSearchBehavior.fallback`. `omitDefault: true` omits that same
+  validated value; by default it is emitted.
+- Both search helpers accept `invalid: InvalidSearchBehavior.error` to throw
+  on invalid input. Under fallback, `searchError` remains available to the UI.
+  Strict mode does not imply positive-only or decimal-only integers.
+
+As with explicit codecs, omitting `search` from `route.to()` skips search
+encoding. For a helper that emits its default, `/paged-posts` may therefore
+canonicalize to `/paged-posts?page=1` during matching. Set `omitDefault: true`
+when the default should stay absent from the URL.
+
+Keep `.codec` for records, multiple fields or business constraints. Its custom
+defaults and callbacks are unchanged. Use strings or a custom BigInt codec for
+larger identifiers; do not first convert them to a Web `int`.
+
+## File routing
+
 The filesystem provides structure. `route.dart` provides the typed contract
 and may own a platform-neutral Document binding. Platform files attach only
 the behavior they own.

@@ -53,10 +53,12 @@ jobs:
       - run: flutter test --no-pub --concurrency=2 test
         working-directory: example/app
       - run: dart test --platform chrome test/web/browser_platform_test.dart
-      - name: Verify safe URL integers in Chrome JavaScript and Wasm
+      - name: Verify URL integer codecs in Chrome JavaScript and Wasm
         run: |
-          dart test --platform chrome test/router/integer_codec_test.dart
-          dart test --platform chrome --compiler dart2wasm test/router/integer_codec_test.dart
+          dart test --platform chrome test/router/integer_codec_test.dart test/router/scalar_codec_test.dart
+          dart test --platform chrome --compiler dart2wasm test/router/integer_codec_test.dart test/router/scalar_codec_test.dart
+      - name: Verify scalar routes in a fresh native and Chrome consumer
+        run: python3 test/support/router_scalar_consumer_smoke.py
       - run: flutter test --no-pub --platform chrome --concurrency=1 test/web/flutter_browser_handoff_test.dart test/web/flutter_hash_handoff_test.dart test/web/flutter_preserve_url_strategy_test.dart
       - name: Verify route identity in native and controlled Chrome consumers
         run: python3 test/support/router_navigation_consumer_smoke.py
