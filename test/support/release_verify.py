@@ -34,13 +34,21 @@ def verify_source_files(source, commit, files):
             raise ValueError(f'Official file differs from the release source: {name}')
 
 
+def load_frozen_manifest(harness, commit, version):
+    name = f'test/fixtures/releases/odroe-{version}.json'
+    payload = (harness / name).read_bytes()
+    reviewed = subprocess.check_output(['git', 'show', commit + ':' + name], cwd=harness)
+    if payload != reviewed:
+        raise ValueError('Frozen manifest must match the pinned harness fixture.')
+    return json.loads(payload), hashlib.sha256(payload).hexdigest()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True)
     parser.add_argument('--commit', required=True)
     parser.add_argument('--source-root', required=True, type=Path)
     parser.add_argument('--harness-commit', required=True)
-    parser.add_argument('--manifest', required=True, type=Path)
     parser.add_argument('--archive-sha256', required=True)
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
@@ -52,13 +60,12 @@ def main():
         raise ValueError('Requested and checked-out package versions differ.')
     if not re.fullmatch(r'[0-9a-f]{64}', args.archive_sha256):
         raise ValueError('An exact preflight archive SHA256 is required.')
-    frozen = json.loads(args.manifest.read_text())
+    frozen, frozen_hash = load_frozen_manifest(harness, args.harness_commit, args.version)
     if (frozen['package'] != 'odroe' or frozen['version'] != args.version
             or frozen['sourceCommit'] != args.commit
             or frozen['archiveSha256'] != args.archive_sha256
             or frozen['archiveConsumers'] != 'passed'):
         raise ValueError('Frozen preflight manifest differs from the release identity.')
-    frozen_hash = sha256(args.manifest)
     sdk = json.loads(subprocess.check_output([flutter, '--version', '--machine'], text=True))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -102,10 +109,10 @@ def main():
                 source, timeout=900, env=dict(env, ODROE_HOSTED_VERSION=args.version))
     check_checkout(source, args.commit, 'source')
     check_checkout(harness, args.harness_commit, 'harness')
-    if sha256(args.manifest) != frozen_hash:
+    if load_frozen_manifest(harness, args.harness_commit, args.version)[1] != frozen_hash:
         raise RuntimeError('The frozen preflight manifest changed during acceptance.')
     result = {'package': 'odroe', 'version': args.version, 'sourceCommit': args.commit,
-              'harnessCommit': args.harness_commit, 'preflightManifestSha256': frozen_hash, 'sdk': sdk,
+              'harnessCommit': args.harness_commit, 'releaseManifestSha256': frozen_hash, 'sdk': sdk,
               'archiveSha256': args.archive_sha256, 'files': manifest,
               'registry': 'https://pub.dev', 'interpretedPublishedCli': 'passed',
               'aotPublishedCli': 'passed', 'freshHostedConsumers': 'passed',

@@ -2,22 +2,8 @@
   "package": "odroe",
   "version": "0.1.0-dev.3",
   "sourceCommit": "9dd3552fbef1151567f7b5231e6ec23cfa0d8671",
-  "sdk": {
-    "frameworkVersion": "3.47.6",
-    "channel": "stable",
-    "repositoryUrl": "https://github.com/flutter/flutter.git",
-    "frameworkRevision": "5fc346839b5d0eef006ed8404392afb4dfae428d",
-    "frameworkCommitDate": "2026-09-30 15:02:49 -0700",
-    "engineRevision": "692136cb6582dbfc5af3fb33c2515a069f2f66d0",
-    "engineCommitDate": "2026-09-30 00:56:59.000Z",
-    "engineContentHash": "b8c8d3d8d5d0095127057f8a29ca8cc53da2167c",
-    "engineBuildDate": "2026-09-30 09:19:13.915",
-    "dartSdkVersion": "3.13.5",
-    "devToolsVersion": "2.60.0",
-    "flutterVersion": "3.47.6",
-    "flutterRoot": "/Users/seven/workspace/flutter"
-  },
   "archiveSha256": "7df2df23b6edd4acba31b1bac2d8d31b7443c54c86d75d0a3b83ca32ab4030d6",
+  "archiveConsumers": "passed",
   "files": {
     "CHANGELOG.md": {
       "sha256": "1a29705457680e12513e46da20c3cd0de978597d2b622e322e7e80728ff0209b",
@@ -844,7 +830,10 @@
       "bytes": 741
     }
   },
-  "archiveConsumers": "passed",
-  "officialHostedAcceptance": "not run",
-  "published": false
+  "sdk": {
+    "frameworkVersion": "3.47.6",
+    "frameworkRevision": "5fc346839b5d0eef006ed8404392afb4dfae428d",
+    "engineRevision": "692136cb6582dbfc5af3fb33c2515a069f2f66d0",
+    "dartSdkVersion": "3.13.5"
+  }
 }

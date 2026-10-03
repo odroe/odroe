@@ -1,12 +1,13 @@
 """Keep release source S distinct from harness H and reject identity drift."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 
-from release_verify import check_checkout, verify_source_files
+from release_verify import check_checkout, load_frozen_manifest, verify_source_files
 
 
 class ReleaseRevisionTest(unittest.TestCase):
@@ -74,6 +75,31 @@ class ReleaseRevisionTest(unittest.TestCase):
                 [os.sys.executable, '-c', 'from fullstack_consumer_smoke import root; print(root)'],
                 cwd=Path(__file__).parent, env=env, text=True).strip()
             self.assertEqual(Path(root), source)
+
+    def test_manifest_must_be_the_version_fixture_in_h(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            harness, _ = self.checkout(base, 'harness', 'fixed harness\n')
+            fixture = harness / 'test/fixtures/releases/odroe-0.1.0-dev.3.json'
+            fixture.parent.mkdir(parents=True)
+            payload = b'{"version":"0.1.0-dev.3","files":{}}\n'
+            fixture.write_bytes(payload)
+            self.git(harness, 'add', '.')
+            self.git(harness, 'commit', '-qm', 'reviewed fixture')
+            h = self.git(harness, 'rev-parse', 'HEAD')
+            manifest, checksum = load_frozen_manifest(harness, h, '0.1.0-dev.3')
+            self.assertEqual(manifest, json.loads(payload))
+            self.assertEqual(checksum, hashlib.sha256(payload).hexdigest())
+            fixture.write_text('{"forged":true}')
+            with self.assertRaisesRegex(ValueError, 'pinned harness fixture'):
+                load_frozen_manifest(harness, h, '0.1.0-dev.3')
+            fixture.unlink()
+            external = base / 'external.json'
+            external.write_bytes(payload)
+            # No external-manifest CLI entrypoint remains. A missing fixed
+            # fixture cannot be supplied by an unrelated external JSON.
+            with self.assertRaises(FileNotFoundError):
+                load_frozen_manifest(harness, h, '0.1.0-dev.3')
 
 
 if __name__ == '__main__':

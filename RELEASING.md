@@ -61,7 +61,13 @@ Consumers execute H's scripts with fixtures from S. A later harness fix must
 never relabel H as the published source. The receipt records both revisions.
 
 Keep the frozen preflight manifest in `test/fixtures/releases/odroe-VERSION.json`
-in the reviewed harness checkout. It is excluded from published packages. The
+in the reviewed harness checkout. Retain the release identity, necessary SDK
+versions/revisions and complete file list, removing machine-local paths from
+this public fixture. Preserve the original private receipt separately. The
+verifier reads only this fixed fixture and checks its bytes against H's Git
+blob; the receipt records the public fixture's own SHA256. A filtered fixture
+is not byte-identical to the original preflight JSON. It is excluded from
+published packages. The
 same acceptance can run locally with separate clean checkouts:
 
 ```sh
@@ -69,7 +75,6 @@ python3 test/support/release_verify.py \
   --version 0.1.0-dev.3 --commit FULL_RELEASE_SOURCE_COMMIT \
   --source-root /path/to/release-source \
   --harness-commit FULL_HARNESS_COMMIT \
-  --manifest test/fixtures/releases/odroe-0.1.0-dev.3.json \
   --archive-sha256 PREFLIGHT_ARCHIVE_SHA256 --output .odroe/published-release
 ```
 
