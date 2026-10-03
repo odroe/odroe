@@ -189,6 +189,15 @@ final class PathOutput {
 
 /// A bidirectional typed path-parameter contract.
 final class PathParams<P> {
+  /// Binds one integer path field to both existing read/write operations.
+  ///
+  /// Retains [PathInput.requiredInt] parsing and its cross-platform safe range.
+  /// Business constraints still use [PathParams.codec].
+  static PathParams<int> integer(String name) => PathParams<int>.codec(
+    decode: (input) => input.requiredInt(name),
+    encode: (value, output) => output.integer(name, value),
+  );
+
   /// Creates an explicit runtime codec.
   const PathParams.codec({
     required P Function(PathInput input) decode,
@@ -391,6 +400,43 @@ final class DecodedSearch<S> {
 
 /// A bidirectional typed search-state contract.
 final class SearchParams<S> {
+  /// Owns one optional integer key. Missing values become null, which is omitted.
+  ///
+  /// Invalid values retain the existing fallback/error policy and diagnostics.
+  static SearchParams<int?> optionalInteger(
+    String name, {
+    InvalidSearchBehavior invalid = InvalidSearchBehavior.fallback,
+  }) => SearchParams<int?>.codec(
+    keys: {name},
+    defaults: null,
+    decode: (input) => input.integer(name),
+    encode: (value, output) => output.integer(name, value),
+    invalid: invalid,
+  );
+
+  /// Owns one integer key with an explicit non-nullable default.
+  ///
+  /// Defaults are emitted unless [omitDefault] is true. Omission uses the same
+  /// value as missing/invalid fallback, keeping that policy in one declaration.
+  /// Throws [ParameterFormatException] at construction if [defaults] is outside
+  /// the cross-platform safe integer range, including when omitted on encode.
+  static SearchParams<int> integer(
+    String name, {
+    required int defaults,
+    bool omitDefault = false,
+    InvalidSearchBehavior invalid = InvalidSearchBehavior.fallback,
+  }) {
+    _encodeInteger(defaults, 'Search parameter "$name" default');
+    return SearchParams<int>.codec(
+      keys: {name},
+      defaults: defaults,
+      decode: (input) => input.integer(name) ?? defaults,
+      encode: (value, output) =>
+          output.integer(name, value, omitIf: omitDefault ? defaults : null),
+      invalid: invalid,
+    );
+  }
+
   /// Creates an explicit runtime codec.
   factory SearchParams.codec({
     required Iterable<String> keys,

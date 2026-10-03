@@ -48,11 +48,13 @@ jobs:
       - run: flutter pub get
         working-directory: sites/odroe.dev
       - run: dart analyze --fatal-infos
-      - name: Verify safe URL integers on native, Chrome JavaScript and Wasm
+      - name: Verify URL integer codecs on native, Chrome JavaScript and Wasm
         run: |
-          dart test test/router/integer_codec_test.dart
-          dart test --platform chrome test/router/integer_codec_test.dart
-          dart test --platform chrome --compiler dart2wasm test/router/integer_codec_test.dart
+          dart test test/router/integer_codec_test.dart test/router/scalar_codec_test.dart test/router/scalar_codec_types_test.dart
+          dart test --platform chrome test/router/integer_codec_test.dart test/router/scalar_codec_test.dart
+          dart test --platform chrome --compiler dart2wasm test/router/integer_codec_test.dart test/router/scalar_codec_test.dart
+      - name: Verify scalar routes in a fresh native and Chrome consumer
+        run: python3 test/support/router_scalar_consumer_smoke.py
       - name: Verify compiler and reference Flutter consumption
         run: |
           flutter test --no-pub --concurrency=2 test/router/file_router_test.dart \

@@ -108,6 +108,30 @@ For an existing Flutter application, follow the
 It separates a Query-only provider from optional routing and HTTP RPC, including
 explicit owned and borrowed provider lifetimes in `0.1.0-dev.2`.
 
+### Integer route helpers — next release, unpublished
+
+The following convenience APIs are available in source for the next release;
+they are **not in the published `0.1.0-dev.3` package**. Handwritten routes bind
+one integer field's decoding and encoding in one declaration:
+
+```dart
+final post = AppRoute<int, NoSearch, NoData>(
+  path: '/posts/:postId',
+  params: PathParams.integer('postId'),
+);
+final posts = AppRoute<NoParams, int?, NoData>(
+  path: '/posts',
+  search: SearchParams.optionalInteger('authorId'),
+);
+```
+
+`SearchParams.integer('page', defaults: 1, omitDefault: true)` provides a
+non-null search value. Its default is checked at construction against the
+inclusive safe range ±9007199254740991, even when omitted from URLs. These
+helpers return the existing codec types; use `.codec` for records and custom
+business constraints. See the [routing guide](sites/odroe.dev/content/docs/concepts/routing.mdc)
+for fallback, strict errors and omission behavior.
+
 ## Optional full-stack starter
 
 To explore the generated Query/RPC/SQLite starter alongside the application
