@@ -25,7 +25,7 @@ def main():
     if not dart or not flutter or not chrome:
         raise RuntimeError('Dart, Flutter and Chrome are required; set CHROME_EXECUTABLE if needed.')
     with tempfile.TemporaryDirectory(prefix='odroe-query-consumer-') as temporary:
-        base = Path(temporary)
+        base = Path(temporary).resolve()
         project = base / 'app'
         (project / 'lib').mkdir(parents=True)
         env = dict(os.environ)

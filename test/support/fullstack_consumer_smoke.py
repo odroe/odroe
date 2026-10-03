@@ -2,7 +2,7 @@ from pathlib import Path
 import json, os, queue, re, shutil, signal, subprocess, sys, tempfile, threading, time
 from urllib.parse import urljoin, urlparse, unquote
 
-root = Path(__file__).resolve().parents[2]
+root = Path(os.environ.get('ODROE_SOURCE_ROOT', Path(__file__).resolve().parents[2])).resolve()
 package_root = Path(os.environ.get('ODROE_PACKAGE_ROOT', root)).resolve()
 dart = shutil.which('dart')
 flutter = shutil.which('flutter')
