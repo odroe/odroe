@@ -12,18 +12,56 @@ external JSBoolean? get _useHash;
 external set _action(JSFunction value);
 @JS('routeHistorySnapshot')
 external set _snapshot(JSFunction value);
+@JS('routeHistoryNativeCalls')
+external JSNumber? get _nativeCalls;
+@JS('routeHistoryBacksAfterGo')
+external set _backsAfterGo(JSNumber value);
+@JS('routeHistoryMoveFault')
+external set _moveFault(JSString value);
+@JS('routeHistoryNativePending')
+external JSBoolean? get _nativePending;
 
 bool _holdTraversal = false;
 Completer<void>? _gate;
 int _traversals = 0;
+bool _holdGo = false;
+bool _failWrite = false;
+bool _failWriteAfter = false;
+final _notifications = <void Function()>[];
+final _errors = <String>[];
 
-// Race scenarios pause before a real history.go; ordinary scenarios use the
-// same strategy without a pause. No history entry or popstate is simulated.
+// The legacy go gate exposes the old delayed-strategy hazard. The notification
+// gate delays Flutter delivery while native history still moves. Neither
+// creates history entries or synthesizes popstate events.
 mixin _TraversalGate on HashUrlStrategy {
+  @override
+  void Function() addPopStateListener(void Function(Object?) listener) =>
+      super.addPopStateListener((state) {
+        if (_holdTraversal) {
+          _gate ??= Completer<void>();
+          _notifications.add(() => listener(state));
+        } else {
+          listener(state);
+        }
+      });
+
+  @override
+  void pushState(Object? state, String title, String url) {
+    if (_failWrite) {
+      _failWrite = false;
+      throw StateError('injected history write failure');
+    }
+    super.pushState(state, title, url);
+    if (_failWriteAfter) {
+      _failWriteAfter = false;
+      throw StateError('injected failure after native history write');
+    }
+  }
+
   @override
   Future<void> go(int count) async {
     _traversals++;
-    if (_holdTraversal) {
+    if (_holdGo) {
       final gate = _gate = Completer<void>();
       await gate.future;
       _gate = null;
@@ -35,6 +73,16 @@ mixin _TraversalGate on HashUrlStrategy {
 class _PathHistory extends PathUrlStrategy with _TraversalGate {}
 
 class _HashHistory extends HashUrlStrategy with _TraversalGate {}
+
+class _NavigationNotifications with WidgetsBindingObserver {
+  RouteInformation? latest;
+
+  @override
+  Future<bool> didPushRouteInformation(RouteInformation information) async {
+    latest = information;
+    return false;
+  }
+}
 
 final _home = AppRoute<NoParams, NoSearch, NoData>(path: '/');
 final _posts = AppRoute<NoParams, int?, NoData>(
@@ -54,6 +102,8 @@ final _workspaceEdit = AppRoute<NoParams, NoSearch, NoData>(path: 'edit');
 
 /// A real application: browser tests call the same actions as its controls.
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) => _errors.add(details.exceptionAsString());
   setUrlStrategy((_useHash?.toDart ?? false) ? _HashHistory() : _PathHistory());
   runApp(const _HistoryApp());
 }
@@ -68,6 +118,9 @@ class _HistoryApp extends StatefulWidget {
 class _HistoryAppState extends State<_HistoryApp> {
   final list = GlobalKey<_ListState>();
   final results = <String?>[];
+  final notifications = _NavigationNotifications();
+  RouteInformation? savedNotification;
+  bool requestedDuringNativeMove = false;
   late final router = AppRouter(
     routes: [
       _home.page(build: (_) => screen('Home')),
@@ -111,14 +164,36 @@ class _HistoryAppState extends State<_HistoryApp> {
             .then(results.add);
       case 'hold':
         _holdTraversal = true;
+      case 'holdGo':
+        _holdGo = true;
+      case 'failWrite':
+        _failWrite = true;
+      case 'failWriteAfter':
+        _failWriteAfter = true;
+      case 'dropMove':
+        _moveFault = 'drop'.toJS;
+      case 'failMove':
+        _moveFault = 'throw'.toJS;
+      case 'backAfterGo':
+        _backsAfterGo = 1.toJS;
+      case 'twiceBackAfterGo':
+        _backsAfterGo = 2.toJS;
       case 'release':
         _holdTraversal = false;
+        _holdGo = false;
         _gate?.complete();
-      case 'reentrantPush':
+        _gate = null;
+        final notifications = List<void Function()>.of(_notifications);
+        _notifications.clear();
+        for (final notification in notifications) {
+          notification();
+        }
+      case 'reentrantPush' || 'reentrantGo':
         void listener() {
           if (router.location.path != '/posts') return;
           router.routerDelegate.removeListener(listener);
-          act('pushNext');
+          requestedDuringNativeMove = _nativePending?.toDart ?? false;
+          act(action == 'reentrantGo' ? 'goNext' : 'pushNext');
         }
         router.routerDelegate.addListener(listener);
         act('pop');
@@ -137,6 +212,13 @@ class _HistoryAppState extends State<_HistoryApp> {
         if (navigator.canPop()) navigator.pop('saved');
       case 'draft':
         list.currentState!.increment();
+      case 'captureNotification':
+        savedNotification = notifications.latest!;
+      case 'replayNotification':
+        unawaited(
+          (router.routeInformationProvider! as WidgetsBindingObserver)
+              .didPushRouteInformation(savedNotification!),
+        );
     }
   }
 
@@ -153,6 +235,7 @@ class _HistoryAppState extends State<_HistoryApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(notifications);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _action = ((JSString value) => act(value.toDart)).toJS;
       _snapshot = (() => jsonEncode({
@@ -161,7 +244,10 @@ class _HistoryAppState extends State<_HistoryApp> {
         'mount': list.currentState?.mount,
         'results': results,
         'waiting': _gate != null,
-        'traversals': _traversals,
+        'traversals': _nativeCalls?.toDartInt ?? 0,
+        'strategyGoCalls': _traversals,
+        'errors': _errors,
+        'requestedDuringNativeMove': requestedDuringNativeMove,
       }).toJS).toJS;
     });
   }
@@ -172,6 +258,7 @@ class _HistoryAppState extends State<_HistoryApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(notifications);
     router.dispose();
     super.dispose();
   }

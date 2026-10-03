@@ -25,6 +25,8 @@ abstract interface class RouteNavigator {
   /// On web, popping returns to the existing browser entry when it is known
   /// to this router. Browser Forward restores the destination by URL as a new
   /// navigation; it does not revive this call's completed Future.
+  /// When the old browser relationship cannot be verified, the local pop
+  /// completes and replaces the current URL instead of traversing history.
   Future<T?> push<T>(Destination destination);
 
   /// Replaces the top-most navigation entry with [destination].

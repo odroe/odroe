@@ -123,6 +123,19 @@ starts a new navigation. An initial deep link has no known predecessor owned
 by the router, so returning to its parent replaces the current URL. History
 traversal preserves the host's path or hash URL strategy.
 
+If browser retention, failed writes, or missing events make the old history
+relationship unprovable, an in-app pop retains its local page and result but
+replaces the current URL. Back/Forward then follow the browser's remaining
+history. The router observes the expected change from each write, including
+known Forward truncation; it never uses `history.length` as a browser index or
+uses later growth to restore discarded relationships.
+
+The host strategy still encodes and decodes URLs. Verified native browser
+traversal is submitted synchronously, without calling a custom asynchronous
+`UrlStrategy.go` override. Native state is compared opaquely without depending
+on Flutter engine state fields. A write must succeed and be observed before
+the router treats the new native entry as owned.
+
 Routed Flutter applications set `webPathUrls: true` on the composition root
 `App` to install Flutter's official path URL strategy before `runApp`. This
 remains early enough when modules are provided by a lazy iterable, and gives
