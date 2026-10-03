@@ -42,6 +42,17 @@ final class AppRouter extends RouterConfig<Object> implements RouteNavigator {
     RouterErrorBuilder? error,
     RouterInitialState? initialState,
   }) {
+    final routeList = List<RouteNode>.of(routes, growable: false);
+    final localRouteIdentities = HashSet<Object>.identity();
+    void collectLocalRoutes(Iterable<RouteNode> nodes) {
+      for (final route in nodes) {
+        if (route is PageRoute || route is ShellRoute) {
+          localRouteIdentities.add(route.identity);
+        }
+        collectLocalRoutes(route.children);
+      }
+    }
+
     late final Uri location;
     if (initialLocation case final initial?) {
       if (!initial.hasAbsolutePath) {
@@ -64,7 +75,7 @@ final class AppRouter extends RouterConfig<Object> implements RouteNavigator {
     final provider = _RouteInformationProvider(location);
     late final AppRouter router;
     final delegate = _RouterDelegate(
-      matcher: RouteMatcher(routes),
+      matcher: RouteMatcher(routeList),
       provider: provider,
       router: () => router,
       app: context,
@@ -73,11 +84,13 @@ final class AppRouter extends RouterConfig<Object> implements RouteNavigator {
       error: error,
       initialState: initialState,
     );
+    collectLocalRoutes(routeList);
     router = AppRouter._(
       provider: provider,
       delegate: delegate,
       app: context,
       ownsApp: app == null,
+      localRouteIdentities: localRouteIdentities,
     );
     return router;
   }
@@ -87,9 +100,11 @@ final class AppRouter extends RouterConfig<Object> implements RouteNavigator {
     required _RouterDelegate delegate,
     required this.app,
     required bool ownsApp,
+    required Set<Object> localRouteIdentities,
   }) : _provider = provider,
        _delegate = delegate,
        _ownsApp = ownsApp,
+       _localRouteIdentities = localRouteIdentities,
        super(
          routeInformationProvider: provider,
          routeInformationParser: const _RouteInformationParser(),
@@ -100,6 +115,7 @@ final class AppRouter extends RouterConfig<Object> implements RouteNavigator {
   final _RouteInformationProvider _provider;
   final _RouterDelegate _delegate;
   final bool _ownsApp;
+  final Set<Object> _localRouteIdentities;
 
   /// Application services available to page loaders.
   final AppContext app;
@@ -129,6 +145,8 @@ final class AppRouter extends RouterConfig<Object> implements RouteNavigator {
 
   bool _openExternal(Destination destination, {required bool replace}) {
     final route = destination.route;
+    // Definitions and platform wrappers share the registered binding's identity.
+    if (_localRouteIdentities.contains(route.identity)) return false;
     if (route is PageRoute || route is ShellRoute) return false;
     if (navigateExternal(destination.uri, replace: replace)) return true;
     throw StateError(
