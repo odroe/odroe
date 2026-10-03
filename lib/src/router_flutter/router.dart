@@ -544,9 +544,10 @@ final class _RouteInformationProvider extends RouteInformationProvider
       }
       traversal.superseded = true;
       if (!traversal.completed.isCompleted) traversal.completed.complete(false);
-      // A real external navigation supersedes browser writes queued before it.
-      _updates.clear();
     }
+    // External navigation supersedes older queued writes, including writes
+    // waiting behind a native update whose acknowledgement has not arrived.
+    _updates.clear();
     final request = _NavigationRequest(
       operation: _NavigationOperation.external,
     );

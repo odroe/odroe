@@ -393,6 +393,26 @@ const cases = {
     const forward = await at('Forward after failed write', '/post/3');
     assert.deepEqual(forward.results, ['saved', null]);
   },
+  async 'browser Back supersedes pushes queued behind a failed write'({at, act, traverse, snapshot}) {
+    await act('list'); await at('list', list);
+    await act('failWriteAfter'); await act('push');
+    await at('native write awaiting failure', '/post/1');
+    await act('pushNext');
+    await until(snapshot, s => s.route === '/post/3' && s.url === '/post/1', 'push queued behind pending write');
+    // Let Router report the new configuration while the failed write is pending.
+    await pause(350);
+    const queued = await snapshot();
+    assert.equal(queued.route, '/post/3');
+    assert.equal(queued.url, '/post/1');
+    assert.deepEqual(queued.errors, []);
+    await traverse('back'); await at('Back while write is pending', list);
+    await until(snapshot, s => s.errors.length > 0, 'observed write failure');
+    const settled = await at('Back remains current after failure', list);
+    assert.deepEqual(settled.results, [null, null]);
+    await traverse('back'); await at('next Back reaches home without a duplicate list', '/');
+    await traverse('forward'); await at('Forward returns to list', list);
+    await traverse('forward'); await at('Forward retains the original native write', '/post/1');
+  },
 };
 for (const count of [1, 2]) {
   cases[`push truncates ${count} known Forward entries`] = async ({at, act, traverse}) => {
