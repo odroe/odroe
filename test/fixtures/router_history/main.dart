@@ -147,6 +147,8 @@ class _HistoryAppState extends State<_HistoryApp> {
     switch (action) {
       case 'list':
         router.go(_posts.to(search: 7));
+      case 'pushList':
+        router.push<String>(_posts.to(search: 7)).then(results.add);
       case 'push':
         router.push<String>(_post.to(params: 1)).then(results.add);
       case 'pushNext':

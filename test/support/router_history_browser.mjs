@@ -120,7 +120,8 @@ async function scenario(hash, initial, test) {
       state => state.frameTree.frame.url === origin.replace('127.0.0.1', 'localhost') + '/outside',
       'explicit browser navigation outside',
     );
-    await test({at, act, traverse, initialState, waiting, snapshot, reload, outside});
+    const replaceNativeState = () => evaluate("history.replaceState({host: 'replacement'}, '', location.href)");
+    await test({at, act, traverse, initialState, waiting, snapshot, reload, outside, replaceNativeState});
   } finally {
     console.log(JSON.stringify({strategy: hash ? 'hash' : 'path', sequence}));
     socket.close();
@@ -412,6 +413,26 @@ const cases = {
     await traverse('back'); await at('next Back reaches home without a duplicate list', '/');
     await traverse('forward'); await at('Forward returns to list', list);
     await traverse('forward'); await at('Forward retains the original native write', '/post/1');
+  },
+  async 'host state replacement retires old history anchors'({at, act, replaceNativeState}) {
+    await act('pushList'); const before = await at('pushed parent list', list);
+    await act('draft');
+    await replaceNativeState();
+    const changed = await at('host replacement keeps URL and length', list);
+    assert.equal(changed.length, before.length);
+    await act('push'); await at('push after host replacement', '/post/1');
+    await act('pop'); const popped = await at('local pop uses replacement fallback', list);
+    assert.deepEqual(popped.results, ['saved'], 'the parent push must remain pending');
+    assert.equal(popped.draft, 1);
+    assert.equal(popped.mount, before.mount);
+    assert.equal(popped.traversals, 0);
+    await act('pushNext'); await at('new owned push', '/post/3');
+    await act('pop'); const recovered = await at('new owned pop', list);
+    assert.equal(recovered.traversals, 1);
+    assert.equal(recovered.draft, 1);
+    assert.deepEqual(recovered.results, ['saved', 'saved']);
+    await act('pop'); const parent = await at('parent push completes only on its own pop', '/');
+    assert.deepEqual(parent.results, ['saved', 'saved', 'saved']);
   },
 };
 for (const count of [1, 2]) {

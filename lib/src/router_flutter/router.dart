@@ -403,6 +403,12 @@ final class _RouteInformationProvider extends RouteInformationProvider
           if (_disposed) return;
           final beforeLength = _checkHistoryLength();
           final beforeState = browserHistoryState;
+          // A host can replace state without changing the URL or length.
+          // Do not carry that unowned entry into a new predecessor chain.
+          if (_position >= 0 &&
+              beforeState != _entries[_position].browserState) {
+            _forgetHistory();
+          }
           final revision = _historyRevision;
           final knownForward = _entries.length - _position - 1;
           final expectedLength = update.replace
