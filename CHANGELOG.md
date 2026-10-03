@@ -1,14 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-dev.3
 
 - Navigate locally from shared route definitions and wrappers when their
   identity has a registered Flutter page or shell binding. Keep unbound server
   destinations external, including independent routes with the same pathname.
 - Add optional `query_rpc.dart` with `ServerFunctionRef.read`, `readAt`, and
-  `reads`, returning existing Query options and filters. Reads explicitly opt
-  into repeat execution and use a frozen codec/serializer payload, resolved
-  endpoint, and application-supplied account/tenant scope for cache identity.
+  `reads`, returning existing Query options and filters. Calling `read` explicitly
+  declares the function idempotent and safe for retries and refetches. Reads use
+  a frozen codec/serializer payload, resolved endpoint, and application-supplied
+  account/tenant scope for cache identity.
   The application owns each account/backend RPC client and its credentials.
 - Resolve relative Web RPC URLs against the document base consistently for
   cache identity and transport; native reads require an explicit HTTP(S)

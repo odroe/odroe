@@ -13,9 +13,31 @@ The old `setup`, `signal`, reactive props, lifecycle hooks and UI context APIs a
 
 ## New framework applications
 
-For source evaluation, use Flutter 3.38.1 / stable Dart 3.10.0 or a newer validated pair. For hosted installation, add the exact `odroe` version `0.1.0-dev.2` to an existing or empty Flutter application and import the APIs you need, as shown in the README. `init` and `create` are optional starter tools; direct use does not require initialization or generated files.
+For source evaluation, use Flutter 3.38.1 / stable Dart 3.10.0 or a newer validated pair. For hosted installation, add the exact `odroe` version `0.1.0-dev.3` to an existing or empty Flutter application and import the APIs you need, as shown in the README. `init` and `create` are optional starter tools; direct use does not require initialization or generated files.
 
 Framework App/Module/Context, Query/Mutation, typed routes, generated RPC and SQL are separate contracts from the former UI API. Roux is the actual matching dependency; Spry and oxy are not integrated.
+
+## 0.1.0-dev.3: Ordinary RPC reads and route identity
+
+Import the optional `query_rpc.dart` entrypoint to use `ref.read`, `readAt`,
+and `reads` with existing Query options and filters. Calling `read` explicitly
+declares the function idempotent and safe for retries and refetches. Supply a
+stable account/tenant `scope` and own each RpcClient per account/backend; its
+headers provider must read that account's refreshable credentials. Tokens and
+ambient cookies are not cache identity. Encoded input and the resolved endpoint
+are frozen when options are created.
+
+Web relative RPC URLs resolve against the document base for both transport and
+cache identity. Native reads need an explicit HTTP(S) endpoint. Raw responses
+and streams are rejected by this value bridge; continue using direct RPC for
+those resources. Cancellation stops client work and excludes late results;
+server notification remains transport best-effort. Pagination and mutation
+invalidation remain application-defined Query behavior.
+
+Flutter navigation now uses the identity of a registered Page or Shell binding
+when navigating from shared route definitions or wrappers. Unbound destinations
+remain external, including independent routes with the same pathname. This is
+a local navigation correction within the existing router.
 
 ## 0.1.0-dev.2: Query client ownership
 

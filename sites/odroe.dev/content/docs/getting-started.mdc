@@ -16,13 +16,13 @@ The `0.1.0-dev.1` framework preview has a different API from the former
 
 Use an existing Flutter application, or start with an empty one:
 
-These commands target `0.1.0-dev.2` and require that exact preview to be
+These commands target `0.1.0-dev.3` and require that exact preview to be
 available on pub.dev. For an unpublished checkout, use a path dependency.
 
 ```sh
 flutter create --empty --platforms web my_app
 cd my_app
-flutter pub add 'odroe:{"version":"0.1.0-dev.2"}'
+flutter pub add 'odroe:{"version":"0.1.0-dev.3"}'
 ```
 
 Replace `lib/main.dart` with this application:
@@ -94,7 +94,7 @@ above, create a separate empty Flutter project:
 cd ..
 flutter create --empty --platforms web full_stack_app
 cd full_stack_app
-flutter pub add 'odroe:{"version":"0.1.0-dev.2"}'
+flutter pub add 'odroe:{"version":"0.1.0-dev.3"}'
 dart run odroe init --full-stack
 dart run odroe dev -- -d chrome
 ```

@@ -44,7 +44,7 @@ def main():
             env.pop(key, None)
         run([flutter, 'pub', 'get'], package, env=env)
         for name in ['fullstack_consumer_smoke', 'dependency_first_consumer_smoke',
-                     'incremental_adoption_smoke', 'query_rpc_consumer_smoke']:
+                     'incremental_adoption_smoke', 'query_rpc_consumer_smoke', 'router_navigation_consumer_smoke']:
             run([sys.executable, str(root / 'test/support' / (name + '.py'))],
                 root, timeout=900, env=env)
     if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True):
