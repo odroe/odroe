@@ -122,6 +122,15 @@ provider constructor owns one client; `.value(client: ...)` borrows an existing
 one. See [incremental adoption](/docs/guides/incremental-adoption) for lifecycle
 rules and migration from the `0.1.0-dev.1` constructor.
 
+**Next release, unpublished:** a provider synchronizes the client's focus with
+Flutter's current lifecycle on first mount and client replacement, then follows
+later lifecycle events. Only `resumed` counts as focused; if Flutter has not
+reported a state yet, the client's existing focus is preserved. This also applies
+to `QueryModule`. Mounting in the background still permits the initial read;
+interval polling requires focus unless `refetchInBackground` is enabled, and
+failed-read retries wait for resume. Connectivity remains application-wired
+through `QueryOnlineManager`.
+
 Use focused builders for query, infinite-query, or mutation state. The query
 function can call a generated RPC ref without coupling either subsystem.
 A stable query key preserves the subscription and cache across ordinary

@@ -90,6 +90,12 @@ final class _QueryClientProviderState extends State<QueryClientProvider>
     try {
       if (ownedPrevious) previous?.clear();
     } finally {
+      // A lifecycle event may have happened before this provider connected.
+      // Synchronize before mounting so polling and retries use the current state.
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (state != null) {
+        next.focusManager.isFocused = state == AppLifecycleState.resumed;
+      }
       next.mount();
     }
   }

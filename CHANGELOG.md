@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Synchronize Query clients with Flutter's current lifecycle when a provider
+  first mounts or connects a replacement client. Background mounts and account
+  switches now honor foreground-only polling and pause failed-read retries until
+  resume, without requiring an extra lifecycle event. Applies to owned and
+  borrowed providers and QueryModule; initial reads keep their existing behavior.
 - Return to the existing browser history entry when popping a pushed Flutter
   page. Back no longer repeats the list; Forward can reopen the detail by URL
   without reviving a completed push Future. Preserve retained page state,
