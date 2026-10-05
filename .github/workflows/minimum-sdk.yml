@@ -64,7 +64,8 @@ jobs:
         run: |
           flutter test --no-pub --concurrency=2 test/router/file_router_test.dart \
             test/router/flutter_route_identity_test.dart \
-            test/query/flutter_provider_test.dart test/query/flutter_query_test.dart \
+            test/query/flutter_provider_test.dart test/query/flutter_lifecycle_test.dart \
+            test/query/flutter_query_test.dart \
             test/query/flutter_options_test.dart test/query/flutter_rpc_read_test.dart
           dart test test/query/observer_test.dart test/query/options_update_test.dart \
             test/query/remount_test.dart
