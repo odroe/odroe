@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://odroe.dev/sitemap.xml

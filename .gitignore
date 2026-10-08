@@ -1,9 +1,0 @@
-.dart_tool/
-.wrangler/
-.odroe/
-.pub/
-build/
-node_modules/
-__pycache__/
-pubspec.lock
-!sites/odroe.dev/pubspec.lock
